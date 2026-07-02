@@ -1,0 +1,44 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    FruityLink.Host — the managed entry point hosted IN-PROCESS inside FL Studio.
+    The version.dll proxy -> FlClrHost.dll (CoreCLR host) loads THIS assembly and calls
+    HostEntry.Bootstrap. It then launches a WPF window on its own STA thread and switches the
+    FL bridge to the in-process P/Invoke transport (no named pipe).
+
+    Built as a dynamically-loadable component: EnableDynamicLoading emits the
+    *.runtimeconfig.json + *.deps.json hostfxr needs and copies all dependencies locally.
+  -->
+  <PropertyGroup>
+    <OutputType>Library</OutputType>
+    <TargetFramework>net9.0-windows</TargetFramework>
+    <UseWPF>true</UseWPF>
+    <RootNamespace>FruityLink.Host</RootNamespace>
+    <AssemblyName>FruityLink.Host</AssemblyName>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+
+    <!-- Produce runtimeconfig.json + deps.json and copy all referenced assemblies next to the
+         output so hostfxr can resolve them from FL's install dir. -->
+    <EnableDynamicLoading>true</EnableDynamicLoading>
+    <GenerateRuntimeConfigurationFiles>true</GenerateRuntimeConfigurationFiles>
+
+    <!-- Self-contained package management: do NOT touch the shared Directory.Packages.props
+         (parallel-agent scope rule). This project pulls in NuGet packages only transitively via
+         project references, which already pin their own versions centrally. -->
+    <ManagePackageVersionsCentrally>false</ManagePackageVersionsCentrally>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- In-proc bridge transport + the full FL control surface. -->
+    <ProjectReference Include="..\FruityLink.FlStudio\FruityLink.FlStudio.csproj" />
+    <!-- Plugin contract read by the native "Plugins" toolbar dropdown (Abstractions -> Core only;
+         no cycle). PluginGlue marshals PluginManagerLocator.Current to the C++ bridge. -->
+    <ProjectReference Include="..\FruityLink.Plugins.Abstractions\FruityLink.Plugins.Abstractions.csproj" />
+    <!-- The real plugin host (manager + hot-reload). HostEntry calls PluginHost.Initialize at startup;
+         PluginGlue casts PluginManagerLocator.Current to the concrete PluginManager for Reload/PluginsDir. -->
+    <ProjectReference Include="..\FruityLink.Plugins.Host\FruityLink.Plugins.Host.csproj" />
+  </ItemGroup>
+
+</Project>

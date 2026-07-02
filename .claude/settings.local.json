@@ -1,0 +1,12 @@
+{
+  "permissions": {
+    "allow": [
+      "mcp__ghidra-mcp__list_instances",
+      "mcp__ghidra-mcp__list_open_programs",
+      "PowerShell($f = Get-Item \"C:\\\\Program Files\\\\Image-Line\\\\FL Studio 2025\\\\FLEngine_x64.dll\"; \"{0} MB\" -f [math]::Round\\($f.Length/1MB,1\\); $f.VersionInfo | Format-List FileVersion,ProductVersion,FileDescription,CompanyName; \"---FL64.exe---\"; $e = Get-Item \"C:\\\\Program Files\\\\Image-Line\\\\FL Studio 2025\\\\FL64.exe\"; \"{0} MB\" -f [math]::Round\\($e.Length/1MB,2\\); $e.VersionInfo | Format-List FileVersion,ProductVersion; \"---FLMManaged.dll \\(managed?\\)---\"; $m = Get-Item \"C:\\\\Program Files\\\\Image-Line\\\\FL Studio 2025\\\\FLMManaged.dll\"; \"{0} MB\" -f [math]::Round\\($m.Length/1MB,1\\); $m.VersionInfo | Format-List FileDescription)",
+      "mcp__ghidra-mcp__analysis_status",
+      "mcp__ghidra-mcp__get_entry_points",
+      "mcp__ghidra-mcp__search_strings"
+    ]
+  }
+}

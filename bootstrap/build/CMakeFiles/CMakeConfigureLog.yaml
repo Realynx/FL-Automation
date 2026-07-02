@@ -1,0 +1,2271 @@
+
+---
+events:
+  -
+    kind: "message-v1"
+    backtrace:
+      - "C:/Program Files/CMake/share/cmake-4.1/Modules/CMakeDetermineSystem.cmake:212 (message)"
+      - "CMakeLists.txt:2 (project)"
+    message: |
+      The system is: Windows - 10.0.19045 - AMD64
+  -
+    kind: "find-v1"
+    backtrace:
+      - "C:/Program Files/CMake/share/cmake-4.1/Modules/CMakeDetermineCompilerId.cmake:462 (find_file)"
+      - "C:/Program Files/CMake/share/cmake-4.1/Modules/CMakeDetermineCompilerId.cmake:500 (CMAKE_DETERMINE_COMPILER_ID_WRITE)"
+      - "C:/Program Files/CMake/share/cmake-4.1/Modules/CMakeDetermineCompilerId.cmake:8 (CMAKE_DETERMINE_COMPILER_ID_BUILD)"
+      - "C:/Program Files/CMake/share/cmake-4.1/Modules/CMakeDetermineCompilerId.cmake:64 (__determine_compiler_id_test)"
+      - "C:/Program Files/CMake/share/cmake-4.1/Modules/CMakeDetermineCCompiler.cmake:122 (CMAKE_DETERMINE_COMPILER_ID)"
+      - "CMakeLists.txt:2 (project)"
+    mode: "file"
+    variable: "src_in"
+    description: "Path to a file."
+    settings:
+      SearchFramework: "NEVER"
+      SearchAppBundle: "NEVER"
+      CMAKE_FIND_USE_CMAKE_PATH: true
+      CMAKE_FIND_USE_CMAKE_ENVIRONMENT_PATH: true
+      CMAKE_FIND_USE_SYSTEM_ENVIRONMENT_PATH: true
+      CMAKE_FIND_USE_CMAKE_SYSTEM_PATH: true
+      CMAKE_FIND_USE_INSTALL_PREFIX: true
+    names:
+      - "CMakeCCompilerId.c.in"
+    candidate_directories:
+      - "C:/Program Files/CMake/share/cmake-4.1/Modules/"
+    found: "C:/Program Files/CMake/share/cmake-4.1/Modules/CMakeCCompilerId.c.in"
+    search_context:
+      ENV{PATH}:
+        - "C:\\Program Files\\PowerShell\\7"
+        - "C:\\Program Files\\Microsoft SDKs\\Azure\\CLI2\\wbin"
+        - "C:\\Program Files\\Zulu\\zulu-21\\bin\\"
+        - "C:\\Windows\\system32"
+        - "C:\\Windows"
+        - "C:\\Windows\\System32\\Wbem"
+        - "C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\"
+        - "C:\\Windows\\System32\\OpenSSH\\"
+        - "C:\\Program Files\\Microsoft SQL Server\\150\\Tools\\Binn\\"
+        - "C:\\Program Files\\010 Editor"
+        - "C:\\Program Files\\NVIDIA Corporation\\NVIDIA app\\NvDLISR"
+        - "C:\\Program Files (x86)\\NVIDIA Corporation\\PhysX\\Common"
+        - "C:\\Program Files\\Microsoft SQL Server\\Client SDK\\ODBC\\170\\Tools\\Binn\\"
+        - "C:\\Program Files\\dotnet\\"
+        - "C:\\Program Files\\Git\\cmd"
+        - "C:\\Program Files\\nodejs\\"
+        - "C:\\Program Files (x86)\\Windows Kits\\10\\Windows Performance Toolkit\\"
+        - "C:\\Program Files\\CMake\\bin"
+        - "C:\\Program Files\\Microsoft SQL Server\\170\\Tools\\Binn\\"
+        - "C:\\ffmpeg-8.0.1-full_build\\bin"
+        - "C:\\Program Files\\PuTTY\\"
+        - "C:\\Program Files\\PowerShell\\7\\"
+        - "C:\\Strawberry\\c\\bin"
+        - "C:\\Strawberry\\perl\\site\\bin"
+        - "C:\\Strawberry\\perl\\bin"
+        - "C:\\Program Files\\Docker\\Docker\\resources\\bin"
+        - "C:\\Program Files\\CanopyDoc\\Connector"
+        - "C:\\Program Files\\PyManager\\"
+        - "C:\\Users\\poofi\\.local\\bin"
+        - "C:\\Users\\poofi\\AppData\\Local\\Programs\\Python\\Launcher\\"
+        - "C:\\Users\\poofi\\.cargo\\bin"
+        - "C:\\Users\\poofi\\AppData\\Local\\Programs\\oh-my-posh\\bin\\"
+        - "C:\\Users\\poofi\\AppData\\Local\\Microsoft\\WindowsApps"
+        - "C:\\Users\\poofi\\AppData\\Local\\Programs\\Microsoft VS Code\\bin"
+        - "C:\\Users\\poofi\\.dotnet\\tools"
+        - "C:\\Users\\poofi\\AppData\\Local\\Microsoft\\WinGet\\Packages\\Microsoft.Sysinternals_Microsoft.Winget.Source_8wekyb3d8bbwe"
+        - "C:\\Users\\poofi\\AppData\\Local\\Programs\\Fiddler"
+        - "C:\\Users\\poofi\\AppData\\Local\\GitHubDesktop\\bin"
+        - "C:\\Users\\poofi\\AppData\\Roaming\\npm"
+        - "C:\\Users\\poofi\\.dotnet\\tools"
+        - "C:\\Users\\poofi\\AppData\\Local\\Microsoft\\WinGet\\Packages\\GitHub.Copilot_Microsoft.Winget.Source_8wekyb3d8bbwe"
+        - "C:\\Users\\poofi\\AppData\\Local\\Programs\\MiKTeX\\miktex\\bin\\x64\\"
+  -
+    kind: "message-v1"
+    backtrace:
+      - "C:/Program Files/CMake/share/cmake-4.1/Modules/CMakeDetermineCompilerId.cmake:17 (message)"
+      - "C:/Program Files/CMake/share/cmake-4.1/Modules/CMakeDetermineCompilerId.cmake:64 (__determine_compiler_id_test)"
+      - "C:/Program Files/CMake/share/cmake-4.1/Modules/CMakeDetermineCCompiler.cmake:122 (CMAKE_DETERMINE_COMPILER_ID)"
+      - "CMakeLists.txt:2 (project)"
+    message: |
+      Compiling the C compiler identification source file "CMakeCCompilerId.c" succeeded.
+      Compiler:  
+      Build flags: 
+      Id flags:  
+      
+      The output was:
+      0
+      MSBuild version 17.14.23+b0019275e for .NET Framework
+      Build started 6/30/2026 12:12:45 PM.
+      
+      Project "C:\\Users\\poofi\\source\\repos\\FruityLoopsLLMLink\\bootstrap\\build\\CMakeFiles\\4.1.1\\CompilerIdC\\CompilerIdC.vcxproj" on node 1 (default targets).
+      PrepareForBuild:
+        Creating directory "Debug\\".
+        Structured output is enabled. The formatting of compiler diagnostics will reflect the error hierarchy. See https://aka.ms/cpp/structured-output for more details.
+        Creating directory "Debug\\CompilerIdC.tlog\\".
+      InitializeBuildStatus:
+        Creating "Debug\\CompilerIdC.tlog\\unsuccessfulbuild" because "AlwaysCreate" was specified.
+        Touching "Debug\\CompilerIdC.tlog\\unsuccessfulbuild".
+      ClCompile:
+        C:\\Program Files\\Microsoft Visual Studio\\2022\\Enterprise\\VC\\Tools\\MSVC\\14.44.35207\\bin\\HostX64\\x64\\CL.exe /c /nologo /W0 /WX- /diagnostics:column /Od /D _MBCS /Gm- /EHsc /RTC1 /MDd /GS /fp:precise /Zc:wchar_t /Zc:forScope /Zc:inline /Fo"Debug\\\\" /Fd"Debug\\vc143.pdb" /external:W0 /Gd /TC /FC /errorReport:queue CMakeCCompilerId.c
+        CMakeCCompilerId.c
+      Link:
+        C:\\Program Files\\Microsoft Visual Studio\\2022\\Enterprise\\VC\\Tools\\MSVC\\14.44.35207\\bin\\HostX64\\x64\\link.exe /ERRORREPORT:QUEUE /OUT:".\\CompilerIdC.exe" /INCREMENTAL:NO /NOLOGO kernel32.lib user32.lib gdi32.lib winspool.lib comdlg32.lib advapi32.lib shell32.lib ole32.lib oleaut32.lib uuid.lib odbc32.lib odbccp32.lib /MANIFEST /MANIFESTUAC:"level='asInvoker' uiAccess='false'" /manifest:embed /PDB:".\\CompilerIdC.pdb" /SUBSYSTEM:CONSOLE /TLBID:1 /DYNAMICBASE /NXCOMPAT /IMPLIB:".\\CompilerIdC.lib" /MACHINE:X64 Debug\\CMakeCCompilerId.obj
+        CompilerIdC.vcxproj -> C:\\Users\\poofi\\source\\repos\\FruityLoopsLLMLink\\bootstrap\\build\\CMakeFiles\\4.1.1\\CompilerIdC\\CompilerIdC.exe
+      PostBuildEvent:
+        for %%i in (cl.exe) do @echo CMAKE_C_COMPILER=%%~$PATH:i
+        :VCEnd
+        CMAKE_C_COMPILER=C:\\Program Files\\Microsoft Visual Studio\\2022\\Enterprise\\VC\\Tools\\MSVC\\14.44.35207\\bin\\Hostx64\\x64\\cl.exe
+      FinalizeBuildStatus:
+        Deleting file "Debug\\CompilerIdC.tlog\\unsuccessfulbuild".
+        Touching "Debug\\CompilerIdC.tlog\\CompilerIdC.lastbuildstate".
+      Done Building Project "C:\\Users\\poofi\\source\\repos\\FruityLoopsLLMLink\\bootstrap\\build\\CMakeFiles\\4.1.1\\CompilerIdC\\CompilerIdC.vcxproj" (default targets).
+      
+      Build succeeded.
+          0 Warning(s)
+          0 Error(s)
+      
+      Time Elapsed 00:00:00.69
+      
+      
+      Compilation of the C compiler identification source "CMakeCCompilerId.c" produced "CompilerIdC.exe"
+      
+      Compilation of the C compiler identification source "CMakeCCompilerId.c" produced "CompilerIdC.vcxproj"
+      
+      The C compiler identification is MSVC, found in:
+        C:/Users/poofi/source/repos/FruityLoopsLLMLink/bootstrap/build/CMakeFiles/4.1.1/CompilerIdC/CompilerIdC.exe
+      
+  -
+    kind: "find-v1"
+    backtrace:
+      - "C:/Program Files/CMake/share/cmake-4.1/Modules/CMakeFindBinUtils.cmake:37 (find_program)"
+      - "C:/Program Files/CMake/share/cmake-4.1/Modules/CMakeFindBinUtils.cmake:65 (__resolve_tool_path)"
+      - "C:/Program Files/CMake/share/cmake-4.1/Modules/CMakeFindBinUtils.cmake:103 (__resolve_linker_path)"
+      - "C:/Program Files/CMake/share/cmake-4.1/Modules/CMakeDetermineCCompiler.cmake:200 (include)"
+      - "CMakeLists.txt:2 (project)"
+    mode: "program"
+    variable: "_CMAKE_TOOL_WITH_PATH"
+    description: "Path to a program."
+    settings:
+      SearchFramework: "NEVER"
+      SearchAppBundle: "NEVER"
+      CMAKE_FIND_USE_CMAKE_PATH: false
+      CMAKE_FIND_USE_CMAKE_ENVIRONMENT_PATH: false
+      CMAKE_FIND_USE_SYSTEM_ENVIRONMENT_PATH: true
+      CMAKE_FIND_USE_CMAKE_SYSTEM_PATH: true
+      CMAKE_FIND_USE_INSTALL_PREFIX: true
+    names:
+      - "link"
+    candidate_directories:
+      - "C:/Program Files/Microsoft Visual Studio/2022/Enterprise/VC/Tools/MSVC/14.44.35207/bin/Hostx64/x64/"
+      - "C:/Program Files/PowerShell/7/"
+      - "C:/Program Files/Microsoft SDKs/Azure/CLI2/wbin/"
+      - "C:/Program Files/Zulu/zulu-21/bin/"
+      - "C:/Windows/System32/"
+      - "C:/Windows/"
+      - "C:/Windows/System32/wbem/"
+      - "C:/Windows/System32/WindowsPowerShell/v1.0/"
+      - "C:/Windows/System32/OpenSSH/"
+      - "C:/Program Files/Microsoft SQL Server/150/Tools/Binn/"
+      - "C:/Program Files/010 Editor/"
+      - "C:/Program Files/NVIDIA Corporation/NVIDIA app/NvDLISR/"
+      - "C:/Program Files (x86)/NVIDIA Corporation/PhysX/Common/"
+      - "C:/Program Files/Microsoft SQL Server/Client SDK/ODBC/170/Tools/Binn/"
+      - "C:/Program Files/dotnet/"
+      - "C:/Program Files/Git/cmd/"
+      - "C:/Program Files/nodejs/"
+      - "C:/Program Files (x86)/Windows Kits/10/Windows Performance Toolkit/"
+      - "C:/Program Files/CMake/bin/"
+      - "C:/Program Files/Microsoft SQL Server/170/Tools/Binn/"
+      - "C:/ffmpeg-8.0.1-full_build/bin/"
+      - "C:/Program Files/PuTTY/"
+      - "C:/Strawberry/c/bin/"
+      - "C:/Strawberry/perl/site/bin/"
+      - "C:/Strawberry/perl/bin/"
+      - "C:/Program Files/Docker/Docker/resources/bin/"
+      - "C:/Program Files/CanopyDoc/Connector/"
+      - "C:/Program Files/PyManager/"
+      - "C:/Users/poofi/.local/bin/"
+      - "C:/Users/poofi/AppData/Local/Programs/Python/Launcher/"
+      - "C:/Users/poofi/.cargo/bin/"
+      - "C:/Users/poofi/AppData/Local/Programs/oh-my-posh/bin/"
+      - "C:/Users/poofi/AppData/Local/Microsoft/WindowsApps/"
+      - "C:/Users/poofi/AppData/Local/Programs/Microsoft VS Code/bin/"
+      - "C:/Users/poofi/.dotnet/tools/"
+      - "C:/Users/poofi/AppData/Local/Microsoft/WinGet/Packages/Microsoft.Sysinternals_Microsoft.Winget.Source_8wekyb3d8bbwe/"
+      - "C:/Users/poofi/AppData/Local/Programs/Fiddler/"
+      - "C:/Users/poofi/AppData/Local/GitHubDesktop/bin/"
+      - "C:/Users/poofi/AppData/Roaming/npm/"
+      - "C:/Users/poofi/AppData/Local/Microsoft/WinGet/Packages/GitHub.Copilot_Microsoft.Winget.Source_8wekyb3d8bbwe/"
+      - "C:/Users/poofi/AppData/Local/Programs/MiKTeX/miktex/bin/x64/"
+    searched_directories:
+      - "C:/Program Files/Microsoft Visual Studio/2022/Enterprise/VC/Tools/MSVC/14.44.35207/bin/Hostx64/x64/link.com"
+    found: "C:/Program Files/Microsoft Visual Studio/2022/Enterprise/VC/Tools/MSVC/14.44.35207/bin/Hostx64/x64/link.exe"
+    search_context:
+      ENV{PATH}:
+        - "C:\\Program Files\\PowerShell\\7"
+        - "C:\\Program Files\\Microsoft SDKs\\Azure\\CLI2\\wbin"
+        - "C:\\Program Files\\Zulu\\zulu-21\\bin\\"
+        - "C:\\Windows\\system32"
+        - "C:\\Windows"
+        - "C:\\Windows\\System32\\Wbem"
+        - "C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\"
+        - "C:\\Windows\\System32\\OpenSSH\\"
+        - "C:\\Program Files\\Microsoft SQL Server\\150\\Tools\\Binn\\"
+        - "C:\\Program Files\\010 Editor"
+        - "C:\\Program Files\\NVIDIA Corporation\\NVIDIA app\\NvDLISR"
+        - "C:\\Program Files (x86)\\NVIDIA Corporation\\PhysX\\Common"
+        - "C:\\Program Files\\Microsoft SQL Server\\Client SDK\\ODBC\\170\\Tools\\Binn\\"
+        - "C:\\Program Files\\dotnet\\"
+        - "C:\\Program Files\\Git\\cmd"
+        - "C:\\Program Files\\nodejs\\"
+        - "C:\\Program Files (x86)\\Windows Kits\\10\\Windows Performance Toolkit\\"
+        - "C:\\Program Files\\CMake\\bin"
+        - "C:\\Program Files\\Microsoft SQL Server\\170\\Tools\\Binn\\"
+        - "C:\\ffmpeg-8.0.1-full_build\\bin"
+        - "C:\\Program Files\\PuTTY\\"
+        - "C:\\Program Files\\PowerShell\\7\\"
+        - "C:\\Strawberry\\c\\bin"
+        - "C:\\Strawberry\\perl\\site\\bin"
+        - "C:\\Strawberry\\perl\\bin"
+        - "C:\\Program Files\\Docker\\Docker\\resources\\bin"
+        - "C:\\Program Files\\CanopyDoc\\Connector"
+        - "C:\\Program Files\\PyManager\\"
+        - "C:\\Users\\poofi\\.local\\bin"
+        - "C:\\Users\\poofi\\AppData\\Local\\Programs\\Python\\Launcher\\"
+        - "C:\\Users\\poofi\\.cargo\\bin"
+        - "C:\\Users\\poofi\\AppData\\Local\\Programs\\oh-my-posh\\bin\\"
+        - "C:\\Users\\poofi\\AppData\\Local\\Microsoft\\WindowsApps"
+        - "C:\\Users\\poofi\\AppData\\Local\\Programs\\Microsoft VS Code\\bin"
+        - "C:\\Users\\poofi\\.dotnet\\tools"
+        - "C:\\Users\\poofi\\AppData\\Local\\Microsoft\\WinGet\\Packages\\Microsoft.Sysinternals_Microsoft.Winget.Source_8wekyb3d8bbwe"
+        - "C:\\Users\\poofi\\AppData\\Local\\Programs\\Fiddler"
+        - "C:\\Users\\poofi\\AppData\\Local\\GitHubDesktop\\bin"
+        - "C:\\Users\\poofi\\AppData\\Roaming\\npm"
+        - "C:\\Users\\poofi\\.dotnet\\tools"
+        - "C:\\Users\\poofi\\AppData\\Local\\Microsoft\\WinGet\\Packages\\GitHub.Copilot_Microsoft.Winget.Source_8wekyb3d8bbwe"
+        - "C:\\Users\\poofi\\AppData\\Local\\Programs\\MiKTeX\\miktex\\bin\\x64\\"
+  -
+    kind: "find-v1"
+    backtrace:
+      - "C:/Program Files/CMake/share/cmake-4.1/Modules/CMakeFindBinUtils.cmake:37 (find_program)"
+      - "C:/Program Files/CMake/share/cmake-4.1/Modules/CMakeFindBinUtils.cmake:65 (__resolve_tool_path)"
+      - "C:/Program Files/CMake/share/cmake-4.1/Modules/CMakeFindBinUtils.cmake:104 (__resolve_linker_path)"
+      - "C:/Program Files/CMake/share/cmake-4.1/Modules/CMakeDetermineCCompiler.cmake:200 (include)"
+      - "CMakeLists.txt:2 (project)"
+    mode: "program"
+    variable: "_CMAKE_TOOL_WITH_PATH"
+    description: "Path to a program."
+    settings:
+      SearchFramework: "NEVER"
+      SearchAppBundle: "NEVER"
+      CMAKE_FIND_USE_CMAKE_PATH: false
+      CMAKE_FIND_USE_CMAKE_ENVIRONMENT_PATH: false
+      CMAKE_FIND_USE_SYSTEM_ENVIRONMENT_PATH: true
+      CMAKE_FIND_USE_CMAKE_SYSTEM_PATH: true
+      CMAKE_FIND_USE_INSTALL_PREFIX: true
+    names:
+      - "lld-link"
+    candidate_directories:
+      - "C:/Program Files/Microsoft Visual Studio/2022/Enterprise/VC/Tools/MSVC/14.44.35207/bin/Hostx64/x64/"
+      - "C:/Program Files/PowerShell/7/"
+      - "C:/Program Files/Microsoft SDKs/Azure/CLI2/wbin/"
+      - "C:/Program Files/Zulu/zulu-21/bin/"
+      - "C:/Windows/System32/"
+      - "C:/Windows/"
+      - "C:/Windows/System32/wbem/"
+      - "C:/Windows/System32/WindowsPowerShell/v1.0/"
+      - "C:/Windows/System32/OpenSSH/"
+      - "C:/Program Files/Microsoft SQL Server/150/Tools/Binn/"
+      - "C:/Program Files/010 Editor/"
+      - "C:/Program Files/NVIDIA Corporation/NVIDIA app/NvDLISR/"
+      - "C:/Program Files (x86)/NVIDIA Corporation/PhysX/Common/"
+      - "C:/Program Files/Microsoft SQL Server/Client SDK/ODBC/170/Tools/Binn/"
+      - "C:/Program Files/dotnet/"
+      - "C:/Program Files/Git/cmd/"
+      - "C:/Program Files/nodejs/"
+      - "C:/Program Files (x86)/Windows Kits/10/Windows Performance Toolkit/"
+      - "C:/Program Files/CMake/bin/"
+      - "C:/Program Files/Microsoft SQL Server/170/Tools/Binn/"
+      - "C:/ffmpeg-8.0.1-full_build/bin/"
+      - "C:/Program Files/PuTTY/"
+      - "C:/Strawberry/c/bin/"
+      - "C:/Strawberry/perl/site/bin/"
+      - "C:/Strawberry/perl/bin/"
+      - "C:/Program Files/Docker/Docker/resources/bin/"
+      - "C:/Program Files/CanopyDoc/Connector/"
+      - "C:/Program Files/PyManager/"
+      - "C:/Users/poofi/.local/bin/"
+      - "C:/Users/poofi/AppData/Local/Programs/Python/Launcher/"
+      - "C:/Users/poofi/.cargo/bin/"
+      - "C:/Users/poofi/AppData/Local/Programs/oh-my-posh/bin/"
+      - "C:/Users/poofi/AppData/Local/Microsoft/WindowsApps/"
+      - "C:/Users/poofi/AppData/Local/Programs/Microsoft VS Code/bin/"
+      - "C:/Users/poofi/.dotnet/tools/"
+      - "C:/Users/poofi/AppData/Local/Microsoft/WinGet/Packages/Microsoft.Sysinternals_Microsoft.Winget.Source_8wekyb3d8bbwe/"
+      - "C:/Users/poofi/AppData/Local/Programs/Fiddler/"
+      - "C:/Users/poofi/AppData/Local/GitHubDesktop/bin/"
+      - "C:/Users/poofi/AppData/Roaming/npm/"
+      - "C:/Users/poofi/AppData/Local/Microsoft/WinGet/Packages/GitHub.Copilot_Microsoft.Winget.Source_8wekyb3d8bbwe/"
+      - "C:/Users/poofi/AppData/Local/Programs/MiKTeX/miktex/bin/x64/"
+    searched_directories:
+      - "C:/Program Files/Microsoft Visual Studio/2022/Enterprise/VC/Tools/MSVC/14.44.35207/bin/Hostx64/x64/lld-link.com"
+      - "C:/Program Files/Microsoft Visual Studio/2022/Enterprise/VC/Tools/MSVC/14.44.35207/bin/Hostx64/x64/lld-link.exe"
+      - "C:/Program Files/Microsoft Visual Studio/2022/Enterprise/VC/Tools/MSVC/14.44.35207/bin/Hostx64/x64/lld-link"
+      - "C:/Program Files/PowerShell/7/lld-link.com"
+      - "C:/Program Files/PowerShell/7/lld-link.exe"
+      - "C:/Program Files/PowerShell/7/lld-link"
+      - "C:/Program Files/Microsoft SDKs/Azure/CLI2/wbin/lld-link.com"
+      - "C:/Program Files/Microsoft SDKs/Azure/CLI2/wbin/lld-link.exe"
+      - "C:/Program Files/Microsoft SDKs/Azure/CLI2/wbin/lld-link"
+      - "C:/Program Files/Zulu/zulu-21/bin/lld-link.com"
+      - "C:/Program Files/Zulu/zulu-21/bin/lld-link.exe"
+      - "C:/Program Files/Zulu/zulu-21/bin/lld-link"
+      - "C:/Windows/System32/lld-link.com"
+      - "C:/Windows/System32/lld-link.exe"
+      - "C:/Windows/System32/lld-link"
+      - "C:/Windows/lld-link.com"
+      - "C:/Windows/lld-link.exe"
+      - "C:/Windows/lld-link"
+      - "C:/Windows/System32/wbem/lld-link.com"
+      - "C:/Windows/System32/wbem/lld-link.exe"
+      - "C:/Windows/System32/wbem/lld-link"
+      - "C:/Windows/System32/WindowsPowerShell/v1.0/lld-link.com"
+      - "C:/Windows/System32/WindowsPowerShell/v1.0/lld-link.exe"
+      - "C:/Windows/System32/WindowsPowerShell/v1.0/lld-link"
+      - "C:/Windows/System32/OpenSSH/lld-link.com"
+      - "C:/Windows/System32/OpenSSH/lld-link.exe"
+      - "C:/Windows/System32/OpenSSH/lld-link"
+      - "C:/Program Files/Microsoft SQL Server/150/Tools/Binn/lld-link.com"
+      - "C:/Program Files/Microsoft SQL Server/150/Tools/Binn/lld-link.exe"
+      - "C:/Program Files/Microsoft SQL Server/150/Tools/Binn/lld-link"
+      - "C:/Program Files/010 Editor/lld-link.com"
+      - "C:/Program Files/010 Editor/lld-link.exe"
+      - "C:/Program Files/010 Editor/lld-link"
+      - "C:/Program Files/NVIDIA Corporation/NVIDIA app/NvDLISR/lld-link.com"
+      - "C:/Program Files/NVIDIA Corporation/NVIDIA app/NvDLISR/lld-link.exe"
+      - "C:/Program Files/NVIDIA Corporation/NVIDIA app/NvDLISR/lld-link"
+      - "C:/Program Files (x86)/NVIDIA Corporation/PhysX/Common/lld-link.com"
+      - "C:/Program Files (x86)/NVIDIA Corporation/PhysX/Common/lld-link.exe"
+      - "C:/Program Files (x86)/NVIDIA Corporation/PhysX/Common/lld-link"
+      - "C:/Program Files/Microsoft SQL Server/Client SDK/ODBC/170/Tools/Binn/lld-link.com"
+      - "C:/Program Files/Microsoft SQL Server/Client SDK/ODBC/170/Tools/Binn/lld-link.exe"
+      - "C:/Program Files/Microsoft SQL Server/Client SDK/ODBC/170/Tools/Binn/lld-link"
+      - "C:/Program Files/dotnet/lld-link.com"
+      - "C:/Program Files/dotnet/lld-link.exe"
+      - "C:/Program Files/dotnet/lld-link"
+      - "C:/Program Files/Git/cmd/lld-link.com"
+      - "C:/Program Files/Git/cmd/lld-link.exe"
+      - "C:/Program Files/Git/cmd/lld-link"
+      - "C:/Program Files/nodejs/lld-link.com"
+      - "C:/Program Files/nodejs/lld-link.exe"
+      - "C:/Program Files/nodejs/lld-link"
+      - "C:/Program Files (x86)/Windows Kits/10/Windows Performance Toolkit/lld-link.com"
+      - "C:/Program Files (x86)/Windows Kits/10/Windows Performance Toolkit/lld-link.exe"
+      - "C:/Program Files (x86)/Windows Kits/10/Windows Performance Toolkit/lld-link"
+      - "C:/Program Files/CMake/bin/lld-link.com"
+      - "C:/Program Files/CMake/bin/lld-link.exe"
+      - "C:/Program Files/CMake/bin/lld-link"
+      - "C:/Program Files/Microsoft SQL Server/170/Tools/Binn/lld-link.com"
+      - "C:/Program Files/Microsoft SQL Server/170/Tools/Binn/lld-link.exe"
+      - "C:/Program Files/Microsoft SQL Server/170/Tools/Binn/lld-link"
+      - "C:/ffmpeg-8.0.1-full_build/bin/lld-link.com"
+      - "C:/ffmpeg-8.0.1-full_build/bin/lld-link.exe"
+      - "C:/ffmpeg-8.0.1-full_build/bin/lld-link"
+      - "C:/Program Files/PuTTY/lld-link.com"
+      - "C:/Program Files/PuTTY/lld-link.exe"
+      - "C:/Program Files/PuTTY/lld-link"
+      - "C:/Strawberry/c/bin/lld-link.com"
+      - "C:/Strawberry/c/bin/lld-link.exe"
+      - "C:/Strawberry/c/bin/lld-link"
+      - "C:/Strawberry/perl/site/bin/lld-link.com"
+      - "C:/Strawberry/perl/site/bin/lld-link.exe"
+      - "C:/Strawberry/perl/site/bin/lld-link"
+      - "C:/Strawberry/perl/bin/lld-link.com"
+      - "C:/Strawberry/perl/bin/lld-link.exe"
+      - "C:/Strawberry/perl/bin/lld-link"
+      - "C:/Program Files/Docker/Docker/resources/bin/lld-link.com"
+      - "C:/Program Files/Docker/Docker/resources/bin/lld-link.exe"
+      - "C:/Program Files/Docker/Docker/resources/bin/lld-link"
+      - "C:/Program Files/CanopyDoc/Connector/lld-link.com"
+      - "C:/Program Files/CanopyDoc/Connector/lld-link.exe"
+      - "C:/Program Files/CanopyDoc/Connector/lld-link"
+      - "C:/Program Files/PyManager/lld-link.com"
+      - "C:/Program Files/PyManager/lld-link.exe"
+      - "C:/Program Files/PyManager/lld-link"
+      - "C:/Users/poofi/.local/bin/lld-link.com"
+      - "C:/Users/poofi/.local/bin/lld-link.exe"
+      - "C:/Users/poofi/.local/bin/lld-link"
+      - "C:/Users/poofi/AppData/Local/Programs/Python/Launcher/lld-link.com"
+      - "C:/Users/poofi/AppData/Local/Programs/Python/Launcher/lld-link.exe"
+      - "C:/Users/poofi/AppData/Local/Programs/Python/Launcher/lld-link"
+      - "C:/Users/poofi/.cargo/bin/lld-link.com"
+      - "C:/Users/poofi/.cargo/bin/lld-link.exe"
+      - "C:/Users/poofi/.cargo/bin/lld-link"
+      - "C:/Users/poofi/AppData/Local/Programs/oh-my-posh/bin/lld-link.com"
+      - "C:/Users/poofi/AppData/Local/Programs/oh-my-posh/bin/lld-link.exe"
+      - "C:/Users/poofi/AppData/Local/Programs/oh-my-posh/bin/lld-link"
+      - "C:/Users/poofi/AppData/Local/Microsoft/WindowsApps/lld-link.com"
+      - "C:/Users/poofi/AppData/Local/Microsoft/WindowsApps/lld-link.exe"
+      - "C:/Users/poofi/AppData/Local/Microsoft/WindowsApps/lld-link"
+      - "C:/Users/poofi/AppData/Local/Programs/Microsoft VS Code/bin/lld-link.com"
+      - "C:/Users/poofi/AppData/Local/Programs/Microsoft VS Code/bin/lld-link.exe"
+      - "C:/Users/poofi/AppData/Local/Programs/Microsoft VS Code/bin/lld-link"
+      - "C:/Users/poofi/.dotnet/tools/lld-link.com"
+      - "C:/Users/poofi/.dotnet/tools/lld-link.exe"
+      - "C:/Users/poofi/.dotnet/tools/lld-link"
+      - "C:/Users/poofi/AppData/Local/Microsoft/WinGet/Packages/Microsoft.Sysinternals_Microsoft.Winget.Source_8wekyb3d8bbwe/lld-link.com"
+      - "C:/Users/poofi/AppData/Local/Microsoft/WinGet/Packages/Microsoft.Sysinternals_Microsoft.Winget.Source_8wekyb3d8bbwe/lld-link.exe"
+      - "C:/Users/poofi/AppData/Local/Microsoft/WinGet/Packages/Microsoft.Sysinternals_Microsoft.Winget.Source_8wekyb3d8bbwe/lld-link"
+      - "C:/Users/poofi/AppData/Local/Programs/Fiddler/lld-link.com"
+      - "C:/Users/poofi/AppData/Local/Programs/Fiddler/lld-link.exe"
+      - "C:/Users/poofi/AppData/Local/Programs/Fiddler/lld-link"
+      - "C:/Users/poofi/AppData/Local/GitHubDesktop/bin/lld-link.com"
+      - "C:/Users/poofi/AppData/Local/GitHubDesktop/bin/lld-link.exe"
+      - "C:/Users/poofi/AppData/Local/GitHubDesktop/bin/lld-link"
+      - "C:/Users/poofi/AppData/Roaming/npm/lld-link.com"
+      - "C:/Users/poofi/AppData/Roaming/npm/lld-link.exe"
+      - "C:/Users/poofi/AppData/Roaming/npm/lld-link"
+      - "C:/Users/poofi/AppData/Local/Microsoft/WinGet/Packages/GitHub.Copilot_Microsoft.Winget.Source_8wekyb3d8bbwe/lld-link.com"
+      - "C:/Users/poofi/AppData/Local/Microsoft/WinGet/Packages/GitHub.Copilot_Microsoft.Winget.Source_8wekyb3d8bbwe/lld-link.exe"
+      - "C:/Users/poofi/AppData/Local/Microsoft/WinGet/Packages/GitHub.Copilot_Microsoft.Winget.Source_8wekyb3d8bbwe/lld-link"
+      - "C:/Users/poofi/AppData/Local/Programs/MiKTeX/miktex/bin/x64/lld-link.com"
+      - "C:/Users/poofi/AppData/Local/Programs/MiKTeX/miktex/bin/x64/lld-link.exe"
+      - "C:/Users/poofi/AppData/Local/Programs/MiKTeX/miktex/bin/x64/lld-link"
+    found: false
+    search_context:
+      ENV{PATH}:
+        - "C:\\Program Files\\PowerShell\\7"
+        - "C:\\Program Files\\Microsoft SDKs\\Azure\\CLI2\\wbin"
+        - "C:\\Program Files\\Zulu\\zulu-21\\bin\\"
+        - "C:\\Windows\\system32"
+        - "C:\\Windows"
+        - "C:\\Windows\\System32\\Wbem"
+        - "C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\"
+        - "C:\\Windows\\System32\\OpenSSH\\"
+        - "C:\\Program Files\\Microsoft SQL Server\\150\\Tools\\Binn\\"
+        - "C:\\Program Files\\010 Editor"
+        - "C:\\Program Files\\NVIDIA Corporation\\NVIDIA app\\NvDLISR"
+        - "C:\\Program Files (x86)\\NVIDIA Corporation\\PhysX\\Common"
+        - "C:\\Program Files\\Microsoft SQL Server\\Client SDK\\ODBC\\170\\Tools\\Binn\\"
+        - "C:\\Program Files\\dotnet\\"
+        - "C:\\Program Files\\Git\\cmd"
+        - "C:\\Program Files\\nodejs\\"
+        - "C:\\Program Files (x86)\\Windows Kits\\10\\Windows Performance Toolkit\\"
+        - "C:\\Program Files\\CMake\\bin"
+        - "C:\\Program Files\\Microsoft SQL Server\\170\\Tools\\Binn\\"
+        - "C:\\ffmpeg-8.0.1-full_build\\bin"
+        - "C:\\Program Files\\PuTTY\\"
+        - "C:\\Program Files\\PowerShell\\7\\"
+        - "C:\\Strawberry\\c\\bin"
+        - "C:\\Strawberry\\perl\\site\\bin"
+        - "C:\\Strawberry\\perl\\bin"
+        - "C:\\Program Files\\Docker\\Docker\\resources\\bin"
+        - "C:\\Program Files\\CanopyDoc\\Connector"
+        - "C:\\Program Files\\PyManager\\"
+        - "C:\\Users\\poofi\\.local\\bin"
+        - "C:\\Users\\poofi\\AppData\\Local\\Programs\\Python\\Launcher\\"
+        - "C:\\Users\\poofi\\.cargo\\bin"
+        - "C:\\Users\\poofi\\AppData\\Local\\Programs\\oh-my-posh\\bin\\"
+        - "C:\\Users\\poofi\\AppData\\Local\\Microsoft\\WindowsApps"
+        - "C:\\Users\\poofi\\AppData\\Local\\Programs\\Microsoft VS Code\\bin"
+        - "C:\\Users\\poofi\\.dotnet\\tools"
+        - "C:\\Users\\poofi\\AppData\\Local\\Microsoft\\WinGet\\Packages\\Microsoft.Sysinternals_Microsoft.Winget.Source_8wekyb3d8bbwe"
+        - "C:\\Users\\poofi\\AppData\\Local\\Programs\\Fiddler"
+        - "C:\\Users\\poofi\\AppData\\Local\\GitHubDesktop\\bin"
+        - "C:\\Users\\poofi\\AppData\\Roaming\\npm"
+        - "C:\\Users\\poofi\\.dotnet\\tools"
+        - "C:\\Users\\poofi\\AppData\\Local\\Microsoft\\WinGet\\Packages\\GitHub.Copilot_Microsoft.Winget.Source_8wekyb3d8bbwe"
+        - "C:\\Users\\poofi\\AppData\\Local\\Programs\\MiKTeX\\miktex\\bin\\x64\\"
+  -
+    kind: "find-v1"
+    backtrace:
+      - "C:/Program Files/CMake/share/cmake-4.1/Modules/CMakeFindBinUtils.cmake:238 (find_program)"
+      - "C:/Program Files/CMake/share/cmake-4.1/Modules/CMakeDetermineCCompiler.cmake:200 (include)"
+      - "CMakeLists.txt:2 (project)"
+    mode: "program"
+    variable: "CMAKE_LINKER"
+    description: "Path to a program."
+    settings:
+      SearchFramework: "NEVER"
+      SearchAppBundle: "NEVER"
+      CMAKE_FIND_USE_CMAKE_PATH: false
+      CMAKE_FIND_USE_CMAKE_ENVIRONMENT_PATH: false
+      CMAKE_FIND_USE_SYSTEM_ENVIRONMENT_PATH: true
+      CMAKE_FIND_USE_CMAKE_SYSTEM_PATH: true
+      CMAKE_FIND_USE_INSTALL_PREFIX: true
+    names:
+      - "link"
+    candidate_directories:
+      - "C:/Program Files/Microsoft Visual Studio/2022/Enterprise/VC/Tools/MSVC/14.44.35207/bin/Hostx64/x64/"
+      - "C:/Program Files/PowerShell/7/"
+      - "C:/Program Files/Microsoft SDKs/Azure/CLI2/wbin/"
+      - "C:/Program Files/Zulu/zulu-21/bin/"
+      - "C:/Windows/System32/"
+      - "C:/Windows/"
+      - "C:/Windows/System32/wbem/"
+      - "C:/Windows/System32/WindowsPowerShell/v1.0/"
+      - "C:/Windows/System32/OpenSSH/"
+      - "C:/Program Files/Microsoft SQL Server/150/Tools/Binn/"
+      - "C:/Program Files/010 Editor/"
+      - "C:/Program Files/NVIDIA Corporation/NVIDIA app/NvDLISR/"
+      - "C:/Program Files (x86)/NVIDIA Corporation/PhysX/Common/"
+      - "C:/Program Files/Microsoft SQL Server/Client SDK/ODBC/170/Tools/Binn/"
+      - "C:/Program Files/dotnet/"
+      - "C:/Program Files/Git/cmd/"
+      - "C:/Program Files/nodejs/"
+      - "C:/Program Files (x86)/Windows Kits/10/Windows Performance Toolkit/"
+      - "C:/Program Files/CMake/bin/"
+      - "C:/Program Files/Microsoft SQL Server/170/Tools/Binn/"
+      - "C:/ffmpeg-8.0.1-full_build/bin/"
+      - "C:/Program Files/PuTTY/"
+      - "C:/Strawberry/c/bin/"
+      - "C:/Strawberry/perl/site/bin/"
+      - "C:/Strawberry/perl/bin/"
+      - "C:/Program Files/Docker/Docker/resources/bin/"
+      - "C:/Program Files/CanopyDoc/Connector/"
+      - "C:/Program Files/PyManager/"
+      - "C:/Users/poofi/.local/bin/"
+      - "C:/Users/poofi/AppData/Local/Programs/Python/Launcher/"
+      - "C:/Users/poofi/.cargo/bin/"
+      - "C:/Users/poofi/AppData/Local/Programs/oh-my-posh/bin/"
+      - "C:/Users/poofi/AppData/Local/Microsoft/WindowsApps/"
+      - "C:/Users/poofi/AppData/Local/Programs/Microsoft VS Code/bin/"
+      - "C:/Users/poofi/.dotnet/tools/"
+      - "C:/Users/poofi/AppData/Local/Microsoft/WinGet/Packages/Microsoft.Sysinternals_Microsoft.Winget.Source_8wekyb3d8bbwe/"
+      - "C:/Users/poofi/AppData/Local/Programs/Fiddler/"
+      - "C:/Users/poofi/AppData/Local/GitHubDesktop/bin/"
+      - "C:/Users/poofi/AppData/Roaming/npm/"
+      - "C:/Users/poofi/AppData/Local/Microsoft/WinGet/Packages/GitHub.Copilot_Microsoft.Winget.Source_8wekyb3d8bbwe/"
+      - "C:/Users/poofi/AppData/Local/Programs/MiKTeX/miktex/bin/x64/"
+    searched_directories:
+      - "C:/Program Files/Microsoft Visual Studio/2022/Enterprise/VC/Tools/MSVC/14.44.35207/bin/Hostx64/x64/link.com"
+    found: "C:/Program Files/Microsoft Visual Studio/2022/Enterprise/VC/Tools/MSVC/14.44.35207/bin/Hostx64/x64/link.exe"
+    search_context:
+      ENV{PATH}:
+        - "C:\\Program Files\\PowerShell\\7"
+        - "C:\\Program Files\\Microsoft SDKs\\Azure\\CLI2\\wbin"
+        - "C:\\Program Files\\Zulu\\zulu-21\\bin\\"
+        - "C:\\Windows\\system32"
+        - "C:\\Windows"
+        - "C:\\Windows\\System32\\Wbem"
+        - "C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\"
+        - "C:\\Windows\\System32\\OpenSSH\\"
+        - "C:\\Program Files\\Microsoft SQL Server\\150\\Tools\\Binn\\"
+        - "C:\\Program Files\\010 Editor"
+        - "C:\\Program Files\\NVIDIA Corporation\\NVIDIA app\\NvDLISR"
+        - "C:\\Program Files (x86)\\NVIDIA Corporation\\PhysX\\Common"
+        - "C:\\Program Files\\Microsoft SQL Server\\Client SDK\\ODBC\\170\\Tools\\Binn\\"
+        - "C:\\Program Files\\dotnet\\"
+        - "C:\\Program Files\\Git\\cmd"
+        - "C:\\Program Files\\nodejs\\"
+        - "C:\\Program Files (x86)\\Windows Kits\\10\\Windows Performance Toolkit\\"
+        - "C:\\Program Files\\CMake\\bin"
+        - "C:\\Program Files\\Microsoft SQL Server\\170\\Tools\\Binn\\"
+        - "C:\\ffmpeg-8.0.1-full_build\\bin"
+        - "C:\\Program Files\\PuTTY\\"
+        - "C:\\Program Files\\PowerShell\\7\\"
+        - "C:\\Strawberry\\c\\bin"
+        - "C:\\Strawberry\\perl\\site\\bin"
+        - "C:\\Strawberry\\perl\\bin"
+        - "C:\\Program Files\\Docker\\Docker\\resources\\bin"
+        - "C:\\Program Files\\CanopyDoc\\Connector"
+        - "C:\\Program Files\\PyManager\\"
+        - "C:\\Users\\poofi\\.local\\bin"
+        - "C:\\Users\\poofi\\AppData\\Local\\Programs\\Python\\Launcher\\"
+        - "C:\\Users\\poofi\\.cargo\\bin"
+        - "C:\\Users\\poofi\\AppData\\Local\\Programs\\oh-my-posh\\bin\\"
+        - "C:\\Users\\poofi\\AppData\\Local\\Microsoft\\WindowsApps"
+        - "C:\\Users\\poofi\\AppData\\Local\\Programs\\Microsoft VS Code\\bin"
+        - "C:\\Users\\poofi\\.dotnet\\tools"
+        - "C:\\Users\\poofi\\AppData\\Local\\Microsoft\\WinGet\\Packages\\Microsoft.Sysinternals_Microsoft.Winget.Source_8wekyb3d8bbwe"
+        - "C:\\Users\\poofi\\AppData\\Local\\Programs\\Fiddler"
+        - "C:\\Users\\poofi\\AppData\\Local\\GitHubDesktop\\bin"
+        - "C:\\Users\\poofi\\AppData\\Roaming\\npm"
+        - "C:\\Users\\poofi\\.dotnet\\tools"
+        - "C:\\Users\\poofi\\AppData\\Local\\Microsoft\\WinGet\\Packages\\GitHub.Copilot_Microsoft.Winget.Source_8wekyb3d8bbwe"
+        - "C:\\Users\\poofi\\AppData\\Local\\Programs\\MiKTeX\\miktex\\bin\\x64\\"
+  -
+    kind: "find-v1"
+    backtrace:
+      - "C:/Program Files/CMake/share/cmake-4.1/Modules/CMakeFindBinUtils.cmake:238 (find_program)"
+      - "C:/Program Files/CMake/share/cmake-4.1/Modules/CMakeDetermineCCompiler.cmake:200 (include)"
+      - "CMakeLists.txt:2 (project)"
+    mode: "program"
+    variable: "CMAKE_MT"
+    description: "Path to a program."
+    settings:
+      SearchFramework: "NEVER"
+      SearchAppBundle: "NEVER"
+      CMAKE_FIND_USE_CMAKE_PATH: false
+      CMAKE_FIND_USE_CMAKE_ENVIRONMENT_PATH: false
+      CMAKE_FIND_USE_SYSTEM_ENVIRONMENT_PATH: true
+      CMAKE_FIND_USE_CMAKE_SYSTEM_PATH: true
+      CMAKE_FIND_USE_INSTALL_PREFIX: true
+    names:
+      - "mt"
+    candidate_directories:
+      - "C:/Program Files/Microsoft Visual Studio/2022/Enterprise/VC/Tools/MSVC/14.44.35207/bin/Hostx64/x64/"
+      - "C:/Program Files/PowerShell/7/"
+      - "C:/Program Files/Microsoft SDKs/Azure/CLI2/wbin/"
+      - "C:/Program Files/Zulu/zulu-21/bin/"
+      - "C:/Windows/System32/"
+      - "C:/Windows/"
+      - "C:/Windows/System32/wbem/"
+      - "C:/Windows/System32/WindowsPowerShell/v1.0/"
+      - "C:/Windows/System32/OpenSSH/"
+      - "C:/Program Files/Microsoft SQL Server/150/Tools/Binn/"
+      - "C:/Program Files/010 Editor/"
+      - "C:/Program Files/NVIDIA Corporation/NVIDIA app/NvDLISR/"
+      - "C:/Program Files (x86)/NVIDIA Corporation/PhysX/Common/"
+      - "C:/Program Files/Microsoft SQL Server/Client SDK/ODBC/170/Tools/Binn/"
+      - "C:/Program Files/dotnet/"
+      - "C:/Program Files/Git/cmd/"
+      - "C:/Program Files/nodejs/"
+      - "C:/Program Files (x86)/Windows Kits/10/Windows Performance Toolkit/"
+      - "C:/Program Files/CMake/bin/"
+      - "C:/Program Files/Microsoft SQL Server/170/Tools/Binn/"
+      - "C:/ffmpeg-8.0.1-full_build/bin/"
+      - "C:/Program Files/PuTTY/"
+      - "C:/Strawberry/c/bin/"
+      - "C:/Strawberry/perl/site/bin/"
+      - "C:/Strawberry/perl/bin/"
+      - "C:/Program Files/Docker/Docker/resources/bin/"
+      - "C:/Program Files/CanopyDoc/Connector/"
+      - "C:/Program Files/PyManager/"
+      - "C:/Users/poofi/.local/bin/"
+      - "C:/Users/poofi/AppData/Local/Programs/Python/Launcher/"
+      - "C:/Users/poofi/.cargo/bin/"
+      - "C:/Users/poofi/AppData/Local/Programs/oh-my-posh/bin/"
+      - "C:/Users/poofi/AppData/Local/Microsoft/WindowsApps/"
+      - "C:/Users/poofi/AppData/Local/Programs/Microsoft VS Code/bin/"
+      - "C:/Users/poofi/.dotnet/tools/"
+      - "C:/Users/poofi/AppData/Local/Microsoft/WinGet/Packages/Microsoft.Sysinternals_Microsoft.Winget.Source_8wekyb3d8bbwe/"
+      - "C:/Users/poofi/AppData/Local/Programs/Fiddler/"
+      - "C:/Users/poofi/AppData/Local/GitHubDesktop/bin/"
+      - "C:/Users/poofi/AppData/Roaming/npm/"
+      - "C:/Users/poofi/AppData/Local/Microsoft/WinGet/Packages/GitHub.Copilot_Microsoft.Winget.Source_8wekyb3d8bbwe/"
+      - "C:/Users/poofi/AppData/Local/Programs/MiKTeX/miktex/bin/x64/"
+    searched_directories:
+      - "C:/Program Files/Microsoft Visual Studio/2022/Enterprise/VC/Tools/MSVC/14.44.35207/bin/Hostx64/x64/mt.com"
+      - "C:/Program Files/Microsoft Visual Studio/2022/Enterprise/VC/Tools/MSVC/14.44.35207/bin/Hostx64/x64/mt.exe"
+      - "C:/Program Files/Microsoft Visual Studio/2022/Enterprise/VC/Tools/MSVC/14.44.35207/bin/Hostx64/x64/mt"
+      - "C:/Program Files/PowerShell/7/mt.com"
+      - "C:/Program Files/PowerShell/7/mt.exe"
+      - "C:/Program Files/PowerShell/7/mt"
+      - "C:/Program Files/Microsoft SDKs/Azure/CLI2/wbin/mt.com"
+      - "C:/Program Files/Microsoft SDKs/Azure/CLI2/wbin/mt.exe"
+      - "C:/Program Files/Microsoft SDKs/Azure/CLI2/wbin/mt"
+      - "C:/Program Files/Zulu/zulu-21/bin/mt.com"
+      - "C:/Program Files/Zulu/zulu-21/bin/mt.exe"
+      - "C:/Program Files/Zulu/zulu-21/bin/mt"
+      - "C:/Windows/System32/mt.com"
+      - "C:/Windows/System32/mt.exe"
+      - "C:/Windows/System32/mt"
+      - "C:/Windows/mt.com"
+      - "C:/Windows/mt.exe"
+      - "C:/Windows/mt"
+      - "C:/Windows/System32/wbem/mt.com"
+      - "C:/Windows/System32/wbem/mt.exe"
+      - "C:/Windows/System32/wbem/mt"
+      - "C:/Windows/System32/WindowsPowerShell/v1.0/mt.com"
+      - "C:/Windows/System32/WindowsPowerShell/v1.0/mt.exe"
+      - "C:/Windows/System32/WindowsPowerShell/v1.0/mt"
+      - "C:/Windows/System32/OpenSSH/mt.com"
+      - "C:/Windows/System32/OpenSSH/mt.exe"
+      - "C:/Windows/System32/OpenSSH/mt"
+      - "C:/Program Files/Microsoft SQL Server/150/Tools/Binn/mt.com"
+      - "C:/Program Files/Microsoft SQL Server/150/Tools/Binn/mt.exe"
+      - "C:/Program Files/Microsoft SQL Server/150/Tools/Binn/mt"
+      - "C:/Program Files/010 Editor/mt.com"
+      - "C:/Program Files/010 Editor/mt.exe"
+      - "C:/Program Files/010 Editor/mt"
+      - "C:/Program Files/NVIDIA Corporation/NVIDIA app/NvDLISR/mt.com"
+      - "C:/Program Files/NVIDIA Corporation/NVIDIA app/NvDLISR/mt.exe"
+      - "C:/Program Files/NVIDIA Corporation/NVIDIA app/NvDLISR/mt"
+      - "C:/Program Files (x86)/NVIDIA Corporation/PhysX/Common/mt.com"
+      - "C:/Program Files (x86)/NVIDIA Corporation/PhysX/Common/mt.exe"
+      - "C:/Program Files (x86)/NVIDIA Corporation/PhysX/Common/mt"
+      - "C:/Program Files/Microsoft SQL Server/Client SDK/ODBC/170/Tools/Binn/mt.com"
+      - "C:/Program Files/Microsoft SQL Server/Client SDK/ODBC/170/Tools/Binn/mt.exe"
+      - "C:/Program Files/Microsoft SQL Server/Client SDK/ODBC/170/Tools/Binn/mt"
+      - "C:/Program Files/dotnet/mt.com"
+      - "C:/Program Files/dotnet/mt.exe"
+      - "C:/Program Files/dotnet/mt"
+      - "C:/Program Files/Git/cmd/mt.com"
+      - "C:/Program Files/Git/cmd/mt.exe"
+      - "C:/Program Files/Git/cmd/mt"
+      - "C:/Program Files/nodejs/mt.com"
+      - "C:/Program Files/nodejs/mt.exe"
+      - "C:/Program Files/nodejs/mt"
+      - "C:/Program Files (x86)/Windows Kits/10/Windows Performance Toolkit/mt.com"
+      - "C:/Program Files (x86)/Windows Kits/10/Windows Performance Toolkit/mt.exe"
+      - "C:/Program Files (x86)/Windows Kits/10/Windows Performance Toolkit/mt"
+      - "C:/Program Files/CMake/bin/mt.com"
+      - "C:/Program Files/CMake/bin/mt.exe"
+      - "C:/Program Files/CMake/bin/mt"
+      - "C:/Program Files/Microsoft SQL Server/170/Tools/Binn/mt.com"
+      - "C:/Program Files/Microsoft SQL Server/170/Tools/Binn/mt.exe"
+      - "C:/Program Files/Microsoft SQL Server/170/Tools/Binn/mt"
+      - "C:/ffmpeg-8.0.1-full_build/bin/mt.com"
+      - "C:/ffmpeg-8.0.1-full_build/bin/mt.exe"
+      - "C:/ffmpeg-8.0.1-full_build/bin/mt"
+      - "C:/Program Files/PuTTY/mt.com"
+      - "C:/Program Files/PuTTY/mt.exe"
+      - "C:/Program Files/PuTTY/mt"
+      - "C:/Strawberry/c/bin/mt.com"
+      - "C:/Strawberry/c/bin/mt.exe"
+      - "C:/Strawberry/c/bin/mt"
+      - "C:/Strawberry/perl/site/bin/mt.com"
+      - "C:/Strawberry/perl/site/bin/mt.exe"
+      - "C:/Strawberry/perl/site/bin/mt"
+      - "C:/Strawberry/perl/bin/mt.com"
+      - "C:/Strawberry/perl/bin/mt.exe"
+      - "C:/Strawberry/perl/bin/mt"
+      - "C:/Program Files/Docker/Docker/resources/bin/mt.com"
+      - "C:/Program Files/Docker/Docker/resources/bin/mt.exe"
+      - "C:/Program Files/Docker/Docker/resources/bin/mt"
+      - "C:/Program Files/CanopyDoc/Connector/mt.com"
+      - "C:/Program Files/CanopyDoc/Connector/mt.exe"
+      - "C:/Program Files/CanopyDoc/Connector/mt"
+      - "C:/Program Files/PyManager/mt.com"
+      - "C:/Program Files/PyManager/mt.exe"
+      - "C:/Program Files/PyManager/mt"
+      - "C:/Users/poofi/.local/bin/mt.com"
+      - "C:/Users/poofi/.local/bin/mt.exe"
+      - "C:/Users/poofi/.local/bin/mt"
+      - "C:/Users/poofi/AppData/Local/Programs/Python/Launcher/mt.com"
+      - "C:/Users/poofi/AppData/Local/Programs/Python/Launcher/mt.exe"
+      - "C:/Users/poofi/AppData/Local/Programs/Python/Launcher/mt"
+      - "C:/Users/poofi/.cargo/bin/mt.com"
+      - "C:/Users/poofi/.cargo/bin/mt.exe"
+      - "C:/Users/poofi/.cargo/bin/mt"
+      - "C:/Users/poofi/AppData/Local/Programs/oh-my-posh/bin/mt.com"
+      - "C:/Users/poofi/AppData/Local/Programs/oh-my-posh/bin/mt.exe"
+      - "C:/Users/poofi/AppData/Local/Programs/oh-my-posh/bin/mt"
+      - "C:/Users/poofi/AppData/Local/Microsoft/WindowsApps/mt.com"
+      - "C:/Users/poofi/AppData/Local/Microsoft/WindowsApps/mt.exe"
+      - "C:/Users/poofi/AppData/Local/Microsoft/WindowsApps/mt"
+      - "C:/Users/poofi/AppData/Local/Programs/Microsoft VS Code/bin/mt.com"
+      - "C:/Users/poofi/AppData/Local/Programs/Microsoft VS Code/bin/mt.exe"
+      - "C:/Users/poofi/AppData/Local/Programs/Microsoft VS Code/bin/mt"
+      - "C:/Users/poofi/.dotnet/tools/mt.com"
+      - "C:/Users/poofi/.dotnet/tools/mt.exe"
+      - "C:/Users/poofi/.dotnet/tools/mt"
+      - "C:/Users/poofi/AppData/Local/Microsoft/WinGet/Packages/Microsoft.Sysinternals_Microsoft.Winget.Source_8wekyb3d8bbwe/mt.com"
+      - "C:/Users/poofi/AppData/Local/Microsoft/WinGet/Packages/Microsoft.Sysinternals_Microsoft.Winget.Source_8wekyb3d8bbwe/mt.exe"
+      - "C:/Users/poofi/AppData/Local/Microsoft/WinGet/Packages/Microsoft.Sysinternals_Microsoft.Winget.Source_8wekyb3d8bbwe/mt"
+      - "C:/Users/poofi/AppData/Local/Programs/Fiddler/mt.com"
+      - "C:/Users/poofi/AppData/Local/Programs/Fiddler/mt.exe"
+      - "C:/Users/poofi/AppData/Local/Programs/Fiddler/mt"
+      - "C:/Users/poofi/AppData/Local/GitHubDesktop/bin/mt.com"
+      - "C:/Users/poofi/AppData/Local/GitHubDesktop/bin/mt.exe"
+      - "C:/Users/poofi/AppData/Local/GitHubDesktop/bin/mt"
+      - "C:/Users/poofi/AppData/Roaming/npm/mt.com"
+      - "C:/Users/poofi/AppData/Roaming/npm/mt.exe"
+      - "C:/Users/poofi/AppData/Roaming/npm/mt"
+      - "C:/Users/poofi/AppData/Local/Microsoft/WinGet/Packages/GitHub.Copilot_Microsoft.Winget.Source_8wekyb3d8bbwe/mt.com"
+      - "C:/Users/poofi/AppData/Local/Microsoft/WinGet/Packages/GitHub.Copilot_Microsoft.Winget.Source_8wekyb3d8bbwe/mt.exe"
+      - "C:/Users/poofi/AppData/Local/Microsoft/WinGet/Packages/GitHub.Copilot_Microsoft.Winget.Source_8wekyb3d8bbwe/mt"
+      - "C:/Users/poofi/AppData/Local/Programs/MiKTeX/miktex/bin/x64/mt.com"
+      - "C:/Users/poofi/AppData/Local/Programs/MiKTeX/miktex/bin/x64/mt.exe"
+      - "C:/Users/poofi/AppData/Local/Programs/MiKTeX/miktex/bin/x64/mt"
+    found: false
+    search_context:
+      ENV{PATH}:
+        - "C:\\Program Files\\PowerShell\\7"
+        - "C:\\Program Files\\Microsoft SDKs\\Azure\\CLI2\\wbin"
+        - "C:\\Program Files\\Zulu\\zulu-21\\bin\\"
+        - "C:\\Windows\\system32"
+        - "C:\\Windows"
+        - "C:\\Windows\\System32\\Wbem"
+        - "C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\"
+        - "C:\\Windows\\System32\\OpenSSH\\"
+        - "C:\\Program Files\\Microsoft SQL Server\\150\\Tools\\Binn\\"
+        - "C:\\Program Files\\010 Editor"
+        - "C:\\Program Files\\NVIDIA Corporation\\NVIDIA app\\NvDLISR"
+        - "C:\\Program Files (x86)\\NVIDIA Corporation\\PhysX\\Common"
+        - "C:\\Program Files\\Microsoft SQL Server\\Client SDK\\ODBC\\170\\Tools\\Binn\\"
+        - "C:\\Program Files\\dotnet\\"
+        - "C:\\Program Files\\Git\\cmd"
+        - "C:\\Program Files\\nodejs\\"
+        - "C:\\Program Files (x86)\\Windows Kits\\10\\Windows Performance Toolkit\\"
+        - "C:\\Program Files\\CMake\\bin"
+        - "C:\\Program Files\\Microsoft SQL Server\\170\\Tools\\Binn\\"
+        - "C:\\ffmpeg-8.0.1-full_build\\bin"
+        - "C:\\Program Files\\PuTTY\\"
+        - "C:\\Program Files\\PowerShell\\7\\"
+        - "C:\\Strawberry\\c\\bin"
+        - "C:\\Strawberry\\perl\\site\\bin"
+        - "C:\\Strawberry\\perl\\bin"
+        - "C:\\Program Files\\Docker\\Docker\\resources\\bin"
+        - "C:\\Program Files\\CanopyDoc\\Connector"
+        - "C:\\Program Files\\PyManager\\"
+        - "C:\\Users\\poofi\\.local\\bin"
+        - "C:\\Users\\poofi\\AppData\\Local\\Programs\\Python\\Launcher\\"
+        - "C:\\Users\\poofi\\.cargo\\bin"
+        - "C:\\Users\\poofi\\AppData\\Local\\Programs\\oh-my-posh\\bin\\"
+        - "C:\\Users\\poofi\\AppData\\Local\\Microsoft\\WindowsApps"
+        - "C:\\Users\\poofi\\AppData\\Local\\Programs\\Microsoft VS Code\\bin"
+        - "C:\\Users\\poofi\\.dotnet\\tools"
+        - "C:\\Users\\poofi\\AppData\\Local\\Microsoft\\WinGet\\Packages\\Microsoft.Sysinternals_Microsoft.Winget.Source_8wekyb3d8bbwe"
+        - "C:\\Users\\poofi\\AppData\\Local\\Programs\\Fiddler"
+        - "C:\\Users\\poofi\\AppData\\Local\\GitHubDesktop\\bin"
+        - "C:\\Users\\poofi\\AppData\\Roaming\\npm"
+        - "C:\\Users\\poofi\\.dotnet\\tools"
+        - "C:\\Users\\poofi\\AppData\\Local\\Microsoft\\WinGet\\Packages\\GitHub.Copilot_Microsoft.Winget.Source_8wekyb3d8bbwe"
+        - "C:\\Users\\poofi\\AppData\\Local\\Programs\\MiKTeX\\miktex\\bin\\x64\\"
+  -
+    kind: "find-v1"
+    backtrace:
+      - "C:/Program Files/CMake/share/cmake-4.1/Modules/CMakeFindBinUtils.cmake:238 (find_program)"
+      - "C:/Program Files/CMake/share/cmake-4.1/Modules/CMakeDetermineCCompiler.cmake:200 (include)"
+      - "CMakeLists.txt:2 (project)"
+    mode: "program"
+    variable: "CMAKE_AR"
+    description: "Path to a program."
+    settings:
+      SearchFramework: "NEVER"
+      SearchAppBundle: "NEVER"
+      CMAKE_FIND_USE_CMAKE_PATH: false
+      CMAKE_FIND_USE_CMAKE_ENVIRONMENT_PATH: false
+      CMAKE_FIND_USE_SYSTEM_ENVIRONMENT_PATH: true
+      CMAKE_FIND_USE_CMAKE_SYSTEM_PATH: true
+      CMAKE_FIND_USE_INSTALL_PREFIX: true
+    names:
+      - "lib"
+    candidate_directories:
+      - "C:/Program Files/Microsoft Visual Studio/2022/Enterprise/VC/Tools/MSVC/14.44.35207/bin/Hostx64/x64/"
+      - "C:/Program Files/PowerShell/7/"
+      - "C:/Program Files/Microsoft SDKs/Azure/CLI2/wbin/"
+      - "C:/Program Files/Zulu/zulu-21/bin/"
+      - "C:/Windows/System32/"
+      - "C:/Windows/"
+      - "C:/Windows/System32/wbem/"
+      - "C:/Windows/System32/WindowsPowerShell/v1.0/"
+      - "C:/Windows/System32/OpenSSH/"
+      - "C:/Program Files/Microsoft SQL Server/150/Tools/Binn/"
+      - "C:/Program Files/010 Editor/"
+      - "C:/Program Files/NVIDIA Corporation/NVIDIA app/NvDLISR/"
+      - "C:/Program Files (x86)/NVIDIA Corporation/PhysX/Common/"
+      - "C:/Program Files/Microsoft SQL Server/Client SDK/ODBC/170/Tools/Binn/"
+      - "C:/Program Files/dotnet/"
+      - "C:/Program Files/Git/cmd/"
+      - "C:/Program Files/nodejs/"
+      - "C:/Program Files (x86)/Windows Kits/10/Windows Performance Toolkit/"
+      - "C:/Program Files/CMake/bin/"
+      - "C:/Program Files/Microsoft SQL Server/170/Tools/Binn/"
+      - "C:/ffmpeg-8.0.1-full_build/bin/"
+      - "C:/Program Files/PuTTY/"
+      - "C:/Strawberry/c/bin/"
+      - "C:/Strawberry/perl/site/bin/"
+      - "C:/Strawberry/perl/bin/"
+      - "C:/Program Files/Docker/Docker/resources/bin/"
+      - "C:/Program Files/CanopyDoc/Connector/"
+      - "C:/Program Files/PyManager/"
+      - "C:/Users/poofi/.local/bin/"
+      - "C:/Users/poofi/AppData/Local/Programs/Python/Launcher/"
+      - "C:/Users/poofi/.cargo/bin/"
+      - "C:/Users/poofi/AppData/Local/Programs/oh-my-posh/bin/"
+      - "C:/Users/poofi/AppData/Local/Microsoft/WindowsApps/"
+      - "C:/Users/poofi/AppData/Local/Programs/Microsoft VS Code/bin/"
+      - "C:/Users/poofi/.dotnet/tools/"
+      - "C:/Users/poofi/AppData/Local/Microsoft/WinGet/Packages/Microsoft.Sysinternals_Microsoft.Winget.Source_8wekyb3d8bbwe/"
+      - "C:/Users/poofi/AppData/Local/Programs/Fiddler/"
+      - "C:/Users/poofi/AppData/Local/GitHubDesktop/bin/"
+      - "C:/Users/poofi/AppData/Roaming/npm/"
+      - "C:/Users/poofi/AppData/Local/Microsoft/WinGet/Packages/GitHub.Copilot_Microsoft.Winget.Source_8wekyb3d8bbwe/"
+      - "C:/Users/poofi/AppData/Local/Programs/MiKTeX/miktex/bin/x64/"
+    searched_directories:
+      - "C:/Program Files/Microsoft Visual Studio/2022/Enterprise/VC/Tools/MSVC/14.44.35207/bin/Hostx64/x64/lib.com"
+    found: "C:/Program Files/Microsoft Visual Studio/2022/Enterprise/VC/Tools/MSVC/14.44.35207/bin/Hostx64/x64/lib.exe"
+    search_context:
+      ENV{PATH}:
+        - "C:\\Program Files\\PowerShell\\7"
+        - "C:\\Program Files\\Microsoft SDKs\\Azure\\CLI2\\wbin"
+        - "C:\\Program Files\\Zulu\\zulu-21\\bin\\"
+        - "C:\\Windows\\system32"
+        - "C:\\Windows"
+        - "C:\\Windows\\System32\\Wbem"
+        - "C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\"
+        - "C:\\Windows\\System32\\OpenSSH\\"
+        - "C:\\Program Files\\Microsoft SQL Server\\150\\Tools\\Binn\\"
+        - "C:\\Program Files\\010 Editor"
+        - "C:\\Program Files\\NVIDIA Corporation\\NVIDIA app\\NvDLISR"
+        - "C:\\Program Files (x86)\\NVIDIA Corporation\\PhysX\\Common"
+        - "C:\\Program Files\\Microsoft SQL Server\\Client SDK\\ODBC\\170\\Tools\\Binn\\"
+        - "C:\\Program Files\\dotnet\\"
+        - "C:\\Program Files\\Git\\cmd"
+        - "C:\\Program Files\\nodejs\\"
+        - "C:\\Program Files (x86)\\Windows Kits\\10\\Windows Performance Toolkit\\"
+        - "C:\\Program Files\\CMake\\bin"
+        - "C:\\Program Files\\Microsoft SQL Server\\170\\Tools\\Binn\\"
+        - "C:\\ffmpeg-8.0.1-full_build\\bin"
+        - "C:\\Program Files\\PuTTY\\"
+        - "C:\\Program Files\\PowerShell\\7\\"
+        - "C:\\Strawberry\\c\\bin"
+        - "C:\\Strawberry\\perl\\site\\bin"
+        - "C:\\Strawberry\\perl\\bin"
+        - "C:\\Program Files\\Docker\\Docker\\resources\\bin"
+        - "C:\\Program Files\\CanopyDoc\\Connector"
+        - "C:\\Program Files\\PyManager\\"
+        - "C:\\Users\\poofi\\.local\\bin"
+        - "C:\\Users\\poofi\\AppData\\Local\\Programs\\Python\\Launcher\\"
+        - "C:\\Users\\poofi\\.cargo\\bin"
+        - "C:\\Users\\poofi\\AppData\\Local\\Programs\\oh-my-posh\\bin\\"
+        - "C:\\Users\\poofi\\AppData\\Local\\Microsoft\\WindowsApps"
+        - "C:\\Users\\poofi\\AppData\\Local\\Programs\\Microsoft VS Code\\bin"
+        - "C:\\Users\\poofi\\.dotnet\\tools"
+        - "C:\\Users\\poofi\\AppData\\Local\\Microsoft\\WinGet\\Packages\\Microsoft.Sysinternals_Microsoft.Winget.Source_8wekyb3d8bbwe"
+        - "C:\\Users\\poofi\\AppData\\Local\\Programs\\Fiddler"
+        - "C:\\Users\\poofi\\AppData\\Local\\GitHubDesktop\\bin"
+        - "C:\\Users\\poofi\\AppData\\Roaming\\npm"
+        - "C:\\Users\\poofi\\.dotnet\\tools"
+        - "C:\\Users\\poofi\\AppData\\Local\\Microsoft\\WinGet\\Packages\\GitHub.Copilot_Microsoft.Winget.Source_8wekyb3d8bbwe"
+        - "C:\\Users\\poofi\\AppData\\Local\\Programs\\MiKTeX\\miktex\\bin\\x64\\"
+  -
+    kind: "find-v1"
+    backtrace:
+      - "C:/Program Files/CMake/share/cmake-4.1/Modules/CMakeDetermineCompilerId.cmake:462 (find_file)"
+      - "C:/Program Files/CMake/share/cmake-4.1/Modules/CMakeDetermineCompilerId.cmake:500 (CMAKE_DETERMINE_COMPILER_ID_WRITE)"
+      - "C:/Program Files/CMake/share/cmake-4.1/Modules/CMakeDetermineCompilerId.cmake:8 (CMAKE_DETERMINE_COMPILER_ID_BUILD)"
+      - "C:/Program Files/CMake/share/cmake-4.1/Modules/CMakeDetermineCompilerId.cmake:64 (__determine_compiler_id_test)"
+      - "C:/Program Files/CMake/share/cmake-4.1/Modules/CMakeDetermineCXXCompiler.cmake:125 (CMAKE_DETERMINE_COMPILER_ID)"
+      - "CMakeLists.txt:2 (project)"
+    mode: "file"
+    variable: "src_in"
+    description: "Path to a file."
+    settings:
+      SearchFramework: "NEVER"
+      SearchAppBundle: "NEVER"
+      CMAKE_FIND_USE_CMAKE_PATH: true
+      CMAKE_FIND_USE_CMAKE_ENVIRONMENT_PATH: true
+      CMAKE_FIND_USE_SYSTEM_ENVIRONMENT_PATH: true
+      CMAKE_FIND_USE_CMAKE_SYSTEM_PATH: true
+      CMAKE_FIND_USE_INSTALL_PREFIX: true
+    names:
+      - "CMakeCXXCompilerId.cpp.in"
+    candidate_directories:
+      - "C:/Program Files/CMake/share/cmake-4.1/Modules/"
+    found: "C:/Program Files/CMake/share/cmake-4.1/Modules/CMakeCXXCompilerId.cpp.in"
+    search_context:
+      ENV{PATH}:
+        - "C:\\Program Files\\PowerShell\\7"
+        - "C:\\Program Files\\Microsoft SDKs\\Azure\\CLI2\\wbin"
+        - "C:\\Program Files\\Zulu\\zulu-21\\bin\\"
+        - "C:\\Windows\\system32"
+        - "C:\\Windows"
+        - "C:\\Windows\\System32\\Wbem"
+        - "C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\"
+        - "C:\\Windows\\System32\\OpenSSH\\"
+        - "C:\\Program Files\\Microsoft SQL Server\\150\\Tools\\Binn\\"
+        - "C:\\Program Files\\010 Editor"
+        - "C:\\Program Files\\NVIDIA Corporation\\NVIDIA app\\NvDLISR"
+        - "C:\\Program Files (x86)\\NVIDIA Corporation\\PhysX\\Common"
+        - "C:\\Program Files\\Microsoft SQL Server\\Client SDK\\ODBC\\170\\Tools\\Binn\\"
+        - "C:\\Program Files\\dotnet\\"
+        - "C:\\Program Files\\Git\\cmd"
+        - "C:\\Program Files\\nodejs\\"
+        - "C:\\Program Files (x86)\\Windows Kits\\10\\Windows Performance Toolkit\\"
+        - "C:\\Program Files\\CMake\\bin"
+        - "C:\\Program Files\\Microsoft SQL Server\\170\\Tools\\Binn\\"
+        - "C:\\ffmpeg-8.0.1-full_build\\bin"
+        - "C:\\Program Files\\PuTTY\\"
+        - "C:\\Program Files\\PowerShell\\7\\"
+        - "C:\\Strawberry\\c\\bin"
+        - "C:\\Strawberry\\perl\\site\\bin"
+        - "C:\\Strawberry\\perl\\bin"
+        - "C:\\Program Files\\Docker\\Docker\\resources\\bin"
+        - "C:\\Program Files\\CanopyDoc\\Connector"
+        - "C:\\Program Files\\PyManager\\"
+        - "C:\\Users\\poofi\\.local\\bin"
+        - "C:\\Users\\poofi\\AppData\\Local\\Programs\\Python\\Launcher\\"
+        - "C:\\Users\\poofi\\.cargo\\bin"
+        - "C:\\Users\\poofi\\AppData\\Local\\Programs\\oh-my-posh\\bin\\"
+        - "C:\\Users\\poofi\\AppData\\Local\\Microsoft\\WindowsApps"
+        - "C:\\Users\\poofi\\AppData\\Local\\Programs\\Microsoft VS Code\\bin"
+        - "C:\\Users\\poofi\\.dotnet\\tools"
+        - "C:\\Users\\poofi\\AppData\\Local\\Microsoft\\WinGet\\Packages\\Microsoft.Sysinternals_Microsoft.Winget.Source_8wekyb3d8bbwe"
+        - "C:\\Users\\poofi\\AppData\\Local\\Programs\\Fiddler"
+        - "C:\\Users\\poofi\\AppData\\Local\\GitHubDesktop\\bin"
+        - "C:\\Users\\poofi\\AppData\\Roaming\\npm"
+        - "C:\\Users\\poofi\\.dotnet\\tools"
+        - "C:\\Users\\poofi\\AppData\\Local\\Microsoft\\WinGet\\Packages\\GitHub.Copilot_Microsoft.Winget.Source_8wekyb3d8bbwe"
+        - "C:\\Users\\poofi\\AppData\\Local\\Programs\\MiKTeX\\miktex\\bin\\x64\\"
+  -
+    kind: "message-v1"
+    backtrace:
+      - "C:/Program Files/CMake/share/cmake-4.1/Modules/CMakeDetermineCompilerId.cmake:17 (message)"
+      - "C:/Program Files/CMake/share/cmake-4.1/Modules/CMakeDetermineCompilerId.cmake:64 (__determine_compiler_id_test)"
+      - "C:/Program Files/CMake/share/cmake-4.1/Modules/CMakeDetermineCXXCompiler.cmake:125 (CMAKE_DETERMINE_COMPILER_ID)"
+      - "CMakeLists.txt:2 (project)"
+    message: |
+      Compiling the CXX compiler identification source file "CMakeCXXCompilerId.cpp" succeeded.
+      Compiler:  
+      Build flags: 
+      Id flags:  
+      
+      The output was:
+      0
+      MSBuild version 17.14.23+b0019275e for .NET Framework
+      Build started 6/30/2026 12:12:46 PM.
+      
+      Project "C:\\Users\\poofi\\source\\repos\\FruityLoopsLLMLink\\bootstrap\\build\\CMakeFiles\\4.1.1\\CompilerIdCXX\\CompilerIdCXX.vcxproj" on node 1 (default targets).
+      PrepareForBuild:
+        Creating directory "Debug\\".
+        Structured output is enabled. The formatting of compiler diagnostics will reflect the error hierarchy. See https://aka.ms/cpp/structured-output for more details.
+        Creating directory "Debug\\CompilerIdCXX.tlog\\".
+      InitializeBuildStatus:
+        Creating "Debug\\CompilerIdCXX.tlog\\unsuccessfulbuild" because "AlwaysCreate" was specified.
+        Touching "Debug\\CompilerIdCXX.tlog\\unsuccessfulbuild".
+      ClCompile:
+        C:\\Program Files\\Microsoft Visual Studio\\2022\\Enterprise\\VC\\Tools\\MSVC\\14.44.35207\\bin\\HostX64\\x64\\CL.exe /c /nologo /W0 /WX- /diagnostics:column /Od /D _MBCS /Gm- /EHsc /RTC1 /MDd /GS /fp:precise /Zc:wchar_t /Zc:forScope /Zc:inline /Fo"Debug\\\\" /Fd"Debug\\vc143.pdb" /external:W0 /Gd /TP /FC /errorReport:queue CMakeCXXCompilerId.cpp
+        CMakeCXXCompilerId.cpp
+      Link:
+        C:\\Program Files\\Microsoft Visual Studio\\2022\\Enterprise\\VC\\Tools\\MSVC\\14.44.35207\\bin\\HostX64\\x64\\link.exe /ERRORREPORT:QUEUE /OUT:".\\CompilerIdCXX.exe" /INCREMENTAL:NO /NOLOGO kernel32.lib user32.lib gdi32.lib winspool.lib comdlg32.lib advapi32.lib shell32.lib ole32.lib oleaut32.lib uuid.lib odbc32.lib odbccp32.lib /MANIFEST /MANIFESTUAC:"level='asInvoker' uiAccess='false'" /manifest:embed /PDB:".\\CompilerIdCXX.pdb" /SUBSYSTEM:CONSOLE /TLBID:1 /DYNAMICBASE /NXCOMPAT /IMPLIB:".\\CompilerIdCXX.lib" /MACHINE:X64 Debug\\CMakeCXXCompilerId.obj
+        CompilerIdCXX.vcxproj -> C:\\Users\\poofi\\source\\repos\\FruityLoopsLLMLink\\bootstrap\\build\\CMakeFiles\\4.1.1\\CompilerIdCXX\\CompilerIdCXX.exe
+      PostBuildEvent:
+        for %%i in (cl.exe) do @echo CMAKE_CXX_COMPILER=%%~$PATH:i
+        :VCEnd
+        CMAKE_CXX_COMPILER=C:\\Program Files\\Microsoft Visual Studio\\2022\\Enterprise\\VC\\Tools\\MSVC\\14.44.35207\\bin\\Hostx64\\x64\\cl.exe
+      FinalizeBuildStatus:
+        Deleting file "Debug\\CompilerIdCXX.tlog\\unsuccessfulbuild".
+        Touching "Debug\\CompilerIdCXX.tlog\\CompilerIdCXX.lastbuildstate".
+      Done Building Project "C:\\Users\\poofi\\source\\repos\\FruityLoopsLLMLink\\bootstrap\\build\\CMakeFiles\\4.1.1\\CompilerIdCXX\\CompilerIdCXX.vcxproj" (default targets).
+      
+      Build succeeded.
+          0 Warning(s)
+          0 Error(s)
+      
+      Time Elapsed 00:00:00.46
+      
+      
+      Compilation of the CXX compiler identification source "CMakeCXXCompilerId.cpp" produced "CompilerIdCXX.exe"
+      
+      Compilation of the CXX compiler identification source "CMakeCXXCompilerId.cpp" produced "CompilerIdCXX.vcxproj"
+      
+      The CXX compiler identification is MSVC, found in:
+        C:/Users/poofi/source/repos/FruityLoopsLLMLink/bootstrap/build/CMakeFiles/4.1.1/CompilerIdCXX/CompilerIdCXX.exe
+      
+  -
+    kind: "find-v1"
+    backtrace:
+      - "C:/Program Files/CMake/share/cmake-4.1/Modules/CMakeFindBinUtils.cmake:37 (find_program)"
+      - "C:/Program Files/CMake/share/cmake-4.1/Modules/CMakeFindBinUtils.cmake:65 (__resolve_tool_path)"
+      - "C:/Program Files/CMake/share/cmake-4.1/Modules/CMakeFindBinUtils.cmake:104 (__resolve_linker_path)"
+      - "C:/Program Files/CMake/share/cmake-4.1/Modules/CMakeDetermineCXXCompiler.cmake:206 (include)"
+      - "CMakeLists.txt:2 (project)"
+    mode: "program"
+    variable: "_CMAKE_TOOL_WITH_PATH"
+    description: "Path to a program."
+    settings:
+      SearchFramework: "NEVER"
+      SearchAppBundle: "NEVER"
+      CMAKE_FIND_USE_CMAKE_PATH: false
+      CMAKE_FIND_USE_CMAKE_ENVIRONMENT_PATH: false
+      CMAKE_FIND_USE_SYSTEM_ENVIRONMENT_PATH: true
+      CMAKE_FIND_USE_CMAKE_SYSTEM_PATH: true
+      CMAKE_FIND_USE_INSTALL_PREFIX: true
+    names:
+      - "lld-link"
+    candidate_directories:
+      - "C:/Program Files/Microsoft Visual Studio/2022/Enterprise/VC/Tools/MSVC/14.44.35207/bin/Hostx64/x64/"
+      - "C:/Program Files/PowerShell/7/"
+      - "C:/Program Files/Microsoft SDKs/Azure/CLI2/wbin/"
+      - "C:/Program Files/Zulu/zulu-21/bin/"
+      - "C:/Windows/System32/"
+      - "C:/Windows/"
+      - "C:/Windows/System32/wbem/"
+      - "C:/Windows/System32/WindowsPowerShell/v1.0/"
+      - "C:/Windows/System32/OpenSSH/"
+      - "C:/Program Files/Microsoft SQL Server/150/Tools/Binn/"
+      - "C:/Program Files/010 Editor/"
+      - "C:/Program Files/NVIDIA Corporation/NVIDIA app/NvDLISR/"
+      - "C:/Program Files (x86)/NVIDIA Corporation/PhysX/Common/"
+      - "C:/Program Files/Microsoft SQL Server/Client SDK/ODBC/170/Tools/Binn/"
+      - "C:/Program Files/dotnet/"
+      - "C:/Program Files/Git/cmd/"
+      - "C:/Program Files/nodejs/"
+      - "C:/Program Files (x86)/Windows Kits/10/Windows Performance Toolkit/"
+      - "C:/Program Files/CMake/bin/"
+      - "C:/Program Files/Microsoft SQL Server/170/Tools/Binn/"
+      - "C:/ffmpeg-8.0.1-full_build/bin/"
+      - "C:/Program Files/PuTTY/"
+      - "C:/Strawberry/c/bin/"
+      - "C:/Strawberry/perl/site/bin/"
+      - "C:/Strawberry/perl/bin/"
+      - "C:/Program Files/Docker/Docker/resources/bin/"
+      - "C:/Program Files/CanopyDoc/Connector/"
+      - "C:/Program Files/PyManager/"
+      - "C:/Users/poofi/.local/bin/"
+      - "C:/Users/poofi/AppData/Local/Programs/Python/Launcher/"
+      - "C:/Users/poofi/.cargo/bin/"
+      - "C:/Users/poofi/AppData/Local/Programs/oh-my-posh/bin/"
+      - "C:/Users/poofi/AppData/Local/Microsoft/WindowsApps/"
+      - "C:/Users/poofi/AppData/Local/Programs/Microsoft VS Code/bin/"
+      - "C:/Users/poofi/.dotnet/tools/"
+      - "C:/Users/poofi/AppData/Local/Microsoft/WinGet/Packages/Microsoft.Sysinternals_Microsoft.Winget.Source_8wekyb3d8bbwe/"
+      - "C:/Users/poofi/AppData/Local/Programs/Fiddler/"
+      - "C:/Users/poofi/AppData/Local/GitHubDesktop/bin/"
+      - "C:/Users/poofi/AppData/Roaming/npm/"
+      - "C:/Users/poofi/AppData/Local/Microsoft/WinGet/Packages/GitHub.Copilot_Microsoft.Winget.Source_8wekyb3d8bbwe/"
+      - "C:/Users/poofi/AppData/Local/Programs/MiKTeX/miktex/bin/x64/"
+    searched_directories:
+      - "C:/Program Files/Microsoft Visual Studio/2022/Enterprise/VC/Tools/MSVC/14.44.35207/bin/Hostx64/x64/lld-link.com"
+      - "C:/Program Files/Microsoft Visual Studio/2022/Enterprise/VC/Tools/MSVC/14.44.35207/bin/Hostx64/x64/lld-link.exe"
+      - "C:/Program Files/Microsoft Visual Studio/2022/Enterprise/VC/Tools/MSVC/14.44.35207/bin/Hostx64/x64/lld-link"
+      - "C:/Program Files/PowerShell/7/lld-link.com"
+      - "C:/Program Files/PowerShell/7/lld-link.exe"
+      - "C:/Program Files/PowerShell/7/lld-link"
+      - "C:/Program Files/Microsoft SDKs/Azure/CLI2/wbin/lld-link.com"
+      - "C:/Program Files/Microsoft SDKs/Azure/CLI2/wbin/lld-link.exe"
+      - "C:/Program Files/Microsoft SDKs/Azure/CLI2/wbin/lld-link"
+      - "C:/Program Files/Zulu/zulu-21/bin/lld-link.com"
+      - "C:/Program Files/Zulu/zulu-21/bin/lld-link.exe"
+      - "C:/Program Files/Zulu/zulu-21/bin/lld-link"
+      - "C:/Windows/System32/lld-link.com"
+      - "C:/Windows/System32/lld-link.exe"
+      - "C:/Windows/System32/lld-link"
+      - "C:/Windows/lld-link.com"
+      - "C:/Windows/lld-link.exe"
+      - "C:/Windows/lld-link"
+      - "C:/Windows/System32/wbem/lld-link.com"
+      - "C:/Windows/System32/wbem/lld-link.exe"
+      - "C:/Windows/System32/wbem/lld-link"
+      - "C:/Windows/System32/WindowsPowerShell/v1.0/lld-link.com"
+      - "C:/Windows/System32/WindowsPowerShell/v1.0/lld-link.exe"
+      - "C:/Windows/System32/WindowsPowerShell/v1.0/lld-link"
+      - "C:/Windows/System32/OpenSSH/lld-link.com"
+      - "C:/Windows/System32/OpenSSH/lld-link.exe"
+      - "C:/Windows/System32/OpenSSH/lld-link"
+      - "C:/Program Files/Microsoft SQL Server/150/Tools/Binn/lld-link.com"
+      - "C:/Program Files/Microsoft SQL Server/150/Tools/Binn/lld-link.exe"
+      - "C:/Program Files/Microsoft SQL Server/150/Tools/Binn/lld-link"
+      - "C:/Program Files/010 Editor/lld-link.com"
+      - "C:/Program Files/010 Editor/lld-link.exe"
+      - "C:/Program Files/010 Editor/lld-link"
+      - "C:/Program Files/NVIDIA Corporation/NVIDIA app/NvDLISR/lld-link.com"
+      - "C:/Program Files/NVIDIA Corporation/NVIDIA app/NvDLISR/lld-link.exe"
+      - "C:/Program Files/NVIDIA Corporation/NVIDIA app/NvDLISR/lld-link"
+      - "C:/Program Files (x86)/NVIDIA Corporation/PhysX/Common/lld-link.com"
+      - "C:/Program Files (x86)/NVIDIA Corporation/PhysX/Common/lld-link.exe"
+      - "C:/Program Files (x86)/NVIDIA Corporation/PhysX/Common/lld-link"
+      - "C:/Program Files/Microsoft SQL Server/Client SDK/ODBC/170/Tools/Binn/lld-link.com"
+      - "C:/Program Files/Microsoft SQL Server/Client SDK/ODBC/170/Tools/Binn/lld-link.exe"
+      - "C:/Program Files/Microsoft SQL Server/Client SDK/ODBC/170/Tools/Binn/lld-link"
+      - "C:/Program Files/dotnet/lld-link.com"
+      - "C:/Program Files/dotnet/lld-link.exe"
+      - "C:/Program Files/dotnet/lld-link"
+      - "C:/Program Files/Git/cmd/lld-link.com"
+      - "C:/Program Files/Git/cmd/lld-link.exe"
+      - "C:/Program Files/Git/cmd/lld-link"
+      - "C:/Program Files/nodejs/lld-link.com"
+      - "C:/Program Files/nodejs/lld-link.exe"
+      - "C:/Program Files/nodejs/lld-link"
+      - "C:/Program Files (x86)/Windows Kits/10/Windows Performance Toolkit/lld-link.com"
+      - "C:/Program Files (x86)/Windows Kits/10/Windows Performance Toolkit/lld-link.exe"
+      - "C:/Program Files (x86)/Windows Kits/10/Windows Performance Toolkit/lld-link"
+      - "C:/Program Files/CMake/bin/lld-link.com"
+      - "C:/Program Files/CMake/bin/lld-link.exe"
+      - "C:/Program Files/CMake/bin/lld-link"
+      - "C:/Program Files/Microsoft SQL Server/170/Tools/Binn/lld-link.com"
+      - "C:/Program Files/Microsoft SQL Server/170/Tools/Binn/lld-link.exe"
+      - "C:/Program Files/Microsoft SQL Server/170/Tools/Binn/lld-link"
+      - "C:/ffmpeg-8.0.1-full_build/bin/lld-link.com"
+      - "C:/ffmpeg-8.0.1-full_build/bin/lld-link.exe"
+      - "C:/ffmpeg-8.0.1-full_build/bin/lld-link"
+      - "C:/Program Files/PuTTY/lld-link.com"
+      - "C:/Program Files/PuTTY/lld-link.exe"
+      - "C:/Program Files/PuTTY/lld-link"
+      - "C:/Strawberry/c/bin/lld-link.com"
+      - "C:/Strawberry/c/bin/lld-link.exe"
+      - "C:/Strawberry/c/bin/lld-link"
+      - "C:/Strawberry/perl/site/bin/lld-link.com"
+      - "C:/Strawberry/perl/site/bin/lld-link.exe"
+      - "C:/Strawberry/perl/site/bin/lld-link"
+      - "C:/Strawberry/perl/bin/lld-link.com"
+      - "C:/Strawberry/perl/bin/lld-link.exe"
+      - "C:/Strawberry/perl/bin/lld-link"
+      - "C:/Program Files/Docker/Docker/resources/bin/lld-link.com"
+      - "C:/Program Files/Docker/Docker/resources/bin/lld-link.exe"
+      - "C:/Program Files/Docker/Docker/resources/bin/lld-link"
+      - "C:/Program Files/CanopyDoc/Connector/lld-link.com"
+      - "C:/Program Files/CanopyDoc/Connector/lld-link.exe"
+      - "C:/Program Files/CanopyDoc/Connector/lld-link"
+      - "C:/Program Files/PyManager/lld-link.com"
+      - "C:/Program Files/PyManager/lld-link.exe"
+      - "C:/Program Files/PyManager/lld-link"
+      - "C:/Users/poofi/.local/bin/lld-link.com"
+      - "C:/Users/poofi/.local/bin/lld-link.exe"
+      - "C:/Users/poofi/.local/bin/lld-link"
+      - "C:/Users/poofi/AppData/Local/Programs/Python/Launcher/lld-link.com"
+      - "C:/Users/poofi/AppData/Local/Programs/Python/Launcher/lld-link.exe"
+      - "C:/Users/poofi/AppData/Local/Programs/Python/Launcher/lld-link"
+      - "C:/Users/poofi/.cargo/bin/lld-link.com"
+      - "C:/Users/poofi/.cargo/bin/lld-link.exe"
+      - "C:/Users/poofi/.cargo/bin/lld-link"
+      - "C:/Users/poofi/AppData/Local/Programs/oh-my-posh/bin/lld-link.com"
+      - "C:/Users/poofi/AppData/Local/Programs/oh-my-posh/bin/lld-link.exe"
+      - "C:/Users/poofi/AppData/Local/Programs/oh-my-posh/bin/lld-link"
+      - "C:/Users/poofi/AppData/Local/Microsoft/WindowsApps/lld-link.com"
+      - "C:/Users/poofi/AppData/Local/Microsoft/WindowsApps/lld-link.exe"
+      - "C:/Users/poofi/AppData/Local/Microsoft/WindowsApps/lld-link"
+      - "C:/Users/poofi/AppData/Local/Programs/Microsoft VS Code/bin/lld-link.com"
+      - "C:/Users/poofi/AppData/Local/Programs/Microsoft VS Code/bin/lld-link.exe"
+      - "C:/Users/poofi/AppData/Local/Programs/Microsoft VS Code/bin/lld-link"
+      - "C:/Users/poofi/.dotnet/tools/lld-link.com"
+      - "C:/Users/poofi/.dotnet/tools/lld-link.exe"
+      - "C:/Users/poofi/.dotnet/tools/lld-link"
+      - "C:/Users/poofi/AppData/Local/Microsoft/WinGet/Packages/Microsoft.Sysinternals_Microsoft.Winget.Source_8wekyb3d8bbwe/lld-link.com"
+      - "C:/Users/poofi/AppData/Local/Microsoft/WinGet/Packages/Microsoft.Sysinternals_Microsoft.Winget.Source_8wekyb3d8bbwe/lld-link.exe"
+      - "C:/Users/poofi/AppData/Local/Microsoft/WinGet/Packages/Microsoft.Sysinternals_Microsoft.Winget.Source_8wekyb3d8bbwe/lld-link"
+      - "C:/Users/poofi/AppData/Local/Programs/Fiddler/lld-link.com"
+      - "C:/Users/poofi/AppData/Local/Programs/Fiddler/lld-link.exe"
+      - "C:/Users/poofi/AppData/Local/Programs/Fiddler/lld-link"
+      - "C:/Users/poofi/AppData/Local/GitHubDesktop/bin/lld-link.com"
+      - "C:/Users/poofi/AppData/Local/GitHubDesktop/bin/lld-link.exe"
+      - "C:/Users/poofi/AppData/Local/GitHubDesktop/bin/lld-link"
+      - "C:/Users/poofi/AppData/Roaming/npm/lld-link.com"
+      - "C:/Users/poofi/AppData/Roaming/npm/lld-link.exe"
+      - "C:/Users/poofi/AppData/Roaming/npm/lld-link"
+      - "C:/Users/poofi/AppData/Local/Microsoft/WinGet/Packages/GitHub.Copilot_Microsoft.Winget.Source_8wekyb3d8bbwe/lld-link.com"
+      - "C:/Users/poofi/AppData/Local/Microsoft/WinGet/Packages/GitHub.Copilot_Microsoft.Winget.Source_8wekyb3d8bbwe/lld-link.exe"
+      - "C:/Users/poofi/AppData/Local/Microsoft/WinGet/Packages/GitHub.Copilot_Microsoft.Winget.Source_8wekyb3d8bbwe/lld-link"
+      - "C:/Users/poofi/AppData/Local/Programs/MiKTeX/miktex/bin/x64/lld-link.com"
+      - "C:/Users/poofi/AppData/Local/Programs/MiKTeX/miktex/bin/x64/lld-link.exe"
+      - "C:/Users/poofi/AppData/Local/Programs/MiKTeX/miktex/bin/x64/lld-link"
+    found: false
+    search_context:
+      ENV{PATH}:
+        - "C:\\Program Files\\PowerShell\\7"
+        - "C:\\Program Files\\Microsoft SDKs\\Azure\\CLI2\\wbin"
+        - "C:\\Program Files\\Zulu\\zulu-21\\bin\\"
+        - "C:\\Windows\\system32"
+        - "C:\\Windows"
+        - "C:\\Windows\\System32\\Wbem"
+        - "C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\"
+        - "C:\\Windows\\System32\\OpenSSH\\"
+        - "C:\\Program Files\\Microsoft SQL Server\\150\\Tools\\Binn\\"
+        - "C:\\Program Files\\010 Editor"
+        - "C:\\Program Files\\NVIDIA Corporation\\NVIDIA app\\NvDLISR"
+        - "C:\\Program Files (x86)\\NVIDIA Corporation\\PhysX\\Common"
+        - "C:\\Program Files\\Microsoft SQL Server\\Client SDK\\ODBC\\170\\Tools\\Binn\\"
+        - "C:\\Program Files\\dotnet\\"
+        - "C:\\Program Files\\Git\\cmd"
+        - "C:\\Program Files\\nodejs\\"
+        - "C:\\Program Files (x86)\\Windows Kits\\10\\Windows Performance Toolkit\\"
+        - "C:\\Program Files\\CMake\\bin"
+        - "C:\\Program Files\\Microsoft SQL Server\\170\\Tools\\Binn\\"
+        - "C:\\ffmpeg-8.0.1-full_build\\bin"
+        - "C:\\Program Files\\PuTTY\\"
+        - "C:\\Program Files\\PowerShell\\7\\"
+        - "C:\\Strawberry\\c\\bin"
+        - "C:\\Strawberry\\perl\\site\\bin"
+        - "C:\\Strawberry\\perl\\bin"
+        - "C:\\Program Files\\Docker\\Docker\\resources\\bin"
+        - "C:\\Program Files\\CanopyDoc\\Connector"
+        - "C:\\Program Files\\PyManager\\"
+        - "C:\\Users\\poofi\\.local\\bin"
+        - "C:\\Users\\poofi\\AppData\\Local\\Programs\\Python\\Launcher\\"
+        - "C:\\Users\\poofi\\.cargo\\bin"
+        - "C:\\Users\\poofi\\AppData\\Local\\Programs\\oh-my-posh\\bin\\"
+        - "C:\\Users\\poofi\\AppData\\Local\\Microsoft\\WindowsApps"
+        - "C:\\Users\\poofi\\AppData\\Local\\Programs\\Microsoft VS Code\\bin"
+        - "C:\\Users\\poofi\\.dotnet\\tools"
+        - "C:\\Users\\poofi\\AppData\\Local\\Microsoft\\WinGet\\Packages\\Microsoft.Sysinternals_Microsoft.Winget.Source_8wekyb3d8bbwe"
+        - "C:\\Users\\poofi\\AppData\\Local\\Programs\\Fiddler"
+        - "C:\\Users\\poofi\\AppData\\Local\\GitHubDesktop\\bin"
+        - "C:\\Users\\poofi\\AppData\\Roaming\\npm"
+        - "C:\\Users\\poofi\\.dotnet\\tools"
+        - "C:\\Users\\poofi\\AppData\\Local\\Microsoft\\WinGet\\Packages\\GitHub.Copilot_Microsoft.Winget.Source_8wekyb3d8bbwe"
+        - "C:\\Users\\poofi\\AppData\\Local\\Programs\\MiKTeX\\miktex\\bin\\x64\\"
+  -
+    kind: "find-v1"
+    backtrace:
+      - "C:/Program Files/CMake/share/cmake-4.1/Modules/CMakeDetermineRCCompiler.cmake:40 (find_program)"
+      - "C:/Program Files/CMake/share/cmake-4.1/Modules/Platform/Windows-MSVC.cmake:574 (enable_language)"
+      - "C:/Program Files/CMake/share/cmake-4.1/Modules/Platform/Windows-MSVC.cmake:547 (__windows_compiler_msvc_enable_rc)"
+      - "C:/Program Files/CMake/share/cmake-4.1/Modules/Platform/Windows-MSVC-C.cmake:5 (__windows_compiler_msvc)"
+      - "C:/Program Files/CMake/share/cmake-4.1/Modules/CMakeCInformation.cmake:48 (include)"
+      - "CMakeLists.txt:2 (project)"
+    mode: "program"
+    variable: "CMAKE_RC_COMPILER"
+    description: "RC compiler"
+    settings:
+      SearchFramework: "NEVER"
+      SearchAppBundle: "NEVER"
+      CMAKE_FIND_USE_CMAKE_PATH: true
+      CMAKE_FIND_USE_CMAKE_ENVIRONMENT_PATH: true
+      CMAKE_FIND_USE_SYSTEM_ENVIRONMENT_PATH: true
+      CMAKE_FIND_USE_CMAKE_SYSTEM_PATH: true
+      CMAKE_FIND_USE_INSTALL_PREFIX: true
+    names:
+      - "rc"
+    candidate_directories:
+      - "C:/Program Files/PowerShell/7/"
+      - "C:/Program Files/Microsoft SDKs/Azure/CLI2/wbin/"
+      - "C:/Program Files/Zulu/zulu-21/bin/"
+      - "C:/Windows/System32/"
+      - "C:/Windows/"
+      - "C:/Windows/System32/wbem/"
+      - "C:/Windows/System32/WindowsPowerShell/v1.0/"
+      - "C:/Windows/System32/OpenSSH/"
+      - "C:/Program Files/Microsoft SQL Server/150/Tools/Binn/"
+      - "C:/Program Files/010 Editor/"
+      - "C:/Program Files/NVIDIA Corporation/NVIDIA app/NvDLISR/"
+      - "C:/Program Files (x86)/NVIDIA Corporation/PhysX/Common/"
+      - "C:/Program Files/Microsoft SQL Server/Client SDK/ODBC/170/Tools/Binn/"
+      - "C:/Program Files/dotnet/"
+      - "C:/Program Files/Git/cmd/"
+      - "C:/Program Files/nodejs/"
+      - "C:/Program Files (x86)/Windows Kits/10/Windows Performance Toolkit/"
+      - "C:/Program Files/CMake/bin/"
+      - "C:/Program Files/Microsoft SQL Server/170/Tools/Binn/"
+      - "C:/ffmpeg-8.0.1-full_build/bin/"
+      - "C:/Program Files/PuTTY/"
+      - "C:/Strawberry/c/bin/"
+      - "C:/Strawberry/perl/site/bin/"
+      - "C:/Strawberry/perl/bin/"
+      - "C:/Program Files/Docker/Docker/resources/bin/"
+      - "C:/Program Files/CanopyDoc/Connector/"
+      - "C:/Program Files/PyManager/"
+      - "C:/Users/poofi/.local/bin/"
+      - "C:/Users/poofi/AppData/Local/Programs/Python/Launcher/"
+      - "C:/Users/poofi/.cargo/bin/"
+      - "C:/Users/poofi/AppData/Local/Programs/oh-my-posh/bin/"
+      - "C:/Users/poofi/AppData/Local/Microsoft/WindowsApps/"
+      - "C:/Users/poofi/AppData/Local/Programs/Microsoft VS Code/bin/"
+      - "C:/Users/poofi/.dotnet/tools/"
+      - "C:/Users/poofi/AppData/Local/Microsoft/WinGet/Packages/Microsoft.Sysinternals_Microsoft.Winget.Source_8wekyb3d8bbwe/"
+      - "C:/Users/poofi/AppData/Local/Programs/Fiddler/"
+      - "C:/Users/poofi/AppData/Local/GitHubDesktop/bin/"
+      - "C:/Users/poofi/AppData/Roaming/npm/"
+      - "C:/Users/poofi/AppData/Local/Microsoft/WinGet/Packages/GitHub.Copilot_Microsoft.Winget.Source_8wekyb3d8bbwe/"
+      - "C:/Users/poofi/AppData/Local/Programs/MiKTeX/miktex/bin/x64/"
+      - "C:/Program Files/bin/"
+      - "C:/Program Files/sbin/"
+      - "C:/Program Files/"
+      - "C:/Program Files (x86)/bin/"
+      - "C:/Program Files (x86)/sbin/"
+      - "C:/Program Files (x86)/"
+      - "C:/Program Files/CMake/bin/"
+      - "C:/Program Files/CMake/sbin/"
+      - "C:/Program Files/CMake/"
+      - "C:/Program Files/FruityLinkBootstrap/bin/"
+      - "C:/Program Files/FruityLinkBootstrap/sbin/"
+      - "C:/Program Files/FruityLinkBootstrap/"
+    searched_directories:
+      - "C:/Program Files/PowerShell/7/rc.com"
+      - "C:/Program Files/PowerShell/7/rc.exe"
+      - "C:/Program Files/PowerShell/7/rc"
+      - "C:/Program Files/Microsoft SDKs/Azure/CLI2/wbin/rc.com"
+      - "C:/Program Files/Microsoft SDKs/Azure/CLI2/wbin/rc.exe"
+      - "C:/Program Files/Microsoft SDKs/Azure/CLI2/wbin/rc"
+      - "C:/Program Files/Zulu/zulu-21/bin/rc.com"
+      - "C:/Program Files/Zulu/zulu-21/bin/rc.exe"
+      - "C:/Program Files/Zulu/zulu-21/bin/rc"
+      - "C:/Windows/System32/rc.com"
+      - "C:/Windows/System32/rc.exe"
+      - "C:/Windows/System32/rc"
+      - "C:/Windows/rc.com"
+      - "C:/Windows/rc.exe"
+      - "C:/Windows/rc"
+      - "C:/Windows/System32/wbem/rc.com"
+      - "C:/Windows/System32/wbem/rc.exe"
+      - "C:/Windows/System32/wbem/rc"
+      - "C:/Windows/System32/WindowsPowerShell/v1.0/rc.com"
+      - "C:/Windows/System32/WindowsPowerShell/v1.0/rc.exe"
+      - "C:/Windows/System32/WindowsPowerShell/v1.0/rc"
+      - "C:/Windows/System32/OpenSSH/rc.com"
+      - "C:/Windows/System32/OpenSSH/rc.exe"
+      - "C:/Windows/System32/OpenSSH/rc"
+      - "C:/Program Files/Microsoft SQL Server/150/Tools/Binn/rc.com"
+      - "C:/Program Files/Microsoft SQL Server/150/Tools/Binn/rc.exe"
+      - "C:/Program Files/Microsoft SQL Server/150/Tools/Binn/rc"
+      - "C:/Program Files/010 Editor/rc.com"
+      - "C:/Program Files/010 Editor/rc.exe"
+      - "C:/Program Files/010 Editor/rc"
+      - "C:/Program Files/NVIDIA Corporation/NVIDIA app/NvDLISR/rc.com"
+      - "C:/Program Files/NVIDIA Corporation/NVIDIA app/NvDLISR/rc.exe"
+      - "C:/Program Files/NVIDIA Corporation/NVIDIA app/NvDLISR/rc"
+      - "C:/Program Files (x86)/NVIDIA Corporation/PhysX/Common/rc.com"
+      - "C:/Program Files (x86)/NVIDIA Corporation/PhysX/Common/rc.exe"
+      - "C:/Program Files (x86)/NVIDIA Corporation/PhysX/Common/rc"
+      - "C:/Program Files/Microsoft SQL Server/Client SDK/ODBC/170/Tools/Binn/rc.com"
+      - "C:/Program Files/Microsoft SQL Server/Client SDK/ODBC/170/Tools/Binn/rc.exe"
+      - "C:/Program Files/Microsoft SQL Server/Client SDK/ODBC/170/Tools/Binn/rc"
+      - "C:/Program Files/dotnet/rc.com"
+      - "C:/Program Files/dotnet/rc.exe"
+      - "C:/Program Files/dotnet/rc"
+      - "C:/Program Files/Git/cmd/rc.com"
+      - "C:/Program Files/Git/cmd/rc.exe"
+      - "C:/Program Files/Git/cmd/rc"
+      - "C:/Program Files/nodejs/rc.com"
+      - "C:/Program Files/nodejs/rc.exe"
+      - "C:/Program Files/nodejs/rc"
+      - "C:/Program Files (x86)/Windows Kits/10/Windows Performance Toolkit/rc.com"
+      - "C:/Program Files (x86)/Windows Kits/10/Windows Performance Toolkit/rc.exe"
+      - "C:/Program Files (x86)/Windows Kits/10/Windows Performance Toolkit/rc"
+      - "C:/Program Files/CMake/bin/rc.com"
+      - "C:/Program Files/CMake/bin/rc.exe"
+      - "C:/Program Files/CMake/bin/rc"
+      - "C:/Program Files/Microsoft SQL Server/170/Tools/Binn/rc.com"
+      - "C:/Program Files/Microsoft SQL Server/170/Tools/Binn/rc.exe"
+      - "C:/Program Files/Microsoft SQL Server/170/Tools/Binn/rc"
+      - "C:/ffmpeg-8.0.1-full_build/bin/rc.com"
+      - "C:/ffmpeg-8.0.1-full_build/bin/rc.exe"
+      - "C:/ffmpeg-8.0.1-full_build/bin/rc"
+      - "C:/Program Files/PuTTY/rc.com"
+      - "C:/Program Files/PuTTY/rc.exe"
+      - "C:/Program Files/PuTTY/rc"
+      - "C:/Strawberry/c/bin/rc.com"
+      - "C:/Strawberry/c/bin/rc.exe"
+      - "C:/Strawberry/c/bin/rc"
+      - "C:/Strawberry/perl/site/bin/rc.com"
+      - "C:/Strawberry/perl/site/bin/rc.exe"
+      - "C:/Strawberry/perl/site/bin/rc"
+      - "C:/Strawberry/perl/bin/rc.com"
+      - "C:/Strawberry/perl/bin/rc.exe"
+      - "C:/Strawberry/perl/bin/rc"
+      - "C:/Program Files/Docker/Docker/resources/bin/rc.com"
+      - "C:/Program Files/Docker/Docker/resources/bin/rc.exe"
+      - "C:/Program Files/Docker/Docker/resources/bin/rc"
+      - "C:/Program Files/CanopyDoc/Connector/rc.com"
+      - "C:/Program Files/CanopyDoc/Connector/rc.exe"
+      - "C:/Program Files/CanopyDoc/Connector/rc"
+      - "C:/Program Files/PyManager/rc.com"
+      - "C:/Program Files/PyManager/rc.exe"
+      - "C:/Program Files/PyManager/rc"
+      - "C:/Users/poofi/.local/bin/rc.com"
+      - "C:/Users/poofi/.local/bin/rc.exe"
+      - "C:/Users/poofi/.local/bin/rc"
+      - "C:/Users/poofi/AppData/Local/Programs/Python/Launcher/rc.com"
+      - "C:/Users/poofi/AppData/Local/Programs/Python/Launcher/rc.exe"
+      - "C:/Users/poofi/AppData/Local/Programs/Python/Launcher/rc"
+      - "C:/Users/poofi/.cargo/bin/rc.com"
+      - "C:/Users/poofi/.cargo/bin/rc.exe"
+      - "C:/Users/poofi/.cargo/bin/rc"
+      - "C:/Users/poofi/AppData/Local/Programs/oh-my-posh/bin/rc.com"
+      - "C:/Users/poofi/AppData/Local/Programs/oh-my-posh/bin/rc.exe"
+      - "C:/Users/poofi/AppData/Local/Programs/oh-my-posh/bin/rc"
+      - "C:/Users/poofi/AppData/Local/Microsoft/WindowsApps/rc.com"
+      - "C:/Users/poofi/AppData/Local/Microsoft/WindowsApps/rc.exe"
+      - "C:/Users/poofi/AppData/Local/Microsoft/WindowsApps/rc"
+      - "C:/Users/poofi/AppData/Local/Programs/Microsoft VS Code/bin/rc.com"
+      - "C:/Users/poofi/AppData/Local/Programs/Microsoft VS Code/bin/rc.exe"
+      - "C:/Users/poofi/AppData/Local/Programs/Microsoft VS Code/bin/rc"
+      - "C:/Users/poofi/.dotnet/tools/rc.com"
+      - "C:/Users/poofi/.dotnet/tools/rc.exe"
+      - "C:/Users/poofi/.dotnet/tools/rc"
+      - "C:/Users/poofi/AppData/Local/Microsoft/WinGet/Packages/Microsoft.Sysinternals_Microsoft.Winget.Source_8wekyb3d8bbwe/rc.com"
+      - "C:/Users/poofi/AppData/Local/Microsoft/WinGet/Packages/Microsoft.Sysinternals_Microsoft.Winget.Source_8wekyb3d8bbwe/rc.exe"
+      - "C:/Users/poofi/AppData/Local/Microsoft/WinGet/Packages/Microsoft.Sysinternals_Microsoft.Winget.Source_8wekyb3d8bbwe/rc"
+      - "C:/Users/poofi/AppData/Local/Programs/Fiddler/rc.com"
+      - "C:/Users/poofi/AppData/Local/Programs/Fiddler/rc.exe"
+      - "C:/Users/poofi/AppData/Local/Programs/Fiddler/rc"
+      - "C:/Users/poofi/AppData/Local/GitHubDesktop/bin/rc.com"
+      - "C:/Users/poofi/AppData/Local/GitHubDesktop/bin/rc.exe"
+      - "C:/Users/poofi/AppData/Local/GitHubDesktop/bin/rc"
+      - "C:/Users/poofi/AppData/Roaming/npm/rc.com"
+      - "C:/Users/poofi/AppData/Roaming/npm/rc.exe"
+      - "C:/Users/poofi/AppData/Roaming/npm/rc"
+      - "C:/Users/poofi/AppData/Local/Microsoft/WinGet/Packages/GitHub.Copilot_Microsoft.Winget.Source_8wekyb3d8bbwe/rc.com"
+      - "C:/Users/poofi/AppData/Local/Microsoft/WinGet/Packages/GitHub.Copilot_Microsoft.Winget.Source_8wekyb3d8bbwe/rc.exe"
+      - "C:/Users/poofi/AppData/Local/Microsoft/WinGet/Packages/GitHub.Copilot_Microsoft.Winget.Source_8wekyb3d8bbwe/rc"
+      - "C:/Users/poofi/AppData/Local/Programs/MiKTeX/miktex/bin/x64/rc.com"
+      - "C:/Users/poofi/AppData/Local/Programs/MiKTeX/miktex/bin/x64/rc.exe"
+      - "C:/Users/poofi/AppData/Local/Programs/MiKTeX/miktex/bin/x64/rc"
+      - "C:/Program Files/bin/rc.com"
+      - "C:/Program Files/bin/rc.exe"
+      - "C:/Program Files/bin/rc"
+      - "C:/Program Files/sbin/rc.com"
+      - "C:/Program Files/sbin/rc.exe"
+      - "C:/Program Files/sbin/rc"
+      - "C:/Program Files/rc.com"
+      - "C:/Program Files/rc.exe"
+      - "C:/Program Files/rc"
+      - "C:/Program Files (x86)/bin/rc.com"
+      - "C:/Program Files (x86)/bin/rc.exe"
+      - "C:/Program Files (x86)/bin/rc"
+      - "C:/Program Files (x86)/sbin/rc.com"
+      - "C:/Program Files (x86)/sbin/rc.exe"
+      - "C:/Program Files (x86)/sbin/rc"
+      - "C:/Program Files (x86)/rc.com"
+      - "C:/Program Files (x86)/rc.exe"
+      - "C:/Program Files (x86)/rc"
+      - "C:/Program Files/CMake/bin/rc.com"
+      - "C:/Program Files/CMake/bin/rc.exe"
+      - "C:/Program Files/CMake/bin/rc"
+      - "C:/Program Files/CMake/sbin/rc.com"
+      - "C:/Program Files/CMake/sbin/rc.exe"
+      - "C:/Program Files/CMake/sbin/rc"
+      - "C:/Program Files/CMake/rc.com"
+      - "C:/Program Files/CMake/rc.exe"
+      - "C:/Program Files/CMake/rc"
+      - "C:/Program Files/FruityLinkBootstrap/bin/rc.com"
+      - "C:/Program Files/FruityLinkBootstrap/bin/rc.exe"
+      - "C:/Program Files/FruityLinkBootstrap/bin/rc"
+      - "C:/Program Files/FruityLinkBootstrap/sbin/rc.com"
+      - "C:/Program Files/FruityLinkBootstrap/sbin/rc.exe"
+      - "C:/Program Files/FruityLinkBootstrap/sbin/rc"
+      - "C:/Program Files/FruityLinkBootstrap/rc.com"
+      - "C:/Program Files/FruityLinkBootstrap/rc.exe"
+      - "C:/Program Files/FruityLinkBootstrap/rc"
+    found: false
+    search_context:
+      ENV{PATH}:
+        - "C:\\Program Files\\PowerShell\\7"
+        - "C:\\Program Files\\Microsoft SDKs\\Azure\\CLI2\\wbin"
+        - "C:\\Program Files\\Zulu\\zulu-21\\bin\\"
+        - "C:\\Windows\\system32"
+        - "C:\\Windows"
+        - "C:\\Windows\\System32\\Wbem"
+        - "C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\"
+        - "C:\\Windows\\System32\\OpenSSH\\"
+        - "C:\\Program Files\\Microsoft SQL Server\\150\\Tools\\Binn\\"
+        - "C:\\Program Files\\010 Editor"
+        - "C:\\Program Files\\NVIDIA Corporation\\NVIDIA app\\NvDLISR"
+        - "C:\\Program Files (x86)\\NVIDIA Corporation\\PhysX\\Common"
+        - "C:\\Program Files\\Microsoft SQL Server\\Client SDK\\ODBC\\170\\Tools\\Binn\\"
+        - "C:\\Program Files\\dotnet\\"
+        - "C:\\Program Files\\Git\\cmd"
+        - "C:\\Program Files\\nodejs\\"
+        - "C:\\Program Files (x86)\\Windows Kits\\10\\Windows Performance Toolkit\\"
+        - "C:\\Program Files\\CMake\\bin"
+        - "C:\\Program Files\\Microsoft SQL Server\\170\\Tools\\Binn\\"
+        - "C:\\ffmpeg-8.0.1-full_build\\bin"
+        - "C:\\Program Files\\PuTTY\\"
+        - "C:\\Program Files\\PowerShell\\7\\"
+        - "C:\\Strawberry\\c\\bin"
+        - "C:\\Strawberry\\perl\\site\\bin"
+        - "C:\\Strawberry\\perl\\bin"
+        - "C:\\Program Files\\Docker\\Docker\\resources\\bin"
+        - "C:\\Program Files\\CanopyDoc\\Connector"
+        - "C:\\Program Files\\PyManager\\"
+        - "C:\\Users\\poofi\\.local\\bin"
+        - "C:\\Users\\poofi\\AppData\\Local\\Programs\\Python\\Launcher\\"
+        - "C:\\Users\\poofi\\.cargo\\bin"
+        - "C:\\Users\\poofi\\AppData\\Local\\Programs\\oh-my-posh\\bin\\"
+        - "C:\\Users\\poofi\\AppData\\Local\\Microsoft\\WindowsApps"
+        - "C:\\Users\\poofi\\AppData\\Local\\Programs\\Microsoft VS Code\\bin"
+        - "C:\\Users\\poofi\\.dotnet\\tools"
+        - "C:\\Users\\poofi\\AppData\\Local\\Microsoft\\WinGet\\Packages\\Microsoft.Sysinternals_Microsoft.Winget.Source_8wekyb3d8bbwe"
+        - "C:\\Users\\poofi\\AppData\\Local\\Programs\\Fiddler"
+        - "C:\\Users\\poofi\\AppData\\Local\\GitHubDesktop\\bin"
+        - "C:\\Users\\poofi\\AppData\\Roaming\\npm"
+        - "C:\\Users\\poofi\\.dotnet\\tools"
+        - "C:\\Users\\poofi\\AppData\\Local\\Microsoft\\WinGet\\Packages\\GitHub.Copilot_Microsoft.Winget.Source_8wekyb3d8bbwe"
+        - "C:\\Users\\poofi\\AppData\\Local\\Programs\\MiKTeX\\miktex\\bin\\x64\\"
+      CMAKE_INSTALL_PREFIX: "C:/Program Files/FruityLinkBootstrap"
+      CMAKE_SYSTEM_PREFIX_PATH:
+        - "C:/Program Files"
+        - "C:/Program Files (x86)"
+        - "C:/Program Files/CMake"
+        - "C:/Program Files/FruityLinkBootstrap"
+  -
+    kind: "try_compile-v1"
+    backtrace:
+      - "C:/Program Files/CMake/share/cmake-4.1/Modules/CMakeDetermineCompilerABI.cmake:83 (try_compile)"
+      - "C:/Program Files/CMake/share/cmake-4.1/Modules/CMakeTestCCompiler.cmake:26 (CMAKE_DETERMINE_COMPILER_ABI)"
+      - "CMakeLists.txt:2 (project)"
+    checks:
+      - "Detecting C compiler ABI info"
+    directories:
+      source: "C:/Users/poofi/source/repos/FruityLoopsLLMLink/bootstrap/build/CMakeFiles/CMakeScratch/TryCompile-jtlg29"
+      binary: "C:/Users/poofi/source/repos/FruityLoopsLLMLink/bootstrap/build/CMakeFiles/CMakeScratch/TryCompile-jtlg29"
+    cmakeVariables:
+      CMAKE_C_FLAGS: "/DWIN32 /D_WINDOWS"
+      CMAKE_C_FLAGS_DEBUG: "/Zi /Ob0 /Od /RTC1"
+      CMAKE_EXE_LINKER_FLAGS: "/machine:x64"
+    buildResult:
+      variable: "CMAKE_C_ABI_COMPILED"
+      cached: true
+      stdout: |
+        Change Dir: 'C:/Users/poofi/source/repos/FruityLoopsLLMLink/bootstrap/build/CMakeFiles/CMakeScratch/TryCompile-jtlg29'
+        
+        Run Build Command(s): "C:/Program Files/Microsoft Visual Studio/2022/Enterprise/MSBuild/Current/Bin/amd64/MSBuild.exe" cmTC_8d708.vcxproj /p:Configuration=Debug /p:Platform=x64 /p:VisualStudioVersion=17.0 /v:n
+        MSBuild version 17.14.23+b0019275e for .NET Framework
+        Build started 6/30/2026 12:12:47 PM.
+        
+        Project "C:\\Users\\poofi\\source\\repos\\FruityLoopsLLMLink\\bootstrap\\build\\CMakeFiles\\CMakeScratch\\TryCompile-jtlg29\\cmTC_8d708.vcxproj" on node 1 (default targets).
+        PrepareForBuild:
+          Creating directory "cmTC_8d708.dir\\Debug\\".
+          Structured output is enabled. The formatting of compiler diagnostics will reflect the error hierarchy. See https://aka.ms/cpp/structured-output for more details.
+          Creating directory "C:\\Users\\poofi\\source\\repos\\FruityLoopsLLMLink\\bootstrap\\build\\CMakeFiles\\CMakeScratch\\TryCompile-jtlg29\\Debug\\".
+          Creating directory "cmTC_8d708.dir\\Debug\\cmTC_8d708.tlog\\".
+        InitializeBuildStatus:
+          Creating "cmTC_8d708.dir\\Debug\\cmTC_8d708.tlog\\unsuccessfulbuild" because "AlwaysCreate" was specified.
+          Touching "cmTC_8d708.dir\\Debug\\cmTC_8d708.tlog\\unsuccessfulbuild".
+        ClCompile:
+          C:\\Program Files\\Microsoft Visual Studio\\2022\\Enterprise\\VC\\Tools\\MSVC\\14.44.35207\\bin\\HostX64\\x64\\CL.exe /c /Zi /W1 /WX- /diagnostics:column /Od /Ob0 /D _MBCS /D WIN32 /D _WINDOWS /D "CMAKE_INTDIR=\\"Debug\\"" /RTC1 /MDd /GS /fp:precise /Fo"cmTC_8d708.dir\\Debug\\\\" /Fd"cmTC_8d708.dir\\Debug\\vc143.pdb" /external:W1 /Gd /TC /errorReport:queue "C:\\Program Files\\CMake\\share\\cmake-4.1\\Modules\\CMakeCCompilerABI.c"
+          Microsoft (R) C/C++ Optimizing Compiler Version 19.44.35222 for x64
+          Copyright (C) Microsoft Corporation.  All rights reserved.
+          cl /c /Zi /W1 /WX- /diagnostics:column /Od /Ob0 /D _MBCS /D WIN32 /D _WINDOWS /D "CMAKE_INTDIR=\\"Debug\\"" /RTC1 /MDd /GS /fp:precise /Fo"cmTC_8d708.dir\\Debug\\\\" /Fd"cmTC_8d708.dir\\Debug\\vc143.pdb" /external:W1 /Gd /TC /errorReport:queue "C:\\Program Files\\CMake\\share\\cmake-4.1\\Modules\\CMakeCCompilerABI.c"
+          CMakeCCompilerABI.c
+        Link:
+          C:\\Program Files\\Microsoft Visual Studio\\2022\\Enterprise\\VC\\Tools\\MSVC\\14.44.35207\\bin\\HostX64\\x64\\link.exe /OUT:"C:\\Users\\poofi\\source\\repos\\FruityLoopsLLMLink\\bootstrap\\build\\CMakeFiles\\CMakeScratch\\TryCompile-jtlg29\\Debug\\cmTC_8d708.exe" /INCREMENTAL /ILK:"cmTC_8d708.dir\\Debug\\cmTC_8d708.ilk" /NOLOGO kernel32.lib user32.lib gdi32.lib winspool.lib shell32.lib ole32.lib oleaut32.lib uuid.lib comdlg32.lib advapi32.lib /MANIFEST /MANIFESTUAC:"level='asInvoker' uiAccess='false'" /manifest:embed /DEBUG /PDB:"C:/Users/poofi/source/repos/FruityLoopsLLMLink/bootstrap/build/CMakeFiles/CMakeScratch/TryCompile-jtlg29/Debug/cmTC_8d708.pdb" /SUBSYSTEM:CONSOLE /TLBID:1 /IMPLIB:"C:/Users/poofi/source/repos/FruityLoopsLLMLink/bootstrap/build/CMakeFiles/CMakeScratch/TryCompile-jtlg29/Debug/cmTC_8d708.lib" /MACHINE:X64  /machine:x64 cmTC_8d708.dir\\Debug\\CMakeCCompilerABI.obj
+          cmTC_8d708.vcxproj -> C:\\Users\\poofi\\source\\repos\\FruityLoopsLLMLink\\bootstrap\\build\\CMakeFiles\\CMakeScratch\\TryCompile-jtlg29\\Debug\\cmTC_8d708.exe
+        FinalizeBuildStatus:
+          Deleting file "cmTC_8d708.dir\\Debug\\cmTC_8d708.tlog\\unsuccessfulbuild".
+          Touching "cmTC_8d708.dir\\Debug\\cmTC_8d708.tlog\\cmTC_8d708.lastbuildstate".
+        Done Building Project "C:\\Users\\poofi\\source\\repos\\FruityLoopsLLMLink\\bootstrap\\build\\CMakeFiles\\CMakeScratch\\TryCompile-jtlg29\\cmTC_8d708.vcxproj" (default targets).
+        
+        Build succeeded.
+            0 Warning(s)
+            0 Error(s)
+        
+        Time Elapsed 00:00:00.48
+        
+      exitCode: 0
+  -
+    kind: "message-v1"
+    backtrace:
+      - "C:/Program Files/CMake/share/cmake-4.1/Modules/CMakeDetermineCompilerABI.cmake:253 (message)"
+      - "C:/Program Files/CMake/share/cmake-4.1/Modules/CMakeTestCCompiler.cmake:26 (CMAKE_DETERMINE_COMPILER_ABI)"
+      - "CMakeLists.txt:2 (project)"
+    message: |
+      Parsed C implicit link information:
+        link line regex: [^( *|.*[/\\])(ld[0-9]*(|\\.[a-rt-z][a-z]*|\\.s[a-np-z][a-z]*|\\.so[a-z]+)|link\\.exe|lld-link(\\.exe)?|CMAKE_LINK_STARTFILE-NOTFOUND|([^/\\]+-)?ld|collect2)[^/\\]*( |$)]
+        linker tool regex: [^[ 	]*(->|")?[ 	]*(([^"]*[/\\])?(ld[0-9]*(|\\.[a-rt-z][a-z]*|\\.s[a-np-z][a-z]*|\\.so[a-z]+)|link\\.exe|lld-link(\\.exe)?))("|,| |$)]
+        linker tool for 'C': C:/Program Files/Microsoft Visual Studio/2022/Enterprise/VC/Tools/MSVC/14.44.35207/bin/HostX64/x64/link.exe
+        implicit libs: []
+        implicit objs: []
+        implicit dirs: []
+        implicit fwks: []
+      
+      
+  -
+    kind: "message-v1"
+    backtrace:
+      - "C:/Program Files/CMake/share/cmake-4.1/Modules/Internal/CMakeDetermineLinkerId.cmake:36 (message)"
+      - "C:/Program Files/CMake/share/cmake-4.1/Modules/CMakeDetermineCompilerABI.cmake:299 (cmake_determine_linker_id)"
+      - "C:/Program Files/CMake/share/cmake-4.1/Modules/CMakeTestCCompiler.cmake:26 (CMAKE_DETERMINE_COMPILER_ABI)"
+      - "CMakeLists.txt:2 (project)"
+    message: |
+      Running the C compiler's linker: "C:/Program Files/Microsoft Visual Studio/2022/Enterprise/VC/Tools/MSVC/14.44.35207/bin/HostX64/x64/link.exe" "-v"
+      Microsoft (R) Incremental Linker Version 14.44.35222.0
+      Copyright (C) Microsoft Corporation.  All rights reserved.
+  -
+    kind: "try_compile-v1"
+    backtrace:
+      - "C:/Program Files/CMake/share/cmake-4.1/Modules/CMakeDetermineCompilerABI.cmake:83 (try_compile)"
+      - "C:/Program Files/CMake/share/cmake-4.1/Modules/CMakeTestCXXCompiler.cmake:26 (CMAKE_DETERMINE_COMPILER_ABI)"
+      - "CMakeLists.txt:2 (project)"
+    checks:
+      - "Detecting CXX compiler ABI info"
+    directories:
+      source: "C:/Users/poofi/source/repos/FruityLoopsLLMLink/bootstrap/build/CMakeFiles/CMakeScratch/TryCompile-9pec4i"
+      binary: "C:/Users/poofi/source/repos/FruityLoopsLLMLink/bootstrap/build/CMakeFiles/CMakeScratch/TryCompile-9pec4i"
+    cmakeVariables:
+      CMAKE_CXX_FLAGS: "/DWIN32 /D_WINDOWS /EHsc"
+      CMAKE_CXX_FLAGS_DEBUG: "/Zi /Ob0 /Od /RTC1"
+      CMAKE_CXX_SCAN_FOR_MODULES: "OFF"
+      CMAKE_EXE_LINKER_FLAGS: "/machine:x64"
+    buildResult:
+      variable: "CMAKE_CXX_ABI_COMPILED"
+      cached: true
+      stdout: |
+        Change Dir: 'C:/Users/poofi/source/repos/FruityLoopsLLMLink/bootstrap/build/CMakeFiles/CMakeScratch/TryCompile-9pec4i'
+        
+        Run Build Command(s): "C:/Program Files/Microsoft Visual Studio/2022/Enterprise/MSBuild/Current/Bin/amd64/MSBuild.exe" cmTC_12b95.vcxproj /p:Configuration=Debug /p:Platform=x64 /p:VisualStudioVersion=17.0 /v:n
+        MSBuild version 17.14.23+b0019275e for .NET Framework
+        Build started 6/30/2026 12:12:48 PM.
+        
+        Project "C:\\Users\\poofi\\source\\repos\\FruityLoopsLLMLink\\bootstrap\\build\\CMakeFiles\\CMakeScratch\\TryCompile-9pec4i\\cmTC_12b95.vcxproj" on node 1 (default targets).
+        PrepareForBuild:
+          Creating directory "cmTC_12b95.dir\\Debug\\".
+          Structured output is enabled. The formatting of compiler diagnostics will reflect the error hierarchy. See https://aka.ms/cpp/structured-output for more details.
+          Creating directory "C:\\Users\\poofi\\source\\repos\\FruityLoopsLLMLink\\bootstrap\\build\\CMakeFiles\\CMakeScratch\\TryCompile-9pec4i\\Debug\\".
+          Creating directory "cmTC_12b95.dir\\Debug\\cmTC_12b95.tlog\\".
+        InitializeBuildStatus:
+          Creating "cmTC_12b95.dir\\Debug\\cmTC_12b95.tlog\\unsuccessfulbuild" because "AlwaysCreate" was specified.
+          Touching "cmTC_12b95.dir\\Debug\\cmTC_12b95.tlog\\unsuccessfulbuild".
+        ClCompile:
+          C:\\Program Files\\Microsoft Visual Studio\\2022\\Enterprise\\VC\\Tools\\MSVC\\14.44.35207\\bin\\HostX64\\x64\\CL.exe /c /Zi /W1 /WX- /diagnostics:column /Od /Ob0 /D _MBCS /D WIN32 /D _WINDOWS /D "CMAKE_INTDIR=\\"Debug\\"" /EHsc /RTC1 /MDd /GS /fp:precise /Fo"cmTC_12b95.dir\\Debug\\\\" /Fd"cmTC_12b95.dir\\Debug\\vc143.pdb" /external:W1 /Gd /TP /errorReport:queue "C:\\Program Files\\CMake\\share\\cmake-4.1\\Modules\\CMakeCXXCompilerABI.cpp"
+          Microsoft (R) C/C++ Optimizing Compiler Version 19.44.35222 for x64
+          Copyright (C) Microsoft Corporation.  All rights reserved.
+          cl /c /Zi /W1 /WX- /diagnostics:column /Od /Ob0 /D _MBCS /D WIN32 /D _WINDOWS /D "CMAKE_INTDIR=\\"Debug\\"" /EHsc /RTC1 /MDd /GS /fp:precise /Fo"cmTC_12b95.dir\\Debug\\\\" /Fd"cmTC_12b95.dir\\Debug\\vc143.pdb" /external:W1 /Gd /TP /errorReport:queue "C:\\Program Files\\CMake\\share\\cmake-4.1\\Modules\\CMakeCXXCompilerABI.cpp"
+          CMakeCXXCompilerABI.cpp
+        Link:
+          C:\\Program Files\\Microsoft Visual Studio\\2022\\Enterprise\\VC\\Tools\\MSVC\\14.44.35207\\bin\\HostX64\\x64\\link.exe /OUT:"C:\\Users\\poofi\\source\\repos\\FruityLoopsLLMLink\\bootstrap\\build\\CMakeFiles\\CMakeScratch\\TryCompile-9pec4i\\Debug\\cmTC_12b95.exe" /INCREMENTAL /ILK:"cmTC_12b95.dir\\Debug\\cmTC_12b95.ilk" /NOLOGO kernel32.lib user32.lib gdi32.lib winspool.lib shell32.lib ole32.lib oleaut32.lib uuid.lib comdlg32.lib advapi32.lib /MANIFEST /MANIFESTUAC:"level='asInvoker' uiAccess='false'" /manifest:embed /DEBUG /PDB:"C:/Users/poofi/source/repos/FruityLoopsLLMLink/bootstrap/build/CMakeFiles/CMakeScratch/TryCompile-9pec4i/Debug/cmTC_12b95.pdb" /SUBSYSTEM:CONSOLE /TLBID:1 /IMPLIB:"C:/Users/poofi/source/repos/FruityLoopsLLMLink/bootstrap/build/CMakeFiles/CMakeScratch/TryCompile-9pec4i/Debug/cmTC_12b95.lib" /MACHINE:X64  /machine:x64 cmTC_12b95.dir\\Debug\\CMakeCXXCompilerABI.obj
+          cmTC_12b95.vcxproj -> C:\\Users\\poofi\\source\\repos\\FruityLoopsLLMLink\\bootstrap\\build\\CMakeFiles\\CMakeScratch\\TryCompile-9pec4i\\Debug\\cmTC_12b95.exe
+        FinalizeBuildStatus:
+          Deleting file "cmTC_12b95.dir\\Debug\\cmTC_12b95.tlog\\unsuccessfulbuild".
+          Touching "cmTC_12b95.dir\\Debug\\cmTC_12b95.tlog\\cmTC_12b95.lastbuildstate".
+        Done Building Project "C:\\Users\\poofi\\source\\repos\\FruityLoopsLLMLink\\bootstrap\\build\\CMakeFiles\\CMakeScratch\\TryCompile-9pec4i\\cmTC_12b95.vcxproj" (default targets).
+        
+        Build succeeded.
+            0 Warning(s)
+            0 Error(s)
+        
+        Time Elapsed 00:00:00.46
+        
+      exitCode: 0
+  -
+    kind: "message-v1"
+    backtrace:
+      - "C:/Program Files/CMake/share/cmake-4.1/Modules/CMakeDetermineCompilerABI.cmake:253 (message)"
+      - "C:/Program Files/CMake/share/cmake-4.1/Modules/CMakeTestCXXCompiler.cmake:26 (CMAKE_DETERMINE_COMPILER_ABI)"
+      - "CMakeLists.txt:2 (project)"
+    message: |
+      Parsed CXX implicit link information:
+        link line regex: [^( *|.*[/\\])(ld[0-9]*(|\\.[a-rt-z][a-z]*|\\.s[a-np-z][a-z]*|\\.so[a-z]+)|link\\.exe|lld-link(\\.exe)?|CMAKE_LINK_STARTFILE-NOTFOUND|([^/\\]+-)?ld|collect2)[^/\\]*( |$)]
+        linker tool regex: [^[ 	]*(->|")?[ 	]*(([^"]*[/\\])?(ld[0-9]*(|\\.[a-rt-z][a-z]*|\\.s[a-np-z][a-z]*|\\.so[a-z]+)|link\\.exe|lld-link(\\.exe)?))("|,| |$)]
+        linker tool for 'CXX': C:/Program Files/Microsoft Visual Studio/2022/Enterprise/VC/Tools/MSVC/14.44.35207/bin/HostX64/x64/link.exe
+        implicit libs: []
+        implicit objs: []
+        implicit dirs: []
+        implicit fwks: []
+      
+      
+  -
+    kind: "message-v1"
+    backtrace:
+      - "C:/Program Files/CMake/share/cmake-4.1/Modules/Internal/CMakeDetermineLinkerId.cmake:36 (message)"
+      - "C:/Program Files/CMake/share/cmake-4.1/Modules/CMakeDetermineCompilerABI.cmake:299 (cmake_determine_linker_id)"
+      - "C:/Program Files/CMake/share/cmake-4.1/Modules/CMakeTestCXXCompiler.cmake:26 (CMAKE_DETERMINE_COMPILER_ABI)"
+      - "CMakeLists.txt:2 (project)"
+    message: |
+      Running the CXX compiler's linker: "C:/Program Files/Microsoft Visual Studio/2022/Enterprise/VC/Tools/MSVC/14.44.35207/bin/HostX64/x64/link.exe" "-v"
+      Microsoft (R) Incremental Linker Version 14.44.35222.0
+      Copyright (C) Microsoft Corporation.  All rights reserved.
+  -
+    kind: "find-v1"
+    backtrace:
+      - "C:/Program Files/CMake/share/cmake-4.1/Modules/CMakeDetermineCompiler.cmake:54 (find_program)"
+      - "C:/Program Files/CMake/share/cmake-4.1/Modules/CMakeDetermineASMCompiler.cmake:61 (_cmake_find_compiler)"
+      - "C:/Program Files/CMake/share/cmake-4.1/Modules/CMakeDetermineASM_MASMCompiler.cmake:17 (include)"
+      - "VersionProxy/CMakeLists.txt:2 (project)"
+    mode: "program"
+    variable: "CMAKE_ASM_MASM_COMPILER"
+    description: "ASM_MASM compiler"
+    settings:
+      SearchFramework: "NEVER"
+      SearchAppBundle: "NEVER"
+      CMAKE_FIND_USE_CMAKE_PATH: true
+      CMAKE_FIND_USE_CMAKE_ENVIRONMENT_PATH: true
+      CMAKE_FIND_USE_SYSTEM_ENVIRONMENT_PATH: true
+      CMAKE_FIND_USE_CMAKE_SYSTEM_PATH: true
+      CMAKE_FIND_USE_INSTALL_PREFIX: true
+    names:
+      - "ml64"
+    candidate_directories:
+      - "C:/Program Files/Microsoft Visual Studio/2022/Enterprise/VC/Tools/MSVC/14.44.35207/bin/Hostx64/x64/"
+    searched_directories:
+      - "C:/Program Files/Microsoft Visual Studio/2022/Enterprise/VC/Tools/MSVC/14.44.35207/bin/Hostx64/x64/ml64.com"
+    found: "C:/Program Files/Microsoft Visual Studio/2022/Enterprise/VC/Tools/MSVC/14.44.35207/bin/Hostx64/x64/ml64.exe"
+    search_context:
+      ENV{PATH}:
+        - "C:\\Program Files\\PowerShell\\7"
+        - "C:\\Program Files\\Microsoft SDKs\\Azure\\CLI2\\wbin"
+        - "C:\\Program Files\\Zulu\\zulu-21\\bin\\"
+        - "C:\\Windows\\system32"
+        - "C:\\Windows"
+        - "C:\\Windows\\System32\\Wbem"
+        - "C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\"
+        - "C:\\Windows\\System32\\OpenSSH\\"
+        - "C:\\Program Files\\Microsoft SQL Server\\150\\Tools\\Binn\\"
+        - "C:\\Program Files\\010 Editor"
+        - "C:\\Program Files\\NVIDIA Corporation\\NVIDIA app\\NvDLISR"
+        - "C:\\Program Files (x86)\\NVIDIA Corporation\\PhysX\\Common"
+        - "C:\\Program Files\\Microsoft SQL Server\\Client SDK\\ODBC\\170\\Tools\\Binn\\"
+        - "C:\\Program Files\\dotnet\\"
+        - "C:\\Program Files\\Git\\cmd"
+        - "C:\\Program Files\\nodejs\\"
+        - "C:\\Program Files (x86)\\Windows Kits\\10\\Windows Performance Toolkit\\"
+        - "C:\\Program Files\\CMake\\bin"
+        - "C:\\Program Files\\Microsoft SQL Server\\170\\Tools\\Binn\\"
+        - "C:\\ffmpeg-8.0.1-full_build\\bin"
+        - "C:\\Program Files\\PuTTY\\"
+        - "C:\\Program Files\\PowerShell\\7\\"
+        - "C:\\Strawberry\\c\\bin"
+        - "C:\\Strawberry\\perl\\site\\bin"
+        - "C:\\Strawberry\\perl\\bin"
+        - "C:\\Program Files\\Docker\\Docker\\resources\\bin"
+        - "C:\\Program Files\\CanopyDoc\\Connector"
+        - "C:\\Program Files\\PyManager\\"
+        - "C:\\Users\\poofi\\.local\\bin"
+        - "C:\\Users\\poofi\\AppData\\Local\\Programs\\Python\\Launcher\\"
+        - "C:\\Users\\poofi\\.cargo\\bin"
+        - "C:\\Users\\poofi\\AppData\\Local\\Programs\\oh-my-posh\\bin\\"
+        - "C:\\Users\\poofi\\AppData\\Local\\Microsoft\\WindowsApps"
+        - "C:\\Users\\poofi\\AppData\\Local\\Programs\\Microsoft VS Code\\bin"
+        - "C:\\Users\\poofi\\.dotnet\\tools"
+        - "C:\\Users\\poofi\\AppData\\Local\\Microsoft\\WinGet\\Packages\\Microsoft.Sysinternals_Microsoft.Winget.Source_8wekyb3d8bbwe"
+        - "C:\\Users\\poofi\\AppData\\Local\\Programs\\Fiddler"
+        - "C:\\Users\\poofi\\AppData\\Local\\GitHubDesktop\\bin"
+        - "C:\\Users\\poofi\\AppData\\Roaming\\npm"
+        - "C:\\Users\\poofi\\.dotnet\\tools"
+        - "C:\\Users\\poofi\\AppData\\Local\\Microsoft\\WinGet\\Packages\\GitHub.Copilot_Microsoft.Winget.Source_8wekyb3d8bbwe"
+        - "C:\\Users\\poofi\\AppData\\Local\\Programs\\MiKTeX\\miktex\\bin\\x64\\"
+      CMAKE_INSTALL_PREFIX: "C:/Program Files/FruityLinkBootstrap"
+      CMAKE_SYSTEM_PREFIX_PATH:
+        - "C:/Program Files"
+        - "C:/Program Files (x86)"
+        - "C:/Program Files/CMake"
+        - "C:/Program Files/FruityLinkBootstrap"
+  -
+    kind: "message-v1"
+    backtrace:
+      - "C:/Program Files/CMake/share/cmake-4.1/Modules/CMakeDetermineCompilerId.cmake:1303 (message)"
+      - "C:/Program Files/CMake/share/cmake-4.1/Modules/CMakeDetermineASMCompiler.cmake:170 (CMAKE_DETERMINE_COMPILER_ID_VENDOR)"
+      - "C:/Program Files/CMake/share/cmake-4.1/Modules/CMakeDetermineASM_MASMCompiler.cmake:17 (include)"
+      - "VersionProxy/CMakeLists.txt:2 (project)"
+    message: |
+      Checking whether the ASM_MASM compiler is GNU using "--version" did not match "(GNU assembler)|(GCC)|(Free Software Foundation)":
+      Microsoft (R) Macro Assembler (x64) Version 14.44.35222.0
+      Copyright (C) Microsoft Corporation.  All rights reserved.
+      
+      MASM : warning A4018:invalid command-line option : --version
+      MASM : fatal error A1017:missing source filename
+  -
+    kind: "message-v1"
+    backtrace:
+      - "C:/Program Files/CMake/share/cmake-4.1/Modules/CMakeDetermineCompilerId.cmake:1303 (message)"
+      - "C:/Program Files/CMake/share/cmake-4.1/Modules/CMakeDetermineASMCompiler.cmake:170 (CMAKE_DETERMINE_COMPILER_ID_VENDOR)"
+      - "C:/Program Files/CMake/share/cmake-4.1/Modules/CMakeDetermineASM_MASMCompiler.cmake:17 (include)"
+      - "VersionProxy/CMakeLists.txt:2 (project)"
+    message: |
+      Checking whether the ASM_MASM compiler is AppleClang using "--version" did not match "(Apple (clang|LLVM) version)":
+      Microsoft (R) Macro Assembler (x64) Version 14.44.35222.0
+      Copyright (C) Microsoft Corporation.  All rights reserved.
+      
+      MASM : warning A4018:invalid command-line option : --version
+      MASM : fatal error A1017:missing source filename
+  -
+    kind: "message-v1"
+    backtrace:
+      - "C:/Program Files/CMake/share/cmake-4.1/Modules/CMakeDetermineCompilerId.cmake:1303 (message)"
+      - "C:/Program Files/CMake/share/cmake-4.1/Modules/CMakeDetermineASMCompiler.cmake:170 (CMAKE_DETERMINE_COMPILER_ID_VENDOR)"
+      - "C:/Program Files/CMake/share/cmake-4.1/Modules/CMakeDetermineASM_MASMCompiler.cmake:17 (include)"
+      - "VersionProxy/CMakeLists.txt:2 (project)"
+    message: |
+      Checking whether the ASM_MASM compiler is Clang using "--version" did not match "(clang version)":
+      Microsoft (R) Macro Assembler (x64) Version 14.44.35222.0
+      Copyright (C) Microsoft Corporation.  All rights reserved.
+      
+      MASM : warning A4018:invalid command-line option : --version
+      MASM : fatal error A1017:missing source filename
+  -
+    kind: "message-v1"
+    backtrace:
+      - "C:/Program Files/CMake/share/cmake-4.1/Modules/CMakeDetermineCompilerId.cmake:1303 (message)"
+      - "C:/Program Files/CMake/share/cmake-4.1/Modules/CMakeDetermineASMCompiler.cmake:170 (CMAKE_DETERMINE_COMPILER_ID_VENDOR)"
+      - "C:/Program Files/CMake/share/cmake-4.1/Modules/CMakeDetermineASM_MASMCompiler.cmake:17 (include)"
+      - "VersionProxy/CMakeLists.txt:2 (project)"
+    message: |
+      Checking whether the ASM_MASM compiler is ARMClang using "--version" did not match "armclang":
+      Microsoft (R) Macro Assembler (x64) Version 14.44.35222.0
+      Copyright (C) Microsoft Corporation.  All rights reserved.
+      
+      MASM : warning A4018:invalid command-line option : --version
+      MASM : fatal error A1017:missing source filename
+  -
+    kind: "message-v1"
+    backtrace:
+      - "C:/Program Files/CMake/share/cmake-4.1/Modules/CMakeDetermineCompilerId.cmake:1303 (message)"
+      - "C:/Program Files/CMake/share/cmake-4.1/Modules/CMakeDetermineASMCompiler.cmake:170 (CMAKE_DETERMINE_COMPILER_ID_VENDOR)"
+      - "C:/Program Files/CMake/share/cmake-4.1/Modules/CMakeDetermineASM_MASMCompiler.cmake:17 (include)"
+      - "VersionProxy/CMakeLists.txt:2 (project)"
+    message: |
+      Checking whether the ASM_MASM compiler is OrangeC using "--version" did not match "occ \\(OrangeC\\) Version":
+      Microsoft (R) Macro Assembler (x64) Version 14.44.35222.0
+      Copyright (C) Microsoft Corporation.  All rights reserved.
+      
+      MASM : warning A4018:invalid command-line option : --version
+      MASM : fatal error A1017:missing source filename
+  -
+    kind: "message-v1"
+    backtrace:
+      - "C:/Program Files/CMake/share/cmake-4.1/Modules/CMakeDetermineCompilerId.cmake:1303 (message)"
+      - "C:/Program Files/CMake/share/cmake-4.1/Modules/CMakeDetermineASMCompiler.cmake:170 (CMAKE_DETERMINE_COMPILER_ID_VENDOR)"
+      - "C:/Program Files/CMake/share/cmake-4.1/Modules/CMakeDetermineASM_MASMCompiler.cmake:17 (include)"
+      - "VersionProxy/CMakeLists.txt:2 (project)"
+    message: |
+      Checking whether the ASM_MASM compiler is HP using "-V" did not match "HP C":
+      Microsoft (R) Macro Assembler (x64) Version 14.44.35222.0
+      Copyright (C) Microsoft Corporation.  All rights reserved.
+      
+      MASM : warning A4018:invalid command-line option : -V
+      MASM : fatal error A1017:missing source filename
+  -
+    kind: "message-v1"
+    backtrace:
+      - "C:/Program Files/CMake/share/cmake-4.1/Modules/CMakeDetermineCompilerId.cmake:1303 (message)"
+      - "C:/Program Files/CMake/share/cmake-4.1/Modules/CMakeDetermineASMCompiler.cmake:170 (CMAKE_DETERMINE_COMPILER_ID_VENDOR)"
+      - "C:/Program Files/CMake/share/cmake-4.1/Modules/CMakeDetermineASM_MASMCompiler.cmake:17 (include)"
+      - "VersionProxy/CMakeLists.txt:2 (project)"
+    message: |
+      Checking whether the ASM_MASM compiler is Intel using "--version" did not match "(ICC)":
+      Microsoft (R) Macro Assembler (x64) Version 14.44.35222.0
+      Copyright (C) Microsoft Corporation.  All rights reserved.
+      
+      MASM : warning A4018:invalid command-line option : --version
+      MASM : fatal error A1017:missing source filename
+  -
+    kind: "message-v1"
+    backtrace:
+      - "C:/Program Files/CMake/share/cmake-4.1/Modules/CMakeDetermineCompilerId.cmake:1303 (message)"
+      - "C:/Program Files/CMake/share/cmake-4.1/Modules/CMakeDetermineASMCompiler.cmake:170 (CMAKE_DETERMINE_COMPILER_ID_VENDOR)"
+      - "C:/Program Files/CMake/share/cmake-4.1/Modules/CMakeDetermineASM_MASMCompiler.cmake:17 (include)"
+      - "VersionProxy/CMakeLists.txt:2 (project)"
+    message: |
+      Checking whether the ASM_MASM compiler is IntelLLVM using "--version" did not match "(Intel[^
+      ]+oneAPI)":
+      Microsoft (R) Macro Assembler (x64) Version 14.44.35222.0
+      Copyright (C) Microsoft Corporation.  All rights reserved.
+      
+      MASM : warning A4018:invalid command-line option : --version
+      MASM : fatal error A1017:missing source filename
+  -
+    kind: "message-v1"
+    backtrace:
+      - "C:/Program Files/CMake/share/cmake-4.1/Modules/CMakeDetermineCompilerId.cmake:1303 (message)"
+      - "C:/Program Files/CMake/share/cmake-4.1/Modules/CMakeDetermineASMCompiler.cmake:170 (CMAKE_DETERMINE_COMPILER_ID_VENDOR)"
+      - "C:/Program Files/CMake/share/cmake-4.1/Modules/CMakeDetermineASM_MASMCompiler.cmake:17 (include)"
+      - "VersionProxy/CMakeLists.txt:2 (project)"
+    message: |
+      Checking whether the ASM_MASM compiler is SunPro using "-V" did not match "Sun C":
+      Microsoft (R) Macro Assembler (x64) Version 14.44.35222.0
+      Copyright (C) Microsoft Corporation.  All rights reserved.
+      
+      MASM : warning A4018:invalid command-line option : -V
+      MASM : fatal error A1017:missing source filename
+  -
+    kind: "message-v1"
+    backtrace:
+      - "C:/Program Files/CMake/share/cmake-4.1/Modules/CMakeDetermineCompilerId.cmake:1303 (message)"
+      - "C:/Program Files/CMake/share/cmake-4.1/Modules/CMakeDetermineASMCompiler.cmake:170 (CMAKE_DETERMINE_COMPILER_ID_VENDOR)"
+      - "C:/Program Files/CMake/share/cmake-4.1/Modules/CMakeDetermineASM_MASMCompiler.cmake:17 (include)"
+      - "VersionProxy/CMakeLists.txt:2 (project)"
+    message: |
+      Checking whether the ASM_MASM compiler is XL using "-qversion" did not match "XL C":
+      Microsoft (R) Macro Assembler (x64) Version 14.44.35222.0
+      Copyright (C) Microsoft Corporation.  All rights reserved.
+      
+      MASM : warning A4018:invalid command-line option : -qversion
+      MASM : fatal error A1017:missing source filename
+  -
+    kind: "message-v1"
+    backtrace:
+      - "C:/Program Files/CMake/share/cmake-4.1/Modules/CMakeDetermineCompilerId.cmake:1290 (message)"
+      - "C:/Program Files/CMake/share/cmake-4.1/Modules/CMakeDetermineASMCompiler.cmake:170 (CMAKE_DETERMINE_COMPILER_ID_VENDOR)"
+      - "C:/Program Files/CMake/share/cmake-4.1/Modules/CMakeDetermineASM_MASMCompiler.cmake:17 (include)"
+      - "VersionProxy/CMakeLists.txt:2 (project)"
+    message: |
+      Checking whether the ASM_MASM compiler is MSVC using "-?" matched "Microsoft":
+      Microsoft (R) Macro Assembler (x64) Version 14.44.35222.0
+      Copyright (C) Microsoft Corporation.  All rights reserved.
+      
+              ML64 [ /options ] filelist [ /link linkoptions ]
+      
+      /Bl<linker> Use alternate linker          /Sf Generate first pass listing
+      /c Assemble without linking               /Sl<width> Set line width
+      /Cp Preserve case of user identifiers     /Sn Suppress symbol-table listing
+      /Cx Preserve case in publics, externs     /Sp<length> Set page length
+      /D<name>[=text] Define text macro         /Ss<string> Set subtitle
+      /EP Output preprocessed listing to stdout /St<string> Set title
+      /F <hex> Set stack size (bytes)           /Sx List false conditionals
+      /Fe<file> Name executable                 /Ta<file> Assemble non-.ASM file
+      /Fl[file] Generate listing                /w Same as /W0 /WX
+      /Fm[file] Generate map                    /WX Treat warnings as errors
+      /Fo<file> Name object file                /W<number> Set warning level
+      /Fr[file] Generate limited browser info   /X Ignore INCLUDE environment path
+      /FR[file] Generate full browser info      /Zd Add line number debug info
+      /I<name> Add include path                 /Zf Make all symbols public
+      /link <linker options and libraries>      /Zi Add symbolic debug info
+      /nologo Suppress copyright message        /Zp[n] Set structure alignment
+      /Sa Maximize source listing               /Zs Perform syntax check only
+      /ZH:MD5 Use MD5 for checksum in debug info
+      /ZH:SHA_256 Use SHA256 for checksum in debug info (default)
+      /Gy[-] separate functions for linker      /quiet Suppress 'Assembling' message
+      /errorReport:<option> Deprecated. Report internal assembler errors to Microsoft
+          none - do not send report
+          prompt - prompt to immediately send report
+          queue - at next admin logon, prompt to send report
+          send - send report automatically
+  -
+    kind: "find-v1"
+    backtrace:
+      - "C:/Program Files/CMake/share/cmake-4.1/Modules/CMakeFindBinUtils.cmake:37 (find_program)"
+      - "C:/Program Files/CMake/share/cmake-4.1/Modules/CMakeFindBinUtils.cmake:65 (__resolve_tool_path)"
+      - "C:/Program Files/CMake/share/cmake-4.1/Modules/CMakeFindBinUtils.cmake:104 (__resolve_linker_path)"
+      - "C:/Program Files/CMake/share/cmake-4.1/Modules/CMakeDetermineASMCompiler.cmake:267 (include)"
+      - "C:/Program Files/CMake/share/cmake-4.1/Modules/CMakeDetermineASM_MASMCompiler.cmake:17 (include)"
+      - "VersionProxy/CMakeLists.txt:2 (project)"
+    mode: "program"
+    variable: "_CMAKE_TOOL_WITH_PATH"
+    description: "Path to a program."
+    settings:
+      SearchFramework: "NEVER"
+      SearchAppBundle: "NEVER"
+      CMAKE_FIND_USE_CMAKE_PATH: false
+      CMAKE_FIND_USE_CMAKE_ENVIRONMENT_PATH: false
+      CMAKE_FIND_USE_SYSTEM_ENVIRONMENT_PATH: true
+      CMAKE_FIND_USE_CMAKE_SYSTEM_PATH: true
+      CMAKE_FIND_USE_INSTALL_PREFIX: true
+    names:
+      - "lld-link"
+    candidate_directories:
+      - "C:/Program Files/Microsoft Visual Studio/2022/Enterprise/VC/Tools/MSVC/14.44.35207/bin/Hostx64/x64/"
+      - "C:/Program Files/PowerShell/7/"
+      - "C:/Program Files/Microsoft SDKs/Azure/CLI2/wbin/"
+      - "C:/Program Files/Zulu/zulu-21/bin/"
+      - "C:/Windows/System32/"
+      - "C:/Windows/"
+      - "C:/Windows/System32/wbem/"
+      - "C:/Windows/System32/WindowsPowerShell/v1.0/"
+      - "C:/Windows/System32/OpenSSH/"
+      - "C:/Program Files/Microsoft SQL Server/150/Tools/Binn/"
+      - "C:/Program Files/010 Editor/"
+      - "C:/Program Files/NVIDIA Corporation/NVIDIA app/NvDLISR/"
+      - "C:/Program Files (x86)/NVIDIA Corporation/PhysX/Common/"
+      - "C:/Program Files/Microsoft SQL Server/Client SDK/ODBC/170/Tools/Binn/"
+      - "C:/Program Files/dotnet/"
+      - "C:/Program Files/Git/cmd/"
+      - "C:/Program Files/nodejs/"
+      - "C:/Program Files (x86)/Windows Kits/10/Windows Performance Toolkit/"
+      - "C:/Program Files/CMake/bin/"
+      - "C:/Program Files/Microsoft SQL Server/170/Tools/Binn/"
+      - "C:/ffmpeg-8.0.1-full_build/bin/"
+      - "C:/Program Files/PuTTY/"
+      - "C:/Strawberry/c/bin/"
+      - "C:/Strawberry/perl/site/bin/"
+      - "C:/Strawberry/perl/bin/"
+      - "C:/Program Files/Docker/Docker/resources/bin/"
+      - "C:/Program Files/CanopyDoc/Connector/"
+      - "C:/Program Files/PyManager/"
+      - "C:/Users/poofi/.local/bin/"
+      - "C:/Users/poofi/AppData/Local/Programs/Python/Launcher/"
+      - "C:/Users/poofi/.cargo/bin/"
+      - "C:/Users/poofi/AppData/Local/Programs/oh-my-posh/bin/"
+      - "C:/Users/poofi/AppData/Local/Microsoft/WindowsApps/"
+      - "C:/Users/poofi/AppData/Local/Programs/Microsoft VS Code/bin/"
+      - "C:/Users/poofi/.dotnet/tools/"
+      - "C:/Users/poofi/AppData/Local/Microsoft/WinGet/Packages/Microsoft.Sysinternals_Microsoft.Winget.Source_8wekyb3d8bbwe/"
+      - "C:/Users/poofi/AppData/Local/Programs/Fiddler/"
+      - "C:/Users/poofi/AppData/Local/GitHubDesktop/bin/"
+      - "C:/Users/poofi/AppData/Roaming/npm/"
+      - "C:/Users/poofi/AppData/Local/Microsoft/WinGet/Packages/GitHub.Copilot_Microsoft.Winget.Source_8wekyb3d8bbwe/"
+      - "C:/Users/poofi/AppData/Local/Programs/MiKTeX/miktex/bin/x64/"
+      - "C:/Program Files/bin/"
+      - "C:/Program Files/sbin/"
+      - "C:/Program Files/"
+      - "C:/Program Files (x86)/bin/"
+      - "C:/Program Files (x86)/sbin/"
+      - "C:/Program Files (x86)/"
+      - "C:/Program Files/CMake/bin/"
+      - "C:/Program Files/CMake/sbin/"
+      - "C:/Program Files/CMake/"
+      - "C:/Program Files/FruityLinkBootstrap/bin/"
+      - "C:/Program Files/FruityLinkBootstrap/sbin/"
+      - "C:/Program Files/FruityLinkBootstrap/"
+    searched_directories:
+      - "C:/Program Files/Microsoft Visual Studio/2022/Enterprise/VC/Tools/MSVC/14.44.35207/bin/Hostx64/x64/lld-link.com"
+      - "C:/Program Files/Microsoft Visual Studio/2022/Enterprise/VC/Tools/MSVC/14.44.35207/bin/Hostx64/x64/lld-link.exe"
+      - "C:/Program Files/Microsoft Visual Studio/2022/Enterprise/VC/Tools/MSVC/14.44.35207/bin/Hostx64/x64/lld-link"
+      - "C:/Program Files/PowerShell/7/lld-link.com"
+      - "C:/Program Files/PowerShell/7/lld-link.exe"
+      - "C:/Program Files/PowerShell/7/lld-link"
+      - "C:/Program Files/Microsoft SDKs/Azure/CLI2/wbin/lld-link.com"
+      - "C:/Program Files/Microsoft SDKs/Azure/CLI2/wbin/lld-link.exe"
+      - "C:/Program Files/Microsoft SDKs/Azure/CLI2/wbin/lld-link"
+      - "C:/Program Files/Zulu/zulu-21/bin/lld-link.com"
+      - "C:/Program Files/Zulu/zulu-21/bin/lld-link.exe"
+      - "C:/Program Files/Zulu/zulu-21/bin/lld-link"
+      - "C:/Windows/System32/lld-link.com"
+      - "C:/Windows/System32/lld-link.exe"
+      - "C:/Windows/System32/lld-link"
+      - "C:/Windows/lld-link.com"
+      - "C:/Windows/lld-link.exe"
+      - "C:/Windows/lld-link"
+      - "C:/Windows/System32/wbem/lld-link.com"
+      - "C:/Windows/System32/wbem/lld-link.exe"
+      - "C:/Windows/System32/wbem/lld-link"
+      - "C:/Windows/System32/WindowsPowerShell/v1.0/lld-link.com"
+      - "C:/Windows/System32/WindowsPowerShell/v1.0/lld-link.exe"
+      - "C:/Windows/System32/WindowsPowerShell/v1.0/lld-link"
+      - "C:/Windows/System32/OpenSSH/lld-link.com"
+      - "C:/Windows/System32/OpenSSH/lld-link.exe"
+      - "C:/Windows/System32/OpenSSH/lld-link"
+      - "C:/Program Files/Microsoft SQL Server/150/Tools/Binn/lld-link.com"
+      - "C:/Program Files/Microsoft SQL Server/150/Tools/Binn/lld-link.exe"
+      - "C:/Program Files/Microsoft SQL Server/150/Tools/Binn/lld-link"
+      - "C:/Program Files/010 Editor/lld-link.com"
+      - "C:/Program Files/010 Editor/lld-link.exe"
+      - "C:/Program Files/010 Editor/lld-link"
+      - "C:/Program Files/NVIDIA Corporation/NVIDIA app/NvDLISR/lld-link.com"
+      - "C:/Program Files/NVIDIA Corporation/NVIDIA app/NvDLISR/lld-link.exe"
+      - "C:/Program Files/NVIDIA Corporation/NVIDIA app/NvDLISR/lld-link"
+      - "C:/Program Files (x86)/NVIDIA Corporation/PhysX/Common/lld-link.com"
+      - "C:/Program Files (x86)/NVIDIA Corporation/PhysX/Common/lld-link.exe"
+      - "C:/Program Files (x86)/NVIDIA Corporation/PhysX/Common/lld-link"
+      - "C:/Program Files/Microsoft SQL Server/Client SDK/ODBC/170/Tools/Binn/lld-link.com"
+      - "C:/Program Files/Microsoft SQL Server/Client SDK/ODBC/170/Tools/Binn/lld-link.exe"
+      - "C:/Program Files/Microsoft SQL Server/Client SDK/ODBC/170/Tools/Binn/lld-link"
+      - "C:/Program Files/dotnet/lld-link.com"
+      - "C:/Program Files/dotnet/lld-link.exe"
+      - "C:/Program Files/dotnet/lld-link"
+      - "C:/Program Files/Git/cmd/lld-link.com"
+      - "C:/Program Files/Git/cmd/lld-link.exe"
+      - "C:/Program Files/Git/cmd/lld-link"
+      - "C:/Program Files/nodejs/lld-link.com"
+      - "C:/Program Files/nodejs/lld-link.exe"
+      - "C:/Program Files/nodejs/lld-link"
+      - "C:/Program Files (x86)/Windows Kits/10/Windows Performance Toolkit/lld-link.com"
+      - "C:/Program Files (x86)/Windows Kits/10/Windows Performance Toolkit/lld-link.exe"
+      - "C:/Program Files (x86)/Windows Kits/10/Windows Performance Toolkit/lld-link"
+      - "C:/Program Files/CMake/bin/lld-link.com"
+      - "C:/Program Files/CMake/bin/lld-link.exe"
+      - "C:/Program Files/CMake/bin/lld-link"
+      - "C:/Program Files/Microsoft SQL Server/170/Tools/Binn/lld-link.com"
+      - "C:/Program Files/Microsoft SQL Server/170/Tools/Binn/lld-link.exe"
+      - "C:/Program Files/Microsoft SQL Server/170/Tools/Binn/lld-link"
+      - "C:/ffmpeg-8.0.1-full_build/bin/lld-link.com"
+      - "C:/ffmpeg-8.0.1-full_build/bin/lld-link.exe"
+      - "C:/ffmpeg-8.0.1-full_build/bin/lld-link"
+      - "C:/Program Files/PuTTY/lld-link.com"
+      - "C:/Program Files/PuTTY/lld-link.exe"
+      - "C:/Program Files/PuTTY/lld-link"
+      - "C:/Strawberry/c/bin/lld-link.com"
+      - "C:/Strawberry/c/bin/lld-link.exe"
+      - "C:/Strawberry/c/bin/lld-link"
+      - "C:/Strawberry/perl/site/bin/lld-link.com"
+      - "C:/Strawberry/perl/site/bin/lld-link.exe"
+      - "C:/Strawberry/perl/site/bin/lld-link"
+      - "C:/Strawberry/perl/bin/lld-link.com"
+      - "C:/Strawberry/perl/bin/lld-link.exe"
+      - "C:/Strawberry/perl/bin/lld-link"
+      - "C:/Program Files/Docker/Docker/resources/bin/lld-link.com"
+      - "C:/Program Files/Docker/Docker/resources/bin/lld-link.exe"
+      - "C:/Program Files/Docker/Docker/resources/bin/lld-link"
+      - "C:/Program Files/CanopyDoc/Connector/lld-link.com"
+      - "C:/Program Files/CanopyDoc/Connector/lld-link.exe"
+      - "C:/Program Files/CanopyDoc/Connector/lld-link"
+      - "C:/Program Files/PyManager/lld-link.com"
+      - "C:/Program Files/PyManager/lld-link.exe"
+      - "C:/Program Files/PyManager/lld-link"
+      - "C:/Users/poofi/.local/bin/lld-link.com"
+      - "C:/Users/poofi/.local/bin/lld-link.exe"
+      - "C:/Users/poofi/.local/bin/lld-link"
+      - "C:/Users/poofi/AppData/Local/Programs/Python/Launcher/lld-link.com"
+      - "C:/Users/poofi/AppData/Local/Programs/Python/Launcher/lld-link.exe"
+      - "C:/Users/poofi/AppData/Local/Programs/Python/Launcher/lld-link"
+      - "C:/Users/poofi/.cargo/bin/lld-link.com"
+      - "C:/Users/poofi/.cargo/bin/lld-link.exe"
+      - "C:/Users/poofi/.cargo/bin/lld-link"
+      - "C:/Users/poofi/AppData/Local/Programs/oh-my-posh/bin/lld-link.com"
+      - "C:/Users/poofi/AppData/Local/Programs/oh-my-posh/bin/lld-link.exe"
+      - "C:/Users/poofi/AppData/Local/Programs/oh-my-posh/bin/lld-link"
+      - "C:/Users/poofi/AppData/Local/Microsoft/WindowsApps/lld-link.com"
+      - "C:/Users/poofi/AppData/Local/Microsoft/WindowsApps/lld-link.exe"
+      - "C:/Users/poofi/AppData/Local/Microsoft/WindowsApps/lld-link"
+      - "C:/Users/poofi/AppData/Local/Programs/Microsoft VS Code/bin/lld-link.com"
+      - "C:/Users/poofi/AppData/Local/Programs/Microsoft VS Code/bin/lld-link.exe"
+      - "C:/Users/poofi/AppData/Local/Programs/Microsoft VS Code/bin/lld-link"
+      - "C:/Users/poofi/.dotnet/tools/lld-link.com"
+      - "C:/Users/poofi/.dotnet/tools/lld-link.exe"
+      - "C:/Users/poofi/.dotnet/tools/lld-link"
+      - "C:/Users/poofi/AppData/Local/Microsoft/WinGet/Packages/Microsoft.Sysinternals_Microsoft.Winget.Source_8wekyb3d8bbwe/lld-link.com"
+      - "C:/Users/poofi/AppData/Local/Microsoft/WinGet/Packages/Microsoft.Sysinternals_Microsoft.Winget.Source_8wekyb3d8bbwe/lld-link.exe"
+      - "C:/Users/poofi/AppData/Local/Microsoft/WinGet/Packages/Microsoft.Sysinternals_Microsoft.Winget.Source_8wekyb3d8bbwe/lld-link"
+      - "C:/Users/poofi/AppData/Local/Programs/Fiddler/lld-link.com"
+      - "C:/Users/poofi/AppData/Local/Programs/Fiddler/lld-link.exe"
+      - "C:/Users/poofi/AppData/Local/Programs/Fiddler/lld-link"
+      - "C:/Users/poofi/AppData/Local/GitHubDesktop/bin/lld-link.com"
+      - "C:/Users/poofi/AppData/Local/GitHubDesktop/bin/lld-link.exe"
+      - "C:/Users/poofi/AppData/Local/GitHubDesktop/bin/lld-link"
+      - "C:/Users/poofi/AppData/Roaming/npm/lld-link.com"
+      - "C:/Users/poofi/AppData/Roaming/npm/lld-link.exe"
+      - "C:/Users/poofi/AppData/Roaming/npm/lld-link"
+      - "C:/Users/poofi/AppData/Local/Microsoft/WinGet/Packages/GitHub.Copilot_Microsoft.Winget.Source_8wekyb3d8bbwe/lld-link.com"
+      - "C:/Users/poofi/AppData/Local/Microsoft/WinGet/Packages/GitHub.Copilot_Microsoft.Winget.Source_8wekyb3d8bbwe/lld-link.exe"
+      - "C:/Users/poofi/AppData/Local/Microsoft/WinGet/Packages/GitHub.Copilot_Microsoft.Winget.Source_8wekyb3d8bbwe/lld-link"
+      - "C:/Users/poofi/AppData/Local/Programs/MiKTeX/miktex/bin/x64/lld-link.com"
+      - "C:/Users/poofi/AppData/Local/Programs/MiKTeX/miktex/bin/x64/lld-link.exe"
+      - "C:/Users/poofi/AppData/Local/Programs/MiKTeX/miktex/bin/x64/lld-link"
+      - "C:/Program Files/bin/lld-link.com"
+      - "C:/Program Files/bin/lld-link.exe"
+      - "C:/Program Files/bin/lld-link"
+      - "C:/Program Files/sbin/lld-link.com"
+      - "C:/Program Files/sbin/lld-link.exe"
+      - "C:/Program Files/sbin/lld-link"
+      - "C:/Program Files/lld-link.com"
+      - "C:/Program Files/lld-link.exe"
+      - "C:/Program Files/lld-link"
+      - "C:/Program Files (x86)/bin/lld-link.com"
+      - "C:/Program Files (x86)/bin/lld-link.exe"
+      - "C:/Program Files (x86)/bin/lld-link"
+      - "C:/Program Files (x86)/sbin/lld-link.com"
+      - "C:/Program Files (x86)/sbin/lld-link.exe"
+      - "C:/Program Files (x86)/sbin/lld-link"
+      - "C:/Program Files (x86)/lld-link.com"
+      - "C:/Program Files (x86)/lld-link.exe"
+      - "C:/Program Files (x86)/lld-link"
+      - "C:/Program Files/CMake/bin/lld-link.com"
+      - "C:/Program Files/CMake/bin/lld-link.exe"
+      - "C:/Program Files/CMake/bin/lld-link"
+      - "C:/Program Files/CMake/sbin/lld-link.com"
+      - "C:/Program Files/CMake/sbin/lld-link.exe"
+      - "C:/Program Files/CMake/sbin/lld-link"
+      - "C:/Program Files/CMake/lld-link.com"
+      - "C:/Program Files/CMake/lld-link.exe"
+      - "C:/Program Files/CMake/lld-link"
+      - "C:/Program Files/FruityLinkBootstrap/bin/lld-link.com"
+      - "C:/Program Files/FruityLinkBootstrap/bin/lld-link.exe"
+      - "C:/Program Files/FruityLinkBootstrap/bin/lld-link"
+      - "C:/Program Files/FruityLinkBootstrap/sbin/lld-link.com"
+      - "C:/Program Files/FruityLinkBootstrap/sbin/lld-link.exe"
+      - "C:/Program Files/FruityLinkBootstrap/sbin/lld-link"
+      - "C:/Program Files/FruityLinkBootstrap/lld-link.com"
+      - "C:/Program Files/FruityLinkBootstrap/lld-link.exe"
+      - "C:/Program Files/FruityLinkBootstrap/lld-link"
+    found: false
+    search_context:
+      ENV{PATH}:
+        - "C:\\Program Files\\PowerShell\\7"
+        - "C:\\Program Files\\Microsoft SDKs\\Azure\\CLI2\\wbin"
+        - "C:\\Program Files\\Zulu\\zulu-21\\bin\\"
+        - "C:\\Windows\\system32"
+        - "C:\\Windows"
+        - "C:\\Windows\\System32\\Wbem"
+        - "C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\"
+        - "C:\\Windows\\System32\\OpenSSH\\"
+        - "C:\\Program Files\\Microsoft SQL Server\\150\\Tools\\Binn\\"
+        - "C:\\Program Files\\010 Editor"
+        - "C:\\Program Files\\NVIDIA Corporation\\NVIDIA app\\NvDLISR"
+        - "C:\\Program Files (x86)\\NVIDIA Corporation\\PhysX\\Common"
+        - "C:\\Program Files\\Microsoft SQL Server\\Client SDK\\ODBC\\170\\Tools\\Binn\\"
+        - "C:\\Program Files\\dotnet\\"
+        - "C:\\Program Files\\Git\\cmd"
+        - "C:\\Program Files\\nodejs\\"
+        - "C:\\Program Files (x86)\\Windows Kits\\10\\Windows Performance Toolkit\\"
+        - "C:\\Program Files\\CMake\\bin"
+        - "C:\\Program Files\\Microsoft SQL Server\\170\\Tools\\Binn\\"
+        - "C:\\ffmpeg-8.0.1-full_build\\bin"
+        - "C:\\Program Files\\PuTTY\\"
+        - "C:\\Program Files\\PowerShell\\7\\"
+        - "C:\\Strawberry\\c\\bin"
+        - "C:\\Strawberry\\perl\\site\\bin"
+        - "C:\\Strawberry\\perl\\bin"
+        - "C:\\Program Files\\Docker\\Docker\\resources\\bin"
+        - "C:\\Program Files\\CanopyDoc\\Connector"
+        - "C:\\Program Files\\PyManager\\"
+        - "C:\\Users\\poofi\\.local\\bin"
+        - "C:\\Users\\poofi\\AppData\\Local\\Programs\\Python\\Launcher\\"
+        - "C:\\Users\\poofi\\.cargo\\bin"
+        - "C:\\Users\\poofi\\AppData\\Local\\Programs\\oh-my-posh\\bin\\"
+        - "C:\\Users\\poofi\\AppData\\Local\\Microsoft\\WindowsApps"
+        - "C:\\Users\\poofi\\AppData\\Local\\Programs\\Microsoft VS Code\\bin"
+        - "C:\\Users\\poofi\\.dotnet\\tools"
+        - "C:\\Users\\poofi\\AppData\\Local\\Microsoft\\WinGet\\Packages\\Microsoft.Sysinternals_Microsoft.Winget.Source_8wekyb3d8bbwe"
+        - "C:\\Users\\poofi\\AppData\\Local\\Programs\\Fiddler"
+        - "C:\\Users\\poofi\\AppData\\Local\\GitHubDesktop\\bin"
+        - "C:\\Users\\poofi\\AppData\\Roaming\\npm"
+        - "C:\\Users\\poofi\\.dotnet\\tools"
+        - "C:\\Users\\poofi\\AppData\\Local\\Microsoft\\WinGet\\Packages\\GitHub.Copilot_Microsoft.Winget.Source_8wekyb3d8bbwe"
+        - "C:\\Users\\poofi\\AppData\\Local\\Programs\\MiKTeX\\miktex\\bin\\x64\\"
+      CMAKE_INSTALL_PREFIX: "C:/Program Files/FruityLinkBootstrap"
+      CMAKE_SYSTEM_PREFIX_PATH:
+        - "C:/Program Files"
+        - "C:/Program Files (x86)"
+        - "C:/Program Files/CMake"
+        - "C:/Program Files/FruityLinkBootstrap"
+...

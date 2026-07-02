@@ -1,0 +1,33 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/FruityLink.Agent/FruityLink.Agent.csproj" />
+    <Project Path="src/FruityLink.Core/FruityLink.Core.csproj" />
+    <Project Path="src/FruityLink.FlStudio/FruityLink.FlStudio.csproj" />
+    <Project Path="src/FruityLink.Host/FruityLink.Host.csproj" />
+    <Project Path="src/FruityLink.Knowledge/FruityLink.Knowledge.csproj" />
+    <Project Path="src/FruityLink.Llm/FruityLink.Llm.csproj" />
+    <Project Path="src/FruityLink.Mcp/FruityLink.Mcp.csproj" />
+    <Project Path="src/FruityLink.Persistence/FruityLink.Persistence.csproj" />
+    <Project Path="src/FruityLink.Speech/FruityLink.Speech.csproj" />
+    <Project Path="src/FruityLink.Ui.Avalonia/FruityLink.Ui.Avalonia.csproj" />
+  </Folder>
+  <Folder Name="/plugins/">
+    <Project Path="src/FruityLink.Plugins.Abstractions/FruityLink.Plugins.Abstractions.csproj" />
+    <Project Path="src/FruityLink.Plugins.Host/FruityLink.Plugins.Host.csproj" />
+    <Project Path="src/FruityLink.Plugins.FlAgent/FruityLink.Plugins.FlAgent.csproj" />
+  </Folder>
+  <Folder Name="/installer/">
+    <Project Path="installer/FruityLink.Installer/FruityLink.Installer.csproj" />
+    <Project Path="installer/FruityLink.Installer.Tests/FruityLink.Installer.Tests.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/FruityLink.Core.Tests/FruityLink.Core.Tests.csproj" />
+    <Project Path="tests/FruityLink.FlStudio.Tests/FruityLink.FlStudio.Tests.csproj" />
+    <Project Path="tests/FruityLink.Knowledge.Tests/FruityLink.Knowledge.Tests.csproj" />
+    <Project Path="tests/FruityLink.Llm.Tests/FruityLink.Llm.Tests.csproj" />
+    <Project Path="tests/FruityLink.Persistence.Tests/FruityLink.Persistence.Tests.csproj" />
+  </Folder>
+  <Folder Name="/tools/">
+    <Project Path="tools/FruityLink.Probe/FruityLink.Probe.csproj" />
+  </Folder>
+</Solution>

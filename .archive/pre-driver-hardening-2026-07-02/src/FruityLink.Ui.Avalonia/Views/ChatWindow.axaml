@@ -1,0 +1,217 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="clr-namespace:FruityLink.Ui.Avalonia.ViewModels"
+        xmlns:views="clr-namespace:FruityLink.Ui.Avalonia.Views"
+        x:Class="FruityLink.Ui.Avalonia.Views.ChatWindow"
+        x:DataType="vm:ChatViewModel"
+        Width="540" Height="800"
+        MinWidth="430" MinHeight="580"
+        Title="FL Automate"
+        Background="{StaticResource BaseBackgroundBrush}"
+        FontFamily="{StaticResource FontBody}">
+
+    <!-- Lets the previewer render sample content. Runtime DataContext is set in App.axaml.cs. -->
+    <Design.DataContext>
+        <vm:ChatViewModel />
+    </Design.DataContext>
+
+    <!-- Root swaps between the CHAT surface and the in-place SETTINGS panel (gear in the header). Only one
+         is ever visible; both fill the window. The debug toggles (Thoughts / Tool calls) used to sit in a
+         fixed status bar the transcript could render under — they now live in the Settings panel, keeping
+         the chat chrome clean. -->
+    <Grid>
+
+        <!-- ============================ CHAT SURFACE ============================ -->
+        <!-- Three bounded rows only: header (Auto) · transcript (*) · composer (Auto). The transcript owns
+             its own clipped region between header + composer, so long messages scroll and never spill. -->
+        <Grid RowDefinitions="Auto,*,Auto" IsVisible="{Binding !IsSettingsOpen}">
+
+            <!-- ============================ Header ============================ -->
+            <!-- Mirrors the hero ChatPanel header: logo mark + branded wordmark + status pill + settings gear. -->
+            <Border Grid.Row="0"
+                    Background="{StaticResource SurfaceTranslucentBrush}"
+                    BorderBrush="{StaticResource BorderWhite10Brush}"
+                    BorderThickness="0,0,0,1"
+                    Padding="16,12">
+                <Grid ColumnDefinitions="Auto,Auto,*,Auto,Auto">
+                    <!-- gradient logo mark with a bolt glyph -->
+                    <Border Grid.Column="0" Width="30" Height="30" CornerRadius="9"
+                            Background="{StaticResource BrandGradientBrush}"
+                            VerticalAlignment="Center"
+                            BoxShadow="0 6 20 -8 #B37C3AED">
+                        <Viewbox Width="16" Height="16">
+                            <Path Fill="White" Data="M7 2v11h3v9l7-12h-4l4-8z" />
+                        </Viewbox>
+                    </Border>
+                    <TextBlock Grid.Column="1" Classes="wordmark" Text="FL Automate"
+                               Margin="11,0,0,0" VerticalAlignment="Center" />
+
+                    <!-- status pill (READY when idle; Working… / Listening… / Transcribing… while active) -->
+                    <Border Grid.Column="3" Classes="glass" Padding="9,4" VerticalAlignment="Center">
+                        <StackPanel Orientation="Horizontal" Spacing="7" VerticalAlignment="Center">
+                            <Border Classes="statusDot" VerticalAlignment="Center" />
+                            <TextBlock Classes="badge" Text="{Binding HeaderStatus}" VerticalAlignment="Center" />
+                        </StackPanel>
+                    </Border>
+
+                    <!-- settings gear → opens the in-place Settings panel (debug toggles live there now). -->
+                    <Button Grid.Column="4" Classes="icon" Width="34" Height="34"
+                            Margin="10,0,0,0" VerticalAlignment="Center"
+                            Command="{Binding ToggleSettingsCommand}"
+                            ToolTip.Tip="Settings">
+                        <Viewbox Width="17" Height="17">
+                            <Path Fill="{StaticResource BodyTextBrush}"
+                                  Data="M19.14 12.94c.04-.3.06-.61.06-.94 0-.32-.02-.64-.07-.94l2.03-1.58a.49.49 0 0 0 .12-.61l-1.92-3.32a.488.488 0 0 0-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54a.484.484 0 0 0-.48-.41h-3.84c-.24 0-.43.17-.47.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96c-.22-.08-.47 0-.59.22L2.74 8.87c-.12.21-.08.47.12.61l2.03 1.58c-.05.3-.09.63-.09.94s.02.64.07.94l-2.03 1.58a.49.49 0 0 0-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32c.12-.22.07-.47-.12-.61l-2.01-1.58zM12 15.6c-1.98 0-3.6-1.62-3.6-3.6s1.62-3.6 3.6-3.6 3.6 1.62 3.6 3.6-1.62 3.6-3.6 3.6z" />
+                        </Viewbox>
+                    </Button>
+                </Grid>
+            </Border>
+
+            <!-- ============================ Transcript ============================ -->
+            <!-- Own clipped region: the aurora glow is a non-layout, non-hit-test BACKGROUND layer behind the
+                 scroller; the ScrollViewer clips to its bounds so long messages scroll instead of spilling
+                 into the composer. -->
+            <Grid Grid.Row="1" ClipToBounds="True">
+                <!-- Aurora glow blobs echoing the hero background. Background layer only — never captures input
+                     and never affects layout of the transcript. -->
+                <Panel IsHitTestVisible="False" ClipToBounds="True" ZIndex="0">
+                    <Ellipse Width="600" Height="600" Fill="{StaticResource AuroraVioletBrush}"
+                             HorizontalAlignment="Center" VerticalAlignment="Top" Margin="0,-200,0,0" />
+                    <Ellipse Width="400" Height="400" Fill="{StaticResource AuroraMagentaBrush}"
+                             HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,-120,-90,0" />
+                    <Ellipse Width="380" Height="380" Fill="{StaticResource AuroraCyanBrush}"
+                             HorizontalAlignment="Left" VerticalAlignment="Center" Margin="-140,0,0,0" />
+                </Panel>
+
+                <!-- Padding lives on the CONTENT (ItemsControl Margin), NOT on the ScrollViewer: Avalonia
+                     subtracts a ScrollViewer's vertical Padding from the scrollable extent, so the bottom
+                     Padding worth of the last message would sit below the reachable scroll range (clipped
+                     under the composer). Folding it into the content margin keeps it in the extent; the
+                     roomy bottom margin also lets the final reply clear the composer edge. -->
+                <ScrollViewer x:Name="TranscriptScroller" ZIndex="1"
+                              ClipToBounds="True"
+                              VerticalScrollBarVisibility="Auto"
+                              HorizontalScrollBarVisibility="Disabled">
+                    <ItemsControl ItemsSource="{Binding Messages}" Margin="16,14,16,20">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate x:DataType="vm:ChatMessage">
+                                <!-- Only one of the three bubbles is visible per item (by Role). -->
+                                <StackPanel>
+
+                                    <!-- USER -->
+                                    <Border Classes="userBubble" IsVisible="{Binding IsUser}">
+                                        <TextBlock Classes="body" Foreground="White" Text="{Binding Text}" />
+                                    </Border>
+
+                                    <!-- INFO / system -->
+                                    <Border Classes="infoBubble" IsVisible="{Binding IsInfo}">
+                                        <TextBlock Classes="muted" FontStyle="Italic" Text="{Binding Text}" />
+                                    </Border>
+
+                                    <!-- ASSISTANT -->
+                                    <Border Classes="asstBubble" IsVisible="{Binding IsAssistant}">
+                                        <StackPanel Spacing="8">
+                                            <!-- who -->
+                                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                                <Border Width="16" Height="16" CornerRadius="5"
+                                                        Background="{StaticResource BrandGradientBrush}"
+                                                        VerticalAlignment="Center" />
+                                                <TextBlock Classes="meta" Text="FL Automate"
+                                                           VerticalAlignment="Center" />
+                                            </StackPanel>
+
+                                            <!-- tool calls (accent chips) -->
+                                            <ItemsControl ItemsSource="{Binding ToolCalls}"
+                                                          IsVisible="{Binding ToolCallsBlockVisible}">
+                                                <ItemsControl.ItemsPanel>
+                                                    <ItemsPanelTemplate>
+                                                        <WrapPanel />
+                                                    </ItemsPanelTemplate>
+                                                </ItemsControl.ItemsPanel>
+                                                <ItemsControl.ItemTemplate>
+                                                    <DataTemplate x:DataType="x:String">
+                                                        <Border Classes="toolChip" Margin="0,0,6,6">
+                                                            <TextBlock Classes="mono" Text="{Binding}" />
+                                                        </Border>
+                                                    </DataTemplate>
+                                                </ItemsControl.ItemTemplate>
+                                            </ItemsControl>
+
+                                            <!-- thoughts (dim italic, accent left-rule) -->
+                                            <Border IsVisible="{Binding ThoughtsBlockVisible}"
+                                                    Background="{StaticResource SurfaceTranslucentBrush}"
+                                                    BorderBrush="{StaticResource Accent400Brush}"
+                                                    BorderThickness="2,0,0,0"
+                                                    CornerRadius="0,8,8,0"
+                                                    Padding="10,7">
+                                                <StackPanel Spacing="3">
+                                                    <TextBlock Classes="badge" Text="THINKING" />
+                                                    <TextBlock Classes="thought" Text="{Binding Thoughts}" />
+                                                </StackPanel>
+                                            </Border>
+
+                                            <!-- answer -->
+                                            <TextBlock Classes="body" Classes.error="{Binding IsError}"
+                                                       Text="{Binding Text}" />
+                                        </StackPanel>
+                                    </Border>
+
+                                </StackPanel>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </ScrollViewer>
+
+                <!-- Empty state (hero headline gradient). Hidden while the transcript has messages. -->
+                <StackPanel IsVisible="{Binding !HasMessages}" ZIndex="2"
+                            HorizontalAlignment="Center" VerticalAlignment="Center"
+                            MaxWidth="380" Spacing="12">
+                    <TextBlock Classes="display" TextAlignment="Center"
+                               HorizontalAlignment="Center"
+                               Text="What should I take off your plate?" />
+                    <TextBlock Classes="muted" TextAlignment="Center" HorizontalAlignment="Center"
+                               Text="Chop samples, organize the session, route the mixer, set up sidechains — you make the calls, I handle the busywork." />
+                </StackPanel>
+            </Grid>
+
+            <!-- ============================ Composer ============================ -->
+            <Border Grid.Row="2"
+                    Background="{StaticResource SurfaceBrush}"
+                    BorderBrush="{StaticResource BorderWhite10Brush}"
+                    BorderThickness="0,1,0,0"
+                    Padding="14,12">
+                <Grid ColumnDefinitions="*,Auto,Auto">
+                    <TextBox x:Name="InputBox" Grid.Column="0" Classes="composer"
+                             Watermark="Message FL Automate…  (Enter to send · Shift+Enter for a new line)"
+                             Text="{Binding InputText, Mode=TwoWay}" />
+
+                    <!-- mic (dictation) — only shown when a dictation service is wired -->
+                    <Button Grid.Column="1" Classes="icon" Margin="10,0,0,0"
+                            VerticalAlignment="Bottom"
+                            IsVisible="{Binding CanDictate}"
+                            Command="{Binding MicCommand}"
+                            Classes.recording="{Binding IsRecording}"
+                            ToolTip.Tip="Dictate (speech-to-text)">
+                        <Viewbox Width="18" Height="18">
+                            <Path Fill="White"
+                                  Data="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3zm5-3c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z" />
+                        </Viewbox>
+                    </Button>
+
+                    <!-- send / cancel -->
+                    <Button Grid.Column="2" Classes="pill" Margin="10,0,0,0"
+                            VerticalAlignment="Bottom" MinWidth="98" MinHeight="44"
+                            Classes.primary="{Binding !IsBusy}"
+                            Classes.danger="{Binding IsBusy}"
+                            Content="{Binding SendButtonText}"
+                            Command="{Binding SendCommand}" />
+                </Grid>
+            </Border>
+        </Grid>
+
+        <!-- ============================ SETTINGS PANEL ============================ -->
+        <!-- In-place, shown when the gear is toggled; inherits this window's ChatViewModel DataContext. -->
+        <views:SettingsView IsVisible="{Binding IsSettingsOpen}" />
+
+    </Grid>
+</Window>

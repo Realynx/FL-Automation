@@ -1,0 +1,27 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="17.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <ClCompile Include="C:\Users\poofi\source\repos\FruityLoopsLLMLink\bootstrap\VersionProxy\dllmain.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="C:\Users\poofi\source\repos\FruityLoopsLLMLink\bootstrap\VersionProxy\versionStubExports.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+  </ItemGroup>
+  <ItemGroup>
+    <CustomBuild Include="C:\Users\poofi\source\repos\FruityLoopsLLMLink\bootstrap\VersionProxy\CMakeLists.txt" />
+  </ItemGroup>
+  <ItemGroup>
+    <MASM Include="C:\Users\poofi\source\repos\FruityLoopsLLMLink\bootstrap\VersionProxy\versionASMStubs.asm" />
+  </ItemGroup>
+  <ItemGroup>
+    <Filter Include="Header Files">
+      <UniqueIdentifier>{B4CA8A88-877C-36F5-98F9-2E7F650BDE18}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Files">
+      <UniqueIdentifier>{E032C864-F4EB-3CE9-88A6-0B7F24B21548}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+</Project>

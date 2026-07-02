@@ -1,0 +1,146 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="clr-namespace:FruityLink.Ui.Avalonia.ViewModels"
+             x:Class="FruityLink.Ui.Avalonia.Views.VersionControlView"
+             x:DataType="vm:ChatViewModel">
+
+    <!-- In-place version-history surface. Inherits the ChatWindow's ChatViewModel; binds through Versions.*
+         (mirrors how SettingsView inherits + binds through Account.*). -->
+    <Grid RowDefinitions="Auto,Auto,*,Auto" ClipToBounds="True">
+
+        <!-- ============================ Header ============================ -->
+        <Border Grid.Row="0"
+                Background="{StaticResource SurfaceTranslucentBrush}"
+                BorderBrush="{StaticResource BorderWhite10Brush}"
+                BorderThickness="0,0,0,1"
+                Padding="14,12">
+            <StackPanel Orientation="Horizontal" Spacing="12" VerticalAlignment="Center">
+                <Button Classes="icon" Width="34" Height="34"
+                        Command="{Binding ToggleVersionsCommand}"
+                        ToolTip.Tip="Back to chat">
+                    <!-- 24×24 Canvas = the icon's design grid; a bare Path would be measured by its
+                         tight bounds and the Viewbox would scale the glyph off-centre (right/down). -->
+                    <Viewbox Width="18" Height="18" HorizontalAlignment="Center" VerticalAlignment="Center">
+                        <Canvas Width="24" Height="24">
+                            <Path Fill="White"
+                                  Data="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z" />
+                        </Canvas>
+                    </Viewbox>
+                </Button>
+                <StackPanel Spacing="1" VerticalAlignment="Center">
+                    <TextBlock Classes="h" Text="Version history" />
+                    <TextBlock Classes="meta" Text="The AI's edits, grouped by work-unit. Jump to any state." />
+                </StackPanel>
+            </StackPanel>
+        </Border>
+
+        <!-- Aurora glow backdrop — same hero blobs as the chat surface + installer, so every
+             panel shares one brand language. Background layer only: no input, no layout. -->
+        <Panel Grid.Row="1" Grid.RowSpan="3" IsHitTestVisible="False" ClipToBounds="True">
+            <Ellipse Width="600" Height="600" Fill="{StaticResource AuroraVioletBrush}"
+                     HorizontalAlignment="Center" VerticalAlignment="Top" Margin="0,-200,0,0" />
+            <Ellipse Width="400" Height="400" Fill="{StaticResource AuroraMagentaBrush}"
+                     HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,-120,-90,0" />
+            <Ellipse Width="380" Height="380" Fill="{StaticResource AuroraCyanBrush}"
+                     HorizontalAlignment="Left" VerticalAlignment="Center" Margin="-140,0,0,0" />
+        </Panel>
+
+        <!-- ============================ Toolbar (Undo / Redo + summary) ============================ -->
+        <Grid Grid.Row="1" ColumnDefinitions="Auto,Auto,*,Auto" Margin="16,12,16,4">
+            <Button Grid.Column="0" Classes="pill secondary" MinHeight="38" Margin="0,0,8,0"
+                    Command="{Binding Versions.UndoCommand}" Content="↶  Undo" />
+            <Button Grid.Column="1" Classes="pill secondary" MinHeight="38"
+                    Command="{Binding Versions.RedoCommand}" Content="↷  Redo" />
+            <TextBlock Grid.Column="3" Classes="meta" VerticalAlignment="Center"
+                       Text="{Binding Versions.Summary}" />
+        </Grid>
+
+        <!-- ============================ Timeline ============================ -->
+        <ScrollViewer Grid.Row="2" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+            <StackPanel Margin="16,8,16,24" Spacing="0">
+
+                <!-- Recovery banner (only when a newer-than-saved backup was detected). -->
+                <Border Classes="glass" Padding="12,10" Margin="0,0,0,10"
+                        IsVisible="{Binding Versions.HasRecovery}"
+                        BorderBrush="{StaticResource Magenta400Brush}">
+                    <StackPanel Spacing="8">
+                        <TextBlock Classes="settingLabel" Text="Recovered work available" />
+                        <TextBlock Classes="settingDesc"
+                                   Text="{Binding Versions.RecoveryLabel}" />
+                        <StackPanel Orientation="Horizontal" Spacing="8">
+                            <Button Classes="pill primary" MinHeight="32" Content="Restore"
+                                    Command="{Binding Versions.RestoreRecoveryCommand}" />
+                            <Button Classes="pill secondary" MinHeight="32" Content="Dismiss"
+                                    Command="{Binding Versions.DismissRecoveryCommand}" />
+                        </StackPanel>
+                    </StackPanel>
+                </Border>
+
+                <!-- Commit rows (newest first). -->
+                <ItemsControl ItemsSource="{Binding Versions.Commits}">
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate x:DataType="vm:CommitVm">
+                            <Border Classes="glass" Padding="12,10" Margin="0,4" Opacity="{Binding RowOpacity}">
+                                <StackPanel Spacing="6">
+                                    <Grid ColumnDefinitions="Auto,*,Auto">
+                                        <!-- current dot (brand gradient) -->
+                                        <Border Grid.Column="0" Width="10" Height="10" CornerRadius="9999"
+                                                VerticalAlignment="Center"
+                                                Background="{StaticResource BrandGradientBrush}"
+                                                IsVisible="{Binding IsCurrent}" />
+                                        <TextBlock Grid.Column="1" Classes="settingLabel" Margin="10,0,0,0"
+                                                   Text="{Binding Label}"
+                                                   ToolTip.Tip="{Binding AbsoluteTime}" />
+                                        <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="8">
+                                            <Border Classes="toolChip" IsVisible="{Binding HasBackup}">
+                                                <TextBlock Classes="mono" Text="backup" />
+                                            </Border>
+                                            <TextBlock Classes="meta" VerticalAlignment="Center"
+                                                       Text="{Binding RelativeTime}" />
+                                        </StackPanel>
+                                    </Grid>
+
+                                    <!-- NOW badge on the current state -->
+                                    <TextBlock Classes="badge" Text="NOW" IsVisible="{Binding IsCurrent}" />
+
+                                    <!-- Row actions (hidden on Current + while confirming) -->
+                                    <StackPanel Orientation="Horizontal" Spacing="8"
+                                                IsVisible="{Binding ShowActions}">
+                                        <Button Classes="pill secondary" MinHeight="32" Content="Jump here"
+                                                Command="{Binding JumpCommand}" />
+                                        <Button Classes="pill secondary" MinHeight="32" Content="Restore .flp"
+                                                IsVisible="{Binding HasBackup}"
+                                                Command="{Binding RestoreBackupCommand}" />
+                                    </StackPanel>
+
+                                    <!-- Inline destructive confirm (replaces the actions) -->
+                                    <StackPanel Orientation="Horizontal" Spacing="8"
+                                                IsVisible="{Binding Confirming}">
+                                        <TextBlock Classes="settingDesc" VerticalAlignment="Center"
+                                                   Text="Discard newer edits and jump here?" />
+                                        <Button Classes="pill danger" MinHeight="32" Content="Jump"
+                                                Command="{Binding ConfirmJumpCommand}" />
+                                        <Button Classes="pill secondary" MinHeight="32" Content="Cancel"
+                                                Command="{Binding CancelJumpCommand}" />
+                                    </StackPanel>
+                                </StackPanel>
+                            </Border>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+            </StackPanel>
+        </ScrollViewer>
+
+        <!-- Empty state -->
+        <StackPanel Grid.Row="2" IsVisible="{Binding Versions.IsEmpty}" VerticalAlignment="Center"
+                    HorizontalAlignment="Center" MaxWidth="320" Spacing="8">
+            <TextBlock Classes="muted" TextAlignment="Center"
+                       Text="No AI edits yet. As FL Automate works, each change appears here so you can undo or jump back." />
+        </StackPanel>
+
+        <!-- Footer status -->
+        <TextBlock Grid.Row="3" Classes="meta" Margin="16,0,16,12"
+                   IsVisible="{Binding Versions.Status, Converter={x:Static ObjectConverters.IsNotNull}}"
+                   Text="{Binding Versions.Status}" />
+    </Grid>
+</UserControl>

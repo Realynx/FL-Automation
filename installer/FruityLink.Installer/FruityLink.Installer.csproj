@@ -1,0 +1,162 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    FruityLink.Installer: ONE project, TWO modes.
+      * Headless / CLI (no window): install, uninstall, silent, fl-path, dry-run flags.
+      * Avalonia GUI (no args): detect FL, edit path, Install / Uninstall, progress + result —
+        themed to the FL Automate marketing hero (docs/ui-design-tokens.md), same look as the
+        in-FL plugin UI (src/FruityLink.Ui.Avalonia).
+
+    Notes:
+      * OutputType=WinExe so the GUI never flashes a console; the CLI attaches to the parent
+        console at runtime (see ConsoleHost.EnsureConsole).
+      * We provide our own [STAThread] Main (Program.cs) with exactly one entry point; the
+        Avalonia Application (Gui/App.axaml) is only spun up in GUI mode.
+      * We opt OUT of central package management (repo Directory.Packages.props) and pin the
+        Avalonia packages inline (same 11.3.18 the flagship UI pins), so this project still
+        builds standalone in its own folder.
+      * The brand fonts (Space Grotesk + Inter) are bundled under Assets\Fonts — a copy of the
+        flagship UI's assets, kept local so the standalone build needs nothing from src\.
+  -->
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net9.0-windows</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <RootNamespace>FruityLink.Installer</RootNamespace>
+    <AssemblyName>FruityLink.Installer</AssemblyName>
+    <StartupObject>FruityLink.Installer.Program</StartupObject>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <BuiltInComInteropSupport>true</BuiltInComInteropSupport>
+    <AvaloniaUseCompiledBindingsByDefault>true</AvaloniaUseCompiledBindingsByDefault>
+
+    <!-- Opt out of the repo's central package management; pin anything we add inline. -->
+    <ManagePackageVersionsCentrally>false</ManagePackageVersionsCentrally>
+
+    <Version>0.1.0</Version>
+    <AssemblyVersion>0.1.0.0</AssemblyVersion>
+    <FileVersion>0.1.0.0</FileVersion>
+    <Product>FL Automate Installer</Product>
+    <Description>Installs / uninstalls FruityLink (transparent proxy version.dll) into FL Studio.</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Same Avalonia train the flagship UI pins (src/FruityLink.Ui.Avalonia). -->
+    <PackageReference Include="Avalonia" Version="11.3.18" />
+    <PackageReference Include="Avalonia.Desktop" Version="11.3.18" />
+    <PackageReference Include="Avalonia.Themes.Fluent" Version="11.3.18" />
+    <!-- Embedded Inter default font — guaranteed fallback if Assets\Fonts is ever stripped. -->
+    <PackageReference Include="Avalonia.Fonts.Inter" Version="11.3.18" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <AvaloniaResource Include="Assets\**" />
+  </ItemGroup>
+
+  <!-- The manually maintained verified-FL-builds + binary-hash list (see Core/FlCompatibility.cs).
+       Ships NEXT TO THE EXE; installs are refused for FL builds not on it or FL installs whose
+       binaries don't hash-match it. Add a new entry via the "print-fl-hashes" CLI verb after the
+       team verifies a new FL build end-to-end. -->
+  <ItemGroup>
+    <None Update="compatibility.json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+  </ItemGroup>
+
+  <!-- Payload travels next to the EXE under .\payload\ and is copied to the build output so
+       local dry-run / GUI runs can resolve it. Use Update (not Include) so we do not duplicate
+       the SDK default None glob. -->
+  <ItemGroup>
+    <None Update="payload\**\*">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+    <!-- Debug symbols are dead weight in an install payload, and worse: a .pdb captured in this
+         glob but absent after a later re-stage fails the build ("Could not copy ... not found").
+         Keep the payload pdb-free end-to-end (see also the Delete in StagePayloadFromSource). -->
+    <None Remove="payload\**\*.pdb" />
+  </ItemGroup>
+
+  <!-- ── Dev payload staging ─────────────────────────────────────────────────────────────────
+       Rebuilding the solution must make this installer install the NEWEST managed bits — that is
+       the dev debug loop. The references below only order the build (no assembly is referenced);
+       StagePayloadFromSource then refreshes payload\ from their outputs. Everything is gated on
+       the source tree existing, so a standalone/release checkout of just this folder still builds
+       and ships the checked-in payload snapshot untouched.
+       The native pieces (version.dll / FlClrHost.dll / FlBridge.dll) are cmake-built, NOT part of
+       the solution: they refresh only when their build dirs exist (run bootstrap\build-and-stage.ps1
+       for those, or for a from-scratch wipe of stale/renamed payload files). -->
+  <PropertyGroup>
+    <RepoRoot>$(MSBuildProjectDirectory)\..\..</RepoRoot>
+    <HasSourceTree Condition="Exists('$(RepoRoot)\src\FruityLink.Host\FruityLink.Host.csproj')">true</HasSourceTree>
+  </PropertyGroup>
+
+  <ItemGroup Condition="'$(HasSourceTree)' == 'true'">
+    <ProjectReference Include="$(RepoRoot)\src\FruityLink.Host\FruityLink.Host.csproj">
+      <ReferenceOutputAssembly>false</ReferenceOutputAssembly>
+      <Private>false</Private>
+    </ProjectReference>
+    <ProjectReference Include="$(RepoRoot)\src\FruityLink.Plugins.FlAgent\FruityLink.Plugins.FlAgent.csproj">
+      <ReferenceOutputAssembly>false</ReferenceOutputAssembly>
+      <Private>false</Private>
+    </ProjectReference>
+  </ItemGroup>
+
+  <Target Name="StagePayloadFromSource" AfterTargets="Build" Condition="'$(HasSourceTree)' == 'true'">
+    <!-- 1) FL Agent plugin: its FULL publish closure (a plain build output lacks the Avalonia
+         native runtimes — libSkiaSharp etc. — and FL would crash on plugin enable). NoBuild: the
+         ProjectReference above already built it in this same configuration. -->
+    <MSBuild Projects="$(RepoRoot)\src\FruityLink.Plugins.FlAgent\FruityLink.Plugins.FlAgent.csproj"
+             Targets="Publish"
+             Properties="Configuration=$(Configuration);NoBuild=true;PublishDir=$(MSBuildProjectDirectory)\payload\FruityLink\plugins\fl-agent\" />
+
+    <!-- The publish drags project + referenced .pdb files along; strip them so the payload stays
+         symbol-free regardless of configuration (matches the None Remove exclusion above). -->
+    <ItemGroup>
+      <PayloadPdbs Include="$(MSBuildProjectDirectory)\payload\**\*.pdb" />
+    </ItemGroup>
+    <Delete Files="@(PayloadPdbs)" />
+
+    <!-- 2) Host closure (same file list bootstrap\build-and-stage.ps1 stages). -->
+    <ItemGroup>
+      <HostOut Include="$(RepoRoot)\src\FruityLink.Host\bin\$(Configuration)\net9.0-windows\" />
+      <HostPayload Include="@(HostOut->'%(Identity)FruityLink.Host.dll')" />
+      <HostPayload Include="@(HostOut->'%(Identity)FruityLink.Host.runtimeconfig.json')" />
+      <HostPayload Include="@(HostOut->'%(Identity)FruityLink.Host.deps.json')" />
+      <HostPayload Include="@(HostOut->'%(Identity)FruityLink.FlStudio.dll')" />
+      <HostPayload Include="@(HostOut->'%(Identity)FruityLink.Core.dll')" />
+      <HostPayload Include="@(HostOut->'%(Identity)FruityLink.Plugins.Abstractions.dll')" />
+      <HostPayload Include="@(HostOut->'%(Identity)FruityLink.Plugins.Host.dll')" />
+    </ItemGroup>
+    <Copy SourceFiles="@(HostPayload)" DestinationFolder="$(MSBuildProjectDirectory)\payload\FruityLink"
+          SkipUnchangedFiles="true" />
+
+    <!-- 2b) Ship the verified-builds list inside the installed FruityLink dir too, so the in-FL
+         host can later enforce the same integrity policy at load time ("refuse to load"). -->
+    <Copy SourceFiles="$(MSBuildProjectDirectory)\compatibility.json"
+          DestinationFolder="$(MSBuildProjectDirectory)\payload\FruityLink"
+          Condition="Exists('$(MSBuildProjectDirectory)\compatibility.json')" SkipUnchangedFiles="true" />
+
+    <!-- 3) Natives: refresh from the cmake output when it exists, otherwise keep the last-staged copy. -->
+    <Copy SourceFiles="$(RepoRoot)\bootstrap\build\VersionProxy\Release\version.dll"
+          DestinationFolder="$(MSBuildProjectDirectory)\payload"
+          Condition="Exists('$(RepoRoot)\bootstrap\build\VersionProxy\Release\version.dll')" SkipUnchangedFiles="true" />
+    <Copy SourceFiles="$(RepoRoot)\bootstrap\build\CLRHost\Release\FlClrHost.dll"
+          DestinationFolder="$(MSBuildProjectDirectory)\payload\FruityLink"
+          Condition="Exists('$(RepoRoot)\bootstrap\build\CLRHost\Release\FlClrHost.dll')" SkipUnchangedFiles="true" />
+    <Copy SourceFiles="$(RepoRoot)\tools\bridge\build\Release\FlBridge.dll"
+          DestinationFolder="$(MSBuildProjectDirectory)\payload\FruityLink"
+          Condition="Exists('$(RepoRoot)\tools\bridge\build\Release\FlBridge.dll')" SkipUnchangedFiles="true" />
+
+    <!-- 4) Mirror the refreshed payload into the output dir — that .\payload next to the EXE is
+         what InstallerInfo.ResolvePayloadRoot actually reads. The None-item copy above ran BEFORE
+         this target (with last build's snapshot), so re-copy here to make THIS build's exe fresh. -->
+    <ItemGroup>
+      <FreshPayload Include="$(MSBuildProjectDirectory)\payload\**\*" />
+    </ItemGroup>
+    <Copy SourceFiles="@(FreshPayload)"
+          DestinationFiles="@(FreshPayload->'$(OutDir)payload\%(RecursiveDir)%(Filename)%(Extension)')"
+          SkipUnchangedFiles="true" />
+  </Target>
+
+</Project>

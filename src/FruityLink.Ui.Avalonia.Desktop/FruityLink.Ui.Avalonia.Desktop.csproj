@@ -1,0 +1,37 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- =========================================================================
+       FruityLink.Ui.Avalonia.Desktop — the thin STANDALONE exe head.
+
+       This is only a dev/preview launcher (dotnet run on this project). All real UI lives in the
+       FruityLink.Ui.Avalonia LIBRARY it references (App / Views / Theme /
+       ViewModels / Assets). The FL Agent plugin does NOT go through this Main —
+       it hosts the same library in-process (Hosting/EmbeddedAvaloniaHost).
+
+       CPM is off here (mirrors the library + the plugin); Avalonia versions are
+       pinned inline to match the library (11.3.18).
+       ========================================================================= -->
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net9.0</TargetFramework>
+    <RootNamespace>FruityLink.Ui.Avalonia.Desktop</RootNamespace>
+    <AssemblyName>FruityLink.Ui.Avalonia.Desktop</AssemblyName>
+    <ManagePackageVersionsCentrally>false</ManagePackageVersionsCentrally>
+
+    <BuiltInComInteropSupport>true</BuiltInComInteropSupport>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Pinned inline to match the library (Directory.Packages.props stays untouched). -->
+    <PackageReference Include="Avalonia" Version="11.3.18" />
+    <PackageReference Include="Avalonia.Desktop" Version="11.3.18" />
+    <PackageReference Include="Avalonia.Diagnostics" Version="11.3.18" Condition="'$(Configuration)' == 'Debug'" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- The one cross-platform interior UI (App / Views / Theme / ViewModels / Assets). -->
+    <ProjectReference Include="..\FruityLink.Ui.Avalonia\FruityLink.Ui.Avalonia.csproj" />
+  </ItemGroup>
+
+</Project>

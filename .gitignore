@@ -1,0 +1,29 @@
+# .NET
+bin/
+obj/
+*.user
+*.suo
+.vs/
+artifacts/
+TestResults/
+*.dmp
+
+# Rider / VS Code
+.idea/
+.vscode/
+
+# App data / local
+*.db
+*.db-shm
+*.db-wal
+appsettings.Local.json
+secrets/
+
+# OS
+Thumbs.db
+.DS_Store
+
+# Local production web applications
+/marketing/
+/admin-console/
+/ai-gateway/

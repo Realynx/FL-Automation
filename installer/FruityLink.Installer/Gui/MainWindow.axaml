@@ -1,0 +1,160 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:Class="FruityLink.Installer.Gui.MainWindow"
+        Title="FL Automate Installer"
+        Width="760" Height="620" MinWidth="620" MinHeight="520"
+        WindowStartupLocation="CenterScreen"
+        Background="{StaticResource BaseBackgroundBrush}"
+        ExtendClientAreaToDecorationsHint="True"
+        ExtendClientAreaChromeHints="NoChrome"
+        ExtendClientAreaTitleBarHeightHint="-1">
+
+    <!-- Root: aurora backdrop → content → modal confirm overlay. -->
+    <Panel>
+
+        <!-- ======================= Aurora backdrop (hero) ======================= -->
+        <Canvas IsHitTestVisible="False" ClipToBounds="True">
+            <Ellipse Width="700" Height="480" Canvas.Left="30"  Canvas.Top="-240" Fill="{StaticResource AuroraVioletBrush}" />
+            <Ellipse Width="480" Height="400" Canvas.Left="400" Canvas.Top="-170" Fill="{StaticResource AuroraMagentaBrush}" />
+            <Ellipse Width="448" Height="400" Canvas.Left="-170" Canvas.Top="210"  Fill="{StaticResource AuroraCyanBrush}" />
+        </Canvas>
+
+        <DockPanel>
+
+            <!-- ======================= Custom title bar ======================= -->
+            <Border DockPanel.Dock="Top" x:Name="TitleBar" Background="Transparent"
+                    Padding="16,10,10,6" PointerPressed="TitleBar_PointerPressed">
+                <Grid ColumnDefinitions="Auto,*,Auto,Auto">
+                    <!-- Brand badge (hero pill). -->
+                    <Border Grid.Column="0" CornerRadius="9999" Padding="12,5"
+                            Background="{StaticResource Glass05Brush}"
+                            BorderBrush="{StaticResource BorderWhite10Brush}" BorderThickness="1"
+                            VerticalAlignment="Center">
+                        <StackPanel Orientation="Horizontal" Spacing="7">
+                            <TextBlock Text="✦" FontSize="11" Foreground="{StaticResource Accent300Brush}"
+                                       VerticalAlignment="Center" />
+                            <TextBlock Text="FL AUTOMATE" FontSize="11" FontWeight="Medium" LetterSpacing="1.3"
+                                       Foreground="{StaticResource StrongTextBrush}" VerticalAlignment="Center" />
+                        </StackPanel>
+                    </Border>
+
+                    <Button Grid.Column="2" Classes="caption" Content="–" Click="Minimize_Click" />
+                    <Button Grid.Column="3" Classes="caption close" Content="✕" Click="CloseButton_Click" />
+                </Grid>
+            </Border>
+
+            <Panel Margin="30,8,30,26">
+
+                <!-- ============================ START PAGE ============================ -->
+                <Grid x:Name="StartPanel" RowDefinitions="Auto,Auto,Auto,Auto,*,Auto">
+
+                    <!-- Headline: white + hero gradient span, Space Grotesk. -->
+                    <StackPanel Grid.Row="0" Margin="0,4,0,18">
+                        <StackPanel Orientation="Horizontal" Spacing="9">
+                            <TextBlock Classes="h" FontSize="30" Text="Install" />
+                            <TextBlock Classes="h" FontSize="30" Text="FL Automate"
+                                       Foreground="{StaticResource HeadlineGradientBrush}" />
+                        </StackPanel>
+                        <TextBlock Margin="0,7,0,0" FontSize="13" TextWrapping="Wrap"
+                                   Foreground="{StaticResource MutedTextBrush}"
+                                   Text="Your AI assistant inside FL Studio. Installs the FruityLink bridge into the FL Studio folder — the original version.dll is backed up, and uninstalling restores it." />
+                    </StackPanel>
+
+                    <!-- FL path -->
+                    <TextBlock Grid.Row="1" Classes="meta" LetterSpacing="1.1" FontWeight="Medium"
+                               Text="FL STUDIO INSTALL FOLDER" Margin="2,0,0,7" />
+                    <Grid Grid.Row="2" ColumnDefinitions="*,Auto,Auto" Margin="0,0,0,7">
+                        <TextBox x:Name="PathBox" Grid.Column="0" Classes="field"
+                                 TextChanged="PathBox_TextChanged" />
+                        <Button x:Name="BrowseBtn" Grid.Column="1" Classes="pill secondary" Content="Browse…"
+                                Margin="9,0,0,0" Click="Browse_Click" />
+                        <Button x:Name="DetectBtn" Grid.Column="2" Classes="pill secondary" Content="Detect"
+                                Margin="9,0,0,0" Click="Detect_Click" />
+                    </Grid>
+                    <TextBlock x:Name="PathStatus" Grid.Row="3" FontSize="12" Margin="2,0,0,16"
+                               Foreground="{StaticResource MutedTextBrush}" TextWrapping="Wrap" />
+
+                    <!-- Log well (glass) -->
+                    <Border Grid.Row="4" CornerRadius="12"
+                            Background="{StaticResource SurfaceTranslucentBrush}"
+                            BorderBrush="{StaticResource BorderWhite10Brush}" BorderThickness="1">
+                        <TextBox x:Name="LogBox" Classes="log" />
+                    </Border>
+
+                    <!-- Footer / actions -->
+                    <Grid Grid.Row="5" ColumnDefinitions="Auto,*,Auto,Auto" Margin="0,18,0,0">
+                        <CheckBox x:Name="DryRunCheck" Grid.Column="0" VerticalAlignment="Center"
+                                  Content="Dry run (preview only)" />
+                        <ProgressBar x:Name="Progress" Grid.Column="1" Height="5" Margin="18,0"
+                                     IsIndeterminate="True" IsVisible="False" CornerRadius="9999" />
+                        <Button x:Name="UninstallBtn" Grid.Column="2" Classes="pill secondary" Content="Uninstall"
+                                Margin="0,0,10,0" Click="Uninstall_Click" />
+                        <Button x:Name="InstallBtn" Grid.Column="3" Classes="pill primary" Content="Install"
+                                Padding="26,8" Click="Install_Click" />
+                    </Grid>
+                </Grid>
+
+                <!-- ============================ FINISH PAGE ============================ -->
+                <Grid x:Name="FinishPanel" RowDefinitions="Auto,Auto,Auto,*,Auto" IsVisible="False">
+
+                    <TextBlock x:Name="FinishHeadline" Grid.Row="0" Classes="h" FontSize="26"
+                               TextWrapping="Wrap" Text="Done" Margin="0,8,0,14" />
+
+                    <!-- Summary (glass card with the hero's violet depth shadow) -->
+                    <Border Grid.Row="1" CornerRadius="12" Padding="16,13" Margin="0,0,0,16"
+                            Background="{StaticResource Glass05Brush}"
+                            BorderBrush="{StaticResource BorderWhite10Brush}" BorderThickness="1"
+                            BoxShadow="0 30 90 -40 #8C7C3AED">
+                        <TextBlock x:Name="FinishSummary" FontSize="13" TextWrapping="Wrap"
+                                   Foreground="{StaticResource StrongTextBrush}" />
+                    </Border>
+
+                    <!-- Post-install only: launch FL on close -->
+                    <CheckBox x:Name="LaunchCheck" Grid.Row="2" IsVisible="False" IsChecked="True"
+                              Margin="2,0,0,14" Content="Launch FL Studio on close" />
+
+                    <!-- Detailed log (secondary, collapsed by default) -->
+                    <Expander x:Name="DetailsExpander" Grid.Row="3" IsExpanded="False"
+                              Foreground="{StaticResource MutedTextBrush}" Header="Show details (full log)">
+                        <Border CornerRadius="12" Margin="0,8,0,0" MinHeight="120"
+                                Background="{StaticResource SurfaceTranslucentBrush}"
+                                BorderBrush="{StaticResource BorderWhite10Brush}" BorderThickness="1">
+                            <TextBox x:Name="FinishLogBox" Classes="log" />
+                        </Border>
+                    </Expander>
+
+                    <!-- Footer / actions -->
+                    <Grid Grid.Row="4" ColumnDefinitions="Auto,*,Auto" Margin="0,18,0,0">
+                        <Button x:Name="BackBtn" Grid.Column="0" Classes="pill secondary" Content="◂ Back"
+                                Click="Back_Click" />
+                        <Button x:Name="CloseBtn" Grid.Column="2" Classes="pill primary" Content="Finish"
+                                Padding="26,8" Click="Close_Click" />
+                    </Grid>
+                </Grid>
+            </Panel>
+        </DockPanel>
+
+        <!-- ======================= Modal confirm overlay ======================= -->
+        <!-- Replaces WPF MessageBox: dimmed base + a glass card in the hero language. -->
+        <Border x:Name="ConfirmOverlay" IsVisible="False" Background="#C706060C">
+            <Border MaxWidth="470" HorizontalAlignment="Center" VerticalAlignment="Center"
+                    CornerRadius="16" Padding="24,20"
+                    Background="{StaticResource SurfaceBrush}"
+                    BorderBrush="{StaticResource BorderWhite10Brush}" BorderThickness="1"
+                    BoxShadow="0 40 120 -30 #8C7C3AED">
+                <StackPanel Spacing="10">
+                    <TextBlock x:Name="ConfirmTitle" Classes="h" FontSize="17" TextWrapping="Wrap" />
+                    <TextBlock x:Name="ConfirmMessage" FontSize="13" TextWrapping="Wrap"
+                               Foreground="{StaticResource BodyTextBrush}" />
+                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="10"
+                                Margin="0,10,0,0">
+                        <Button x:Name="ConfirmCancelBtn" Classes="pill secondary" Content="Cancel"
+                                Click="ConfirmCancel_Click" />
+                        <Button x:Name="ConfirmOkBtn" Classes="pill primary" Content="OK"
+                                Padding="22,8" Click="ConfirmOk_Click" />
+                    </StackPanel>
+                </StackPanel>
+            </Border>
+        </Border>
+    </Panel>
+</Window>

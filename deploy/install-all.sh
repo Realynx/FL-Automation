@@ -1,0 +1,536 @@
+#!/usr/bin/env bash
+# =============================================================================
+# FL Automate — one-click three-server installer.
+#
+# Builds the marketing-site and ai-gateway bundles locally, then provisions and
+# deploys over SSH/scp (key auth) to three Ubuntu servers:
+#
+#   Server A (DB_SSH)   PostgreSQL 16 — fl_automate + fl_gateway databases
+#   Server B (WEB_SSH)  marketing site  :3001  (systemd: fl-automate)
+#   Server C (GW_SSH)   AI gateway      :3002  (systemd: ai-gateway)
+#
+# Usage:
+#   cp servers.env.example servers.env       # fill in, never commit
+#   bash install-all.sh                      # full run: db + site + gateway
+#   bash install-all.sh --only site          # redeploy just the site
+#   bash install-all.sh --skip-build         # reuse the newest existing zips
+#   bash install-all.sh --config other.env
+#
+# Idempotent — safe to re-run for updates. Remote .env files and databases are
+# never overwritten; only code, deps, and schema are refreshed. Run from Git
+# Bash on Windows or any POSIX shell (needs: ssh, scp, node/npm).
+#
+# Cloudflare Tunnels are NOT set up here (cloudflared login is interactive);
+# the script prints the pointers at the end. Everything else is hands-off.
+# =============================================================================
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+
+CONFIG="$SCRIPT_DIR/servers.env"
+SKIP_BUILD=0
+ONLY="db,site,gateway"
+
+usage() {
+  sed -n '2,25p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
+}
+
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --config)     CONFIG="$2"; shift 2 ;;
+    --skip-build) SKIP_BUILD=1; shift ;;
+    --only)       ONLY="$2"; shift 2 ;;
+    -h|--help)    usage; exit 0 ;;
+    *) echo "✖ Unknown argument: $1"; usage; exit 1 ;;
+  esac
+done
+
+if [ ! -f "$CONFIG" ]; then
+  echo "✖ Config not found: $CONFIG"
+  echo "  cp \"$SCRIPT_DIR/servers.env.example\" \"$CONFIG\"  — then fill it in."
+  exit 1
+fi
+# shellcheck source=/dev/null
+source "$CONFIG"
+
+# Optional settings default to empty.
+SITE_BETA_ACCESS_KEY="${SITE_BETA_ACCESS_KEY:-}"
+GATEWAY_PUBLIC_HOST="${GATEWAY_PUBLIC_HOST:-}"
+GATEWAY_ADMIN_KEY="${GATEWAY_ADMIN_KEY:-}"
+GATEWAY_UPSTREAM_PROVIDER="${GATEWAY_UPSTREAM_PROVIDER:-mock}"
+GATEWAY_UPSTREAM_BASE_URL="${GATEWAY_UPSTREAM_BASE_URL:-}"
+GATEWAY_UPSTREAM_API_KEY="${GATEWAY_UPSTREAM_API_KEY:-}"
+
+# Per-plan gateway routing (all optional). Collect every NON-EMPTY
+# GATEWAY_PLAN_<PLAN>_<FIELD> from the config into KEY=VALUE lines; the gateway
+# step upserts exactly these into /opt/ai-gateway/.env. Plans left empty fall
+# back to the legacy UPSTREAM_* settings on the gateway.
+GATEWAY_PLAN_VARS=""
+for _plan in FREE BETA PRO STUDIO; do
+  for _field in PROVIDER BASE_URL API_KEY MODEL ALLOWED_MODELS; do
+    _var="GATEWAY_PLAN_${_plan}_${_field}"
+    _val="${!_var:-}"
+    if [ -n "$_val" ]; then
+      GATEWAY_PLAN_VARS="${GATEWAY_PLAN_VARS}${_var}=${_val}"$'\n'
+    fi
+  done
+done
+unset _plan _field _var _val
+
+require() {
+  local name
+  for name in "$@"; do
+    if [ -z "${!name:-}" ]; then
+      echo "✖ $name is not set in $CONFIG"
+      exit 1
+    fi
+  done
+}
+require SSH_KEY DB_SSH WEB_SSH GW_SSH \
+        DB_PRIVATE_IP WEB_PRIVATE_IP GW_PRIVATE_IP \
+        DB_SITE_PASSWORD DB_GATEWAY_PASSWORD APP_WEB_URL
+
+if [ "$DB_SITE_PASSWORD" = "CHANGE-ME-SITE" ] || [ "$DB_GATEWAY_PASSWORD" = "CHANGE-ME-GATEWAY" ]; then
+  echo "✖ Change the DB_*_PASSWORD placeholders in $CONFIG first."
+  exit 1
+fi
+
+want() {
+  case ",$ONLY," in
+    *",$1,"*) return 0 ;;
+    *)        return 1 ;;
+  esac
+}
+
+SSH_OPTS=(-i "$SSH_KEY" -o IdentitiesOnly=yes -o BatchMode=yes
+          -o StrictHostKeyChecking=accept-new -o ConnectTimeout=10)
+rsh() { local target="$1"; shift; ssh "${SSH_OPTS[@]}" "$target" "$@"; }
+rcp() { scp "${SSH_OPTS[@]}" "$@"; }
+
+step() { printf '\n\033[1m==> %s\033[0m\n' "$*"; }
+
+SITE_DB_URL="postgresql://fl_automate:${DB_SITE_PASSWORD}@${DB_PRIVATE_IP}:5432/fl_automate"
+GW_DB_URL="postgresql://fl_gateway:${DB_GATEWAY_PASSWORD}@${DB_PRIVATE_IP}:5432/fl_gateway"
+
+# Shared prelude for every remote script: fail-fast, sudo shim (root or
+# passwordless sudo), and a node-20 + unzip installer. Single-quoted heredoc —
+# nothing here expands locally.
+REMOTE_PRELUDE=$(cat <<'PRELUDE'
+set -euo pipefail
+export DEBIAN_FRONTEND=noninteractive
+if [ "$(id -u)" = 0 ]; then
+  command -v sudo >/dev/null 2>&1 || { apt-get update -qq; apt-get install -y sudo; }
+  SUDO=""
+  AS_PG="runuser -u postgres --"
+else
+  SUDO="sudo -n"
+  AS_PG="sudo -n -u postgres"
+fi
+ensure_node() {
+  if ! command -v curl >/dev/null 2>&1; then
+    $SUDO apt-get update -qq
+    $SUDO apt-get install -y curl ca-certificates
+  fi
+  if ! command -v node >/dev/null 2>&1 || [ "$(node -p 'process.versions.node.split(".")[0]')" -lt 20 ]; then
+    # NodeSource first; fall back to Ubuntu's own nodejs (>= 20 on 24.04+)
+    # when NodeSource has no repo for this release yet.
+    if curl -fsSL https://deb.nodesource.com/setup_20.x | $SUDO bash - \
+       && $SUDO apt-get install -y nodejs; then :; else
+      echo "NodeSource unavailable — using Ubuntu's nodejs package"
+      $SUDO apt-get update -qq
+      $SUDO apt-get install -y nodejs npm
+    fi
+  fi
+  command -v unzip >/dev/null 2>&1 || $SUDO apt-get install -y unzip
+}
+PRELUDE
+)
+
+# ---------------------------------------------------------------------------
+# Preflight: can we reach every server we're about to touch?
+# ---------------------------------------------------------------------------
+step "Preflight — SSH connectivity"
+for pair in "db:$DB_SSH" "site:$WEB_SSH" "gateway:$GW_SSH"; do
+  name="${pair%%:*}"; target="${pair#*:}"
+  if want "$name"; then
+    if rsh "$target" 'echo ok' >/dev/null; then
+      echo "  ✔ $name ($target)"
+    else
+      echo "  ✖ Cannot SSH to $name ($target) with key $SSH_KEY"
+      exit 1
+    fi
+  fi
+done
+
+# ---------------------------------------------------------------------------
+# Build both bundles locally (both schemas are Postgres-only).
+# ---------------------------------------------------------------------------
+if [ "$SKIP_BUILD" = 0 ]; then
+  if want site; then
+    step "Building marketing site bundle"
+    (cd "$ROOT/marketing" && npm run build:zip)
+
+    # Windows desktop-app installer (distributed by the site's download API).
+    # Two best-effort stages — dotnet/cmake may be busy or missing; a failure
+    # here only degrades/skips the installer upload, never the site deploy:
+    #
+    #   1. bootstrap/build-and-stage.ps1 -Production — rebuilds the NATIVE DLLs
+    #      (version.dll, FlClrHost.dll, FlBridge.dll — debug pipe OFF) and the
+    #      Avalonia plugin closure, then syncs them into the installer's
+    #      payload dir. package.ps1 alone only refreshes the managed bits.
+    #   2. installer/package.ps1 — publishes the installer exe + payload and
+    #      zips it into installer/artifacts/.
+    PS_EXE="$(command -v pwsh.exe || command -v powershell.exe || true)"
+    step "Restaging installer payload (bootstrap/build-and-stage.ps1 -Production)"
+    STAGE_PS1="$ROOT/bootstrap/build-and-stage.ps1"
+    command -v cygpath >/dev/null 2>&1 && STAGE_PS1="$(cygpath -w "$STAGE_PS1")"
+    if [ -z "$PS_EXE" ]; then
+      echo "!! WARNING: no pwsh.exe/powershell.exe on PATH — payload NOT restaged; installer may ship a stale native payload."
+    elif ! "$PS_EXE" -NoProfile -ExecutionPolicy Bypass -File "$STAGE_PS1" -Production; then
+      echo "!! WARNING: payload restage failed (needs cmake + dotnet) — continuing; installer may ship a STALE native payload."
+      echo "   (Re-run later: pwsh -NoProfile -File bootstrap/build-and-stage.ps1 -Production)"
+    fi
+
+    step "Packaging Windows installer (installer/package.ps1)"
+    PKG_PS1="$ROOT/installer/package.ps1"
+    command -v cygpath >/dev/null 2>&1 && PKG_PS1="$(cygpath -w "$PKG_PS1")"
+    if [ -z "$PS_EXE" ]; then
+      echo "!! WARNING: no pwsh.exe/powershell.exe on PATH — installer not packaged; upload will be skipped."
+    elif ! "$PS_EXE" -NoProfile -ExecutionPolicy Bypass -File "$PKG_PS1"; then
+      echo "!! WARNING: installer packaging failed — continuing WITHOUT an installer upload."
+      echo "   (Re-run later, or: pwsh -NoProfile -File installer/package.ps1)"
+    fi
+  fi
+  if want gateway; then
+    step "Building AI gateway bundle"
+    (cd "$ROOT/ai-gateway" && npm run build:zip)
+  fi
+fi
+
+newest_zip() { ls -t -- "$@" 2>/dev/null | head -n 1; }
+SITE_ZIP="$(newest_zip "$ROOT/marketing/artifacts"/fl-automate-site-v*.zip)"
+GW_ZIP="$(newest_zip "$ROOT/ai-gateway/artifacts"/ai-gateway-v*.zip)"
+# The installer artifact is optional by design (see the packaging warning above).
+INSTALLER_ZIP="$(newest_zip "$ROOT/installer/artifacts"/fl-automate-installer-v*.zip || true)"
+if want site && [ -z "$SITE_ZIP" ]; then echo "✖ No site zip in marketing/artifacts — run without --skip-build."; exit 1; fi
+if want gateway && [ -z "$GW_ZIP" ]; then echo "✖ No gateway zip in ai-gateway/artifacts — run without --skip-build."; exit 1; fi
+
+# ---------------------------------------------------------------------------
+# Server A — PostgreSQL: install, roles/databases, private-network access.
+# ---------------------------------------------------------------------------
+if want db; then
+  step "Server A ($DB_SSH) — PostgreSQL"
+  rsh "$DB_SSH" bash -s <<EOF
+$REMOTE_PRELUDE
+
+if ! command -v psql >/dev/null 2>&1; then
+  \$SUDO apt-get update -qq
+  \$SUDO apt-get install -y postgresql
+fi
+\$SUDO systemctl enable --now postgresql
+
+# Settings first (scram before role passwords are hashed), then restart below.
+\$AS_PG psql -qc "ALTER SYSTEM SET listen_addresses = 'localhost,$DB_PRIVATE_IP'"
+\$AS_PG psql -qc "ALTER SYSTEM SET password_encryption = 'scram-sha-256'"
+
+HBA=\$(\$AS_PG psql -tAc "SHOW hba_file")
+LINE_SITE="host fl_automate fl_automate $WEB_PRIVATE_IP/32 scram-sha-256"
+LINE_GW="host fl_gateway fl_gateway $GW_PRIVATE_IP/32 scram-sha-256"
+\$SUDO grep -qF "\$LINE_SITE" "\$HBA" || echo "\$LINE_SITE" | \$SUDO tee -a "\$HBA" >/dev/null
+\$SUDO grep -qF "\$LINE_GW"   "\$HBA" || echo "\$LINE_GW"   | \$SUDO tee -a "\$HBA" >/dev/null
+
+\$SUDO systemctl restart postgresql
+
+# Roles + databases (idempotent: create or refresh the password).
+if \$AS_PG psql -tAc "SELECT 1 FROM pg_roles WHERE rolname='fl_automate'" | grep -q 1; then
+  \$AS_PG psql -qc "ALTER ROLE fl_automate WITH LOGIN PASSWORD '$DB_SITE_PASSWORD'"
+else
+  \$AS_PG psql -qc "CREATE ROLE fl_automate LOGIN PASSWORD '$DB_SITE_PASSWORD'"
+fi
+if \$AS_PG psql -tAc "SELECT 1 FROM pg_roles WHERE rolname='fl_gateway'" | grep -q 1; then
+  \$AS_PG psql -qc "ALTER ROLE fl_gateway WITH LOGIN PASSWORD '$DB_GATEWAY_PASSWORD'"
+else
+  \$AS_PG psql -qc "CREATE ROLE fl_gateway LOGIN PASSWORD '$DB_GATEWAY_PASSWORD'"
+fi
+if ! \$AS_PG psql -tAc "SELECT 1 FROM pg_database WHERE datname='fl_automate'" | grep -q 1; then
+  \$AS_PG createdb -O fl_automate fl_automate
+fi
+if ! \$AS_PG psql -tAc "SELECT 1 FROM pg_database WHERE datname='fl_gateway'" | grep -q 1; then
+  \$AS_PG createdb -O fl_gateway fl_gateway
+fi
+
+# Firewall: only the two app servers may reach 5432 (no-op if ufw is absent).
+if command -v ufw >/dev/null 2>&1; then
+  \$SUDO ufw allow from $WEB_PRIVATE_IP to any port 5432 proto tcp >/dev/null || true
+  \$SUDO ufw allow from $GW_PRIVATE_IP to any port 5432 proto tcp >/dev/null || true
+fi
+
+echo "postgres ready: fl_automate + fl_gateway, listening on $DB_PRIVATE_IP:5432"
+EOF
+fi
+
+# ---------------------------------------------------------------------------
+# Server B — marketing site.
+# ---------------------------------------------------------------------------
+if want site; then
+  step "Server B ($WEB_SSH) — marketing site ($(basename "$SITE_ZIP"))"
+  rcp "$SITE_ZIP" "$WEB_SSH:/tmp/fl-automate-site.zip"
+  HAVE_INSTALLER=0
+  if [ -n "$INSTALLER_ZIP" ]; then
+    echo "  + installer artifact: $(basename "$INSTALLER_ZIP")"
+    rcp "$INSTALLER_ZIP" "$WEB_SSH:/tmp/fl-automate-installer.zip"
+    HAVE_INSTALLER=1
+  else
+    echo "  (no installer artifact in installer/artifacts — download upload skipped)"
+  fi
+  rsh "$WEB_SSH" bash -s <<EOF
+$REMOTE_PRELUDE
+ensure_node
+
+\$SUDO mkdir -p /opt/fl-automate
+\$SUDO unzip -qo /tmp/fl-automate-site.zip -d /opt/fl-automate
+cd /opt/fl-automate
+
+# Windows installer download — the API serves this exact path (stable name).
+# Staged before the final chown -R below so www-data ends up owning it too.
+if [ "$HAVE_INSTALLER" = 1 ] && [ -f /tmp/fl-automate-installer.zip ]; then
+  \$SUDO mkdir -p /opt/fl-automate/downloads
+  \$SUDO mv -f /tmp/fl-automate-installer.zip /opt/fl-automate/downloads/fl-automate-installer.zip
+  echo "installer staged -> downloads/fl-automate-installer.zip"
+fi
+
+# A server .env always carries JWT keys (the app refuses to boot without
+# them). One that doesn't is a stale leftover from an older layout — keep it
+# aside and regenerate rather than failing later.
+if [ -f .env ] && ! grep -q '^JWT_PRIVATE_KEY=..' .env; then
+  \$SUDO mv .env ".env.stale-\$(date +%Y%m%d%H%M%S)"
+  echo "existing .env was stale (no JWT keys) — backed up, regenerating"
+fi
+
+if [ ! -f .env ]; then
+  # First install: generate JWT keys + a ready .env, then point it at Server A.
+  # (Re-runs keep the existing .env untouched — edit it on the server instead.)
+  \$SUDO node scripts/gen-keys.mjs
+  \$SUDO sed -i "s|^DATABASE_URL=.*|DATABASE_URL=\"$SITE_DB_URL\"|" .env
+  \$SUDO sed -i "s|^APP_WEB_URL=.*|APP_WEB_URL=$APP_WEB_URL|" .env
+  if [ -n "$SITE_BETA_ACCESS_KEY" ]; then
+    if grep -q '^BETA_ACCESS_KEY=' .env; then
+      \$SUDO sed -i "s|^BETA_ACCESS_KEY=.*|BETA_ACCESS_KEY=$SITE_BETA_ACCESS_KEY|" .env
+    else
+      echo "BETA_ACCESS_KEY=$SITE_BETA_ACCESS_KEY" | \$SUDO tee -a .env >/dev/null
+    fi
+  fi
+  echo "wrote fresh .env (Helcim/Graph left empty -> purchasing disabled = beta mode)"
+else
+  echo "existing .env kept as-is"
+  # ...but never leave it without a database URL (prisma would abort).
+  if ! grep -q '^DATABASE_URL=' .env; then
+    echo "DATABASE_URL=\"$SITE_DB_URL\"" | \$SUDO tee -a .env >/dev/null
+    echo "appended missing DATABASE_URL"
+  fi
+  # Beta key: only ever ADD a missing line — an existing value (even an
+  # emptied-out one) is a server-side decision we keep.
+  if [ -n "$SITE_BETA_ACCESS_KEY" ] && ! grep -q '^BETA_ACCESS_KEY=' .env; then
+    echo "BETA_ACCESS_KEY=$SITE_BETA_ACCESS_KEY" | \$SUDO tee -a .env >/dev/null
+    echo "appended missing BETA_ACCESS_KEY"
+  fi
+fi
+
+\$SUDO bash deploy/install.sh
+\$SUDO chown -R www-data:www-data /opt/fl-automate
+\$SUDO rm -f /tmp/fl-automate-site.zip
+EOF
+fi
+
+# ---------------------------------------------------------------------------
+# Server C — AI gateway (verifies the JWTs Server B mints, so fetch the
+# public key from B first).
+# ---------------------------------------------------------------------------
+if want gateway; then
+  step "Server C ($GW_SSH) — AI gateway ($(basename "$GW_ZIP"))"
+
+  JWT_PUB="$(rsh "$WEB_SSH" 'if [ "$(id -u)" = 0 ]; then grep "^JWT_PUBLIC_KEY=" /opt/fl-automate/.env; else sudo -n grep "^JWT_PUBLIC_KEY=" /opt/fl-automate/.env; fi' | head -n 1 | cut -d= -f2- | tr -d '\r')"
+  if [ -z "$JWT_PUB" ]; then
+    echo "✖ Could not read JWT_PUBLIC_KEY from $WEB_SSH:/opt/fl-automate/.env"
+    echo "  Deploy the site first (it mints the keys): bash install-all.sh --only site"
+    exit 1
+  fi
+
+  rcp "$GW_ZIP" "$GW_SSH:/tmp/ai-gateway.zip"
+  rsh "$GW_SSH" bash -s <<EOF
+$REMOTE_PRELUDE
+ensure_node
+
+\$SUDO mkdir -p /opt/ai-gateway
+\$SUDO unzip -qo /tmp/ai-gateway.zip -d /opt/ai-gateway
+cd /opt/ai-gateway
+
+\$SUDO npm ci --omit=dev --no-audit --no-fund
+\$SUDO npx prisma generate
+
+if [ ! -f .env ]; then
+  \$SUDO cp .env.example .env
+  \$SUDO sed -i "s|^DATABASE_URL=.*|DATABASE_URL=\"$GW_DB_URL\"|" .env
+  \$SUDO sed -i "s|^JWT_PUBLIC_KEY=.*|JWT_PUBLIC_KEY=$JWT_PUB|" .env
+  if [ -n "$GATEWAY_ADMIN_KEY" ]; then
+    \$SUDO sed -i "s|^ADMIN_API_KEY=.*|ADMIN_API_KEY=$GATEWAY_ADMIN_KEY|" .env
+  fi
+  \$SUDO sed -i "s|^UPSTREAM_PROVIDER=.*|UPSTREAM_PROVIDER=$GATEWAY_UPSTREAM_PROVIDER|" .env
+  if [ -n "$GATEWAY_UPSTREAM_BASE_URL" ]; then
+    \$SUDO sed -i "s|^UPSTREAM_BASE_URL=.*|UPSTREAM_BASE_URL=$GATEWAY_UPSTREAM_BASE_URL|" .env
+  fi
+  if [ -n "$GATEWAY_UPSTREAM_API_KEY" ]; then
+    \$SUDO sed -i "s|^UPSTREAM_API_KEY=.*|UPSTREAM_API_KEY=$GATEWAY_UPSTREAM_API_KEY|" .env
+  fi
+  echo "wrote fresh .env"
+else
+  echo "existing .env kept as-is"
+  if ! grep -q '^DATABASE_URL=' .env; then
+    echo "DATABASE_URL=\"$GW_DB_URL\"" | \$SUDO tee -a .env >/dev/null
+    echo "appended missing DATABASE_URL"
+  fi
+  CURRENT_PUB=\$(grep '^JWT_PUBLIC_KEY=' .env | head -n 1 | cut -d= -f2-)
+  if [ "\$CURRENT_PUB" != "$JWT_PUB" ]; then
+    echo "!! WARNING: JWT_PUBLIC_KEY here differs from the site's — token verification will fail."
+    echo "   Fix: update JWT_PUBLIC_KEY in /opt/ai-gateway/.env, then systemctl restart ai-gateway"
+  fi
+fi
+
+# Per-plan routing (GATEWAY_PLAN_<PLAN>_* from servers.env): upsert every var
+# that is NON-EMPTY locally — replace the existing line, else append. Vars left
+# empty in servers.env are never touched here, so the server-side .env (and the
+# gateway's legacy UPSTREAM_* fallback) stays as-is. The values were expanded
+# ONCE on the deploy machine; the quoted PLAN_VARS heredoc keeps them literal.
+while IFS= read -r kv; do
+  [ -n "\$kv" ] || continue
+  k="\${kv%%=*}"
+  \$SUDO sed -i "/^\${k}=/d" .env
+  printf '%s\n' "\$kv" | \$SUDO tee -a .env >/dev/null
+  echo "plan routing: set \$k"
+done <<'PLAN_VARS'
+$GATEWAY_PLAN_VARS
+PLAN_VARS
+
+# The committed migrations are SQLite-generated; on Postgres sync the schema.
+\$SUDO npx prisma db push --skip-generate
+
+\$SUDO tee /etc/systemd/system/ai-gateway.service >/dev/null <<'UNIT'
+[Unit]
+Description=FL Automate AI Gateway
+After=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/ai-gateway
+ExecStart=/usr/bin/node dist/main.js
+Restart=on-failure
+RestartSec=5
+Environment=NODE_ENV=production
+User=www-data
+Group=www-data
+
+[Install]
+WantedBy=multi-user.target
+UNIT
+
+\$SUDO chown -R www-data:www-data /opt/ai-gateway
+\$SUDO systemctl daemon-reload
+\$SUDO systemctl enable ai-gateway >/dev/null
+\$SUDO systemctl restart ai-gateway
+\$SUDO rm -f /tmp/ai-gateway.zip
+EOF
+fi
+
+# ---------------------------------------------------------------------------
+# Health checks (from inside each box — public routing is Cloudflare's job).
+# ---------------------------------------------------------------------------
+step "Health checks"
+wait_health() {
+  local target="$1" url="$2" i
+  for i in $(seq 1 15); do
+    if rsh "$target" "curl -fsS --max-time 3 $url" >/dev/null 2>&1; then
+      echo "  ✔ $target  $url"
+      return 0
+    fi
+    sleep 2
+  done
+  echo "  ✖ $target  $url is not responding"
+  echo "    ssh -i $SSH_KEY $target 'journalctl -u fl-automate -u ai-gateway -n 50'"
+  return 1
+}
+HEALTH_OK=1
+if want site;    then wait_health "$WEB_SSH" "http://localhost:3001/api/health" || HEALTH_OK=0; fi
+if want gateway; then wait_health "$GW_SSH"  "http://localhost:3002/health"     || HEALTH_OK=0; fi
+
+# ---------------------------------------------------------------------------
+# Network summary — everything you need for the Cloudflare dashboard and your
+# firewall/UI tooling. Informational only; no commands to run.
+# ---------------------------------------------------------------------------
+SITE_HOST="${APP_WEB_URL#*://}"; SITE_HOST="${SITE_HOST%%/*}"
+GW_HOST_PUBLIC="${GATEWAY_PUBLIC_HOST:-ai.$SITE_HOST}"
+
+step "Network details — deployed: $ONLY"
+row() { printf '  %-26s %-26s %s\n' "$@"; }
+echo
+echo "CLOUDFLARE (dashboard: Zero Trust -> Networks -> Tunnels -> Public Hostnames)"
+row "Public hostname" "Service URL" "Tunnel runs on"
+row "$SITE_HOST" "http://localhost:3001" "Server B ($WEB_SSH)"
+row "www.$SITE_HOST" "http://localhost:3001" "Server B (same tunnel)"
+row "$GW_HOST_PUBLIC" "http://localhost:3002" "Server C ($GW_SSH)"
+echo
+echo "  If you run ONE shared cloudflared connector (e.g. on the Proxmox host)"
+echo "  instead of one per box, point the service URLs at the private IPs instead —"
+echo "  both apps listen on all interfaces:"
+row "$SITE_HOST" "http://$WEB_PRIVATE_IP:3001" ""
+row "$GW_HOST_PUBLIC" "http://$GW_PRIVATE_IP:3002" ""
+cat <<SUMMARY
+
+PORTS PER SERVER
+  Server A  db       $DB_PRIVATE_IP
+    5432/tcp   PostgreSQL — PRIVATE network only. Accepts exactly:
+               $WEB_PRIVATE_IP (site) and $GW_PRIVATE_IP (gateway).
+               Never expose this through Cloudflare or a public NIC.
+    22/tcp     SSH (used by this script)
+  Server B  site     $WEB_PRIVATE_IP
+    3001/tcp   marketing site + /api (systemd: fl-automate).
+               Reached only via the Cloudflare Tunnel — no inbound port needed.
+    22/tcp     SSH
+  Server C  gateway  $GW_PRIVATE_IP
+    3002/tcp   AI gateway /v1 + /admin (systemd: ai-gateway).
+               Reached only via the Cloudflare Tunnel — no inbound port needed.
+    22/tcp     SSH
+
+DATABASES (on Server A — passwords are in $CONFIG)
+  site      postgresql://fl_automate:***@$DB_PRIVATE_IP:5432/fl_automate
+  gateway   postgresql://fl_gateway:***@$DB_PRIVATE_IP:5432/fl_gateway
+
+PUBLIC ENDPOINTS (once the Cloudflare hostnames above are in place)
+SUMMARY
+printf '  %-40s %s\n' "https://$SITE_HOST/api/health" "site heartbeat"
+printf '  %-40s %s\n' "https://$GW_HOST_PUBLIC/health" "gateway heartbeat"
+printf '  %-40s %s\n' "https://$GW_HOST_PUBLIC/v1/..." "what the desktop agent calls"
+printf '  %-40s %s\n' "https://$SITE_HOST/api/downloads/installer" "Windows installer (authenticated)"
+if want site; then
+  if [ "$HAVE_INSTALLER" = 1 ]; then
+    echo "    installer artifact uploaded this run: $(basename "$INSTALLER_ZIP")"
+  else
+    echo "    installer artifact NOT uploaded this run — stage + package it first:"
+    echo "      pwsh -NoProfile -File bootstrap/build-and-stage.ps1 -Production"
+    echo "      pwsh -NoProfile -File installer/package.ps1"
+    echo "    then: bash install-all.sh --skip-build --only site"
+  fi
+fi
+cat <<SUMMARY
+
+OTHER ONE-TIME STEPS
+  * First admin (SSH to Server B):
+      cd /opt/fl-automate && node scripts/make-admin.mjs you@email.com
+  * Currently BETA mode (HELCIM_API_TOKEN empty -> purchasing disabled).
+    To start selling: fill in Helcim + email (GRAPH_*) in
+    /opt/fl-automate/.env on Server B, then restart the fl-automate service.
+SUMMARY
+if [ "$HEALTH_OK" = 0 ]; then
+  echo "!! One or more health checks failed — see above."
+  exit 1
+fi

@@ -1,0 +1,46 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- "FL Agent" plugin: brings the existing FruityLink LLM agent + working WPF chat UI to life
+       behind the IFlPlugin contract. It REUSES FruityLink.Agent / .Llm / .Persistence / .Core
+       (no LLM logic is duplicated); only a tiny composition + a self-contained chat window are new.
+       net9.0-windows + UseWPF because it surfaces a WPF chat window.
+       CPM is turned OFF per the host contract; this project carries no direct NuGet packages —
+       every dependency arrives transitively through the ProjectReferences below. -->
+  <PropertyGroup>
+    <TargetFramework>net9.0-windows</TargetFramework>
+    <UseWPF>true</UseWPF>
+    <RootNamespace>FruityLink.Plugins.FlAgent</RootNamespace>
+    <ManagePackageVersionsCentrally>false</ManagePackageVersionsCentrally>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- CPM is off here, so these transitive deps (pulled in by Semantic Kernel) need explicit
+         inline versions. Pin them to 10.7.0 to match the rest of the solution (Directory.Packages.props)
+         and the host process — resolves MSB3277 and keeps the deployed closure consistent.
+         (Microsoft.Extensions.AI became necessary once the Azure connector — which carried the 10.7
+         transitive — was dropped for the gateway-only setup.) -->
+    <PackageReference Include="Microsoft.Extensions.AI.Abstractions" Version="10.7.0" />
+    <PackageReference Include="Microsoft.Extensions.AI" Version="10.7.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- The stable plugin contract (IFlPlugin / IPluginContext / INativeFlControl). -->
+    <ProjectReference Include="..\FruityLink.Plugins.Abstractions\FruityLink.Plugins.Abstractions.csproj" />
+    <!-- Reused, existing LLM + agent stack. No logic is rebuilt here. -->
+    <ProjectReference Include="..\FruityLink.Core\FruityLink.Core.csproj" />
+    <ProjectReference Include="..\FruityLink.Llm\FruityLink.Llm.csproj" />
+    <ProjectReference Include="..\FruityLink.Agent\FruityLink.Agent.csproj" />
+    <ProjectReference Include="..\FruityLink.Persistence\FruityLink.Persistence.csproj" />
+    <!-- Local Whisper speech-to-text (mic dictation in the chat composer). Pulls in Whisper.net +
+         Whisper.net.Runtime (native whisper) + NAudio transitively; the publish/stage step must
+         carry those native assets into the plugin's output + .deps.json (host loads via its ALC). -->
+    <ProjectReference Include="..\FruityLink.Speech\FruityLink.Speech.csproj" />
+    <!-- The flagship Avalonia interior UI (App / Views / Theme / ViewModels / Assets). Hosted IN-PROCESS
+         by this plugin (Ui\AvaloniaChatPresenter + the lib's Hosting\EmbeddedAvaloniaHost) and reparented
+         into FL's native host form. Pulls in Avalonia + Skia/HarfBuzz/ANGLE native assets transitively —
+         the publish/stage step MUST carry those into plugins\fl-agent\ (a missing libSkiaSharp.dll throws
+         on Avalonia init inside FL). -->
+    <ProjectReference Include="..\FruityLink.Ui.Avalonia\FruityLink.Ui.Avalonia.csproj" />
+  </ItemGroup>
+
+</Project>

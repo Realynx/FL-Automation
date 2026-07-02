@@ -1,0 +1,463 @@
+# module	name	funcRVA	flags	doc
+?	getNote	b7e0a0	1	
+?	addNote	b7e210	1	
+?	deleteNote	b7e130	1	
+?	getMarker	b7e280	1	
+?	addMarker	b7e3c0	1	
+?	deleteMarker	b7e300	1	
+?	clear	b7e680	1	
+?	clearNotes	b7e470	1	
+?	clearMarkers	b7e520	1	
+?	getTimelineSelection	b7e790	4	
+?	setTimelineSelection	b7e810	1	
+?	getDefaultNoteProperties	b7e860	4	
+?	getNextFreeGroupIndex	b7ea20	4	
+?	loadScoreFromFile	b7ea80	1	
+?	ProgressMsg	b7ed70	1	
+?	ShowMessage	b7ee20	1	
+?	log	b7ef10	1	
+?	addChordMarker	c69530	1	
+?	getChordMarker	c695b0	1	
+?	clearChordMarkers	c69630	4	
+?	Execute	cf0e70	4	
+?	execute	cf0e70	4	
+?	AddInputKnob	cf0eb0	3	
+?	addInputKnob	cf0eb0	3	
+?	AddInputKnobInt	cf1020	3	
+?	addInputKnobInt	cf1020	3	
+?	GetInputValue	cf12c0	1	
+?	getInputValue	cf12c0	1	
+?	AddInput	cf15a0	3	
+?	addInput	cf15a0	3	
+?	AddInputCombo	cf1960	3	
+?	addInputCombo	cf1960	3	
+?	AddInputText	cf1830	3	
+?	addInputText	cf1830	3	
+?	AddInputCheckbox	cf11a0	3	
+?	addInputCheckbox	cf11a0	3	
+?	AddInputSurface	cf16c0	1	
+?	addInputSurface	cf16c0	1	
+?	SetText	cf1c20	1	
+?	setText	cf1c20	1	
+?	setNormalizedValue	cf1ce0	1	
+?	addGroup	cf1d90	1	
+?	endGroup	cf1e50	4	
+playlist	trackCount	dfd370	4	Get track count
+playlist	getTrackName	dfd390	1	Get track name
+playlist	setTrackName	dfd510	1	Set track name
+playlist	getTrackColor	dfd670	1	Get track color
+playlist	setTrackColor	dfd810	1	Set track color
+playlist	isTrackMuted	dfd930	1	Get track mute state
+playlist	muteTrack	dfdb00	3	Toggle track mute state
+playlist	isTrackMuteLock	dfdc60	1	Get track mute lock state
+playlist	muteTrackLock	dfdd90	1	Toggle track mute lock state
+playlist	isTrackSolo	dfdec0	1	Get track solo state
+playlist	soloTrack	dfe000	3	Toggle track solo state
+playlist	isTrackSelected	dfe210	1	Get track selected state
+playlist	selectTrack	dfe330	1	Set track selected state
+playlist	selectAll	dfe4d0	4	Select all tracks
+playlist	deselectAll	dfe5a0	4	Deselect all tracks
+playlist	getTrackActivityLevel	dfe670	1	Get track activity level
+playlist	getTrackActivityLevelVis	dfe6e0	1	Get track visual activity level
+playlist	getDisplayZone	dfe750	4	Get display zone number
+playlist	lockDisplayZone	dfe800	1	Lock display zone
+playlist	liveDisplayZone	dfe9d0	3	Live display zone
+playlist	getLiveLoopMode	dfeb40	1	Get live loop mode
+playlist	getLiveTriggerMode	dfebb0	1	Get live trigger mode
+playlist	getLivePosSnap	dfec20	1	Get live pos snap
+playlist	getLiveTrigSnap	dfec90	1	Get live trig snap
+playlist	getLiveBlockStatus	dfed20	3	Get live block status
+playlist	getLiveStatus	dfee40	3	Get live status
+playlist	getLiveBlockColor	dfef10	1	Get live block color
+playlist	triggerLiveClip	dff030	3	Trigger live clips
+playlist	refreshLiveClips	dff1f0	4	Refresh live clips
+playlist	incLivePosSnap	dff320	1	Increase live pos snap
+playlist	incLiveTrigSnap	dff4a0	1	Increase live trig snap
+playlist	incLiveLoopMode	dff620	1	Increase live loop mode
+playlist	incLiveTrigMode	dff7a0	1	Increase live trig mode
+playlist	getVisTimeBar	dff8c0	4	Get time bar
+playlist	getVisTimeTick	dff8e0	4	Get time tick
+playlist	getVisTimeStep	dff900	4	Get time step
+playlist	liveTimeToBlockNum	dff920	1	Live time to block number
+playlist	liveBlockNumToTime	dff970	1	Live block number to time
+playlist	getSongStartTickPos	dff9c0	4	Get song start tick position
+playlist	scrollTo	dffc60	1	Scroll to
+playlist	getPerformanceModeState	dffda0	4	Get performance mode state
+playlist	selectTool	dffe40	1	Select playlist tool
+channels	processRECEvent	e005d0	1	Process rec event
+channels	incEventValue	e006c0	1	increase event value
+channels	channelNumber	e00750	3	Get channel number
+channels	selectedChannel	e007f0	3	Get selected channel number
+channels	channelCount	e00890	1	Get channels count
+channels	getChannelName	e00920	3	Get channel name
+channels	setChannelName	e00ad0	3	Set channel name
+channels	getChannelColor	e00c70	3	Get channel color
+channels	setChannelColor	e00de0	3	Set channel color
+channels	isChannelMuted	e00f40	3	Get channel mute state
+channels	muteChannel	e010c0	3	Toggle channel mute state
+channels	isChannelSolo	e01230	3	Get channel solo state
+channels	soloChannel	e013a0	3	Toggle channel solo state
+channels	getChannelVolume	e01520	3	Get channel volume
+channels	setChannelVolume	e01810	3	Set channel volume
+channels	getChannelPan	e01990	3	Get channel pan
+channels	setChannelPan	e01c20	3	Set channel pan
+channels	getChannelPitch	e01db0	3	Get channel pitch
+channels	setChannelPitch	e021e0	3	Set channel pitch
+channels	getChannelType	e02370	3	get channel type
+channels	isChannelSelected	e02420	3	Get channel selected state
+channels	selectChannel	e02580	3	Set channel selected state
+channels	selectOneChannel	e02770	3	Select channel exclusively
+channels	selectAll	e02900	4	Select all channels
+channels	deselectAll	e02a20	4	Deselect all channels
+channels	getChannelMidiInPort	e03480	3	Get channel midi in port
+channels	getChannelIndex	e03510	1	Get channel index
+channels	getTargetFxTrack	e035b0	3	Get channel target FX track
+channels	setTargetFxTrack	e03720	3	Set channel target FX track
+channels	getRecEventId	e038a0	3	Get channel rec event id
+channels	isGridBitAssigned	e02b10	3	Is grid bit assigned
+channels	getGridBit	e02bd0	3	Get channel grid bit
+channels	setGridBit	e02d30	3	Set channel grid bit
+channels	getStepParam	e031b0	3	Get step param
+channels	getCurrentStepParam	e032e0	3	Get current step param
+channels	fillEachNSteps	e02f60	3	Fill every N steps
+channels	getGridBitWithLoop	e033c0	3	Get grid bit with loop
+channels	showCSForm	e03a20	3	Show cs form
+channels	showEditor	e03c20	3	focus channel editor
+channels	focusEditor	e03e10	3	focus channel editor
+channels	isHighLighted	e03f50	4	Is higlight rectangle defined
+channels	midiNoteOn	e04040	3	Set midi note on for channel
+channels	isGraphEditorVisible	e041a0	4	Returns true if graph editor is visible
+channels	updateGraphEditor	e04230	4	Update graph editor
+channels	closeGraphEditor	e04360	1	Close graph editor
+channels	showGraphEditor	e04540	3	Show graph editor
+channels	setStepParameterByIndex	e04770	3	Set step parameter by index
+channels	getActivityLevel	e04910	3	Get channel activity level
+channels	quickQuantize	e04a80	3	Perform quick quantize
+channels	rerollLoopStarterLoop	e05360	3	Reroll LoopStarter audio loop (use index -1 for all loops)
+channels	rerollLoopStarterSteps	e050c0	3	Reroll LoopStarter steps (use index -1 for all step channels)
+channels	rerollLoopStarterSample	e04d40	3	Reroll LoopStarter kit sample (use index -1 for all step channels)
+mixer	trackNumber	e05d30	4	Get track number
+mixer	getTrackInfo	e05f60	1	Get tracks info
+mixer	setTrackNumber	e05e00	3	Set track number
+mixer	trackCount	e05f40	4	Get tracks count
+mixer	getTrackName	e05ff0	3	Get track name
+mixer	setTrackName	e061d0	1	Set track name
+mixer	getTrackColor	e06330	1	Get track color
+mixer	setTrackColor	e064a0	1	Set track color
+mixer	getSlotColor	e065c0	1	Get slot color
+mixer	setSlotColor	e067a0	1	Set slot color
+mixer	isTrackArmed	e068d0	1	Get track armed state
+mixer	armTrack	e06a70	3	Toggle track armed state
+mixer	isTrackSolo	e06bb0	1	Get track solo state
+mixer	soloTrack	e06d20	3	Toggle track solo state
+mixer	isTrackAutomationEnabled	e074e0	1	Get track autotimation state
+mixer	isTrackEnabled	e06e80	1	Get track enabled state
+mixer	enableTrack	e06f90	3	Toggle track enabled state
+mixer	isTrackMuted	e070d0	1	Get track mute state
+mixer	muteTrack	e07180	3	Toggle track mute state
+mixer	isTrackMuteLock	e072e0	1	Get track mute lock state
+mixer	getTrackPluginId	e07380	1	Get track plugin ID
+mixer	isTrackPluginValid	e07420	1	Get track plugin valid state
+mixer	getTrackVolume	e075a0	3	Get track volume
+mixer	setTrackVolume	e07880	3	Ser track volume
+mixer	getTrackPan	e079d0	1	Get track pan
+mixer	setTrackPan	e07c40	3	Set track pan
+mixer	getTrackStereoSep	e07d90	1	Get track stereo separation
+mixer	setTrackStereoSep	e08000	3	Set track setereo separation
+mixer	getPluginMixLevel	e08150	1	Get track plugin mix level
+mixer	setPluginMixLevel	e08640	3	Set track plugin mix level
+mixer	getPluginMuteState	e08210	1	Get track plugin mute state
+mixer	setPluginMuteState	e083b0	3	Set track plugin mute state
+mixer	isTrackSelected	e087a0	1	Get track selected state
+mixer	selectTrack	e08920	3	Set track selected state
+mixer	selectAll	e08ad0	4	Select all tracks
+mixer	deselectAll	e08ba0	4	Deselect all tracks
+mixer	setRouteTo	e08ea0	1	Set route to
+mixer	setRouteToLevel	e090d0	1	Set route to lebel
+mixer	getRouteToLevel	e09220	1	Get route to lebel
+mixer	getRouteSendActive	e092c0	1	Get route send state
+mixer	afterRoutingChanged	e093b0	4	After routing changed
+mixer	setActiveTrack	e08d00	1	Set active track
+mixer	getEventValue	e094a0	3	Get event value from midi
+mixer	remoteFindEventValue	e09540	3	Remote find event value
+mixer	getEventIDName	e095c0	3	Get event ID name
+mixer	getEventIDValueString	e096f0	1	Get event ID value string
+mixer	getAutoSmoothEventValue	e097e0	3	Get event ID value string
+mixer	automateEvent	e09890	3	Automate event
+mixer	getTrackPeaks	e09a00	1	Get track peaks
+mixer	getTrackRecordingFileName	e09c20	1	Get track recording file name
+mixer	linkTrackToChannel	e09dd0	1	Link track to channel
+mixer	linkChannelToTrack	e0a050	3	Link channel to track
+mixer	getSongStepPos	e0a1a0	1	Get song step position
+mixer	getCurrentTempo	e0a1c0	1	Get current tempo
+mixer	setCurrentTempo	e0a2e0	1	Set current tempo
+mixer	getRecPPS	e0a410	1	Get Rec pps
+mixer	getSongTickPos	e0a430	1	Get sing tick pos
+mixer	getLastPeakVol	e0a510	1	Get last peak vol
+mixer	getTrackDockSide	e0a590	1	Get track dock
+mixer	isTrackSlotsEnabled	e0ab70	1	Get track slots enabled state
+mixer	enableTrackSlots	e0acc0	3	Toggle track slots enabled state
+mixer	isTrackRevPolarity	e0a630	1	Get track reversed polarity state
+mixer	revTrackPolarity	e0a790	3	Toggle track reverssed polarity state
+mixer	focusEditor	e0aec0	1	focus mixer editor
+mixer	getActiveEffectIndex	e0afe0	4	get Active Effect Index
+mixer	isTrackSwapChannels	e0a8d0	1	Get track swap channels state
+mixer	swapTrackChannels	e0aa30	3	Toggle track swap channels state
+mixer	getEqBandCount	e0b0a0	4	Get eq band count
+mixer	getEqGain	e0b0d0	3	Get eq gain
+mixer	setEqGain	e0b2b0	1	Set eq gain
+mixer	getEqFrequency	e0b3f0	3	Get eq frequency
+mixer	setEqFrequency	e0b620	1	Set eq frequency
+mixer	getEqBandwidth	e0b750	1	Get eq bandwidth
+mixer	setEqBandwidth	e0b8d0	1	Set eq bandwidth
+mixer	getTrackCount	e0ba00	4	Get track count
+patterns	patternNumber	e0c550	4	Get current pattern number
+patterns	patternCount	e0c570	4	Get patterns count
+patterns	patternMax	e0c5c0	4	Get max pattern id
+patterns	getPatternName	e0c5e0	1	Get pattern name
+patterns	setPatternName	e0c760	1	Set pattern name
+patterns	getPatternColor	e0c8c0	1	Get pattern color
+patterns	setPatternColor	e0ca10	1	Set pattern color
+patterns	getPatternLength	e0cb30	1	Get pattern length
+patterns	getBlockSetStatus	e0cbb0	1	Get block set status
+patterns	ensureValidNoteRecord	e0cc40	3	Ensure Valid Note Record
+patterns	jumpToPattern	e0cd20	1	Jump to pattern
+patterns	findFirstNextEmptyPat	e0ceb0	3	Find first next empty pattern
+patterns	getChannelLoopStyle	e0d010	1	Get channel loop style
+patterns	setChannelLoop	e0d110	1	Set channel loop
+patterns	isPatternSelected	e0d300	1	Get pattern selected state
+patterns	isPatternDefault	e0d370	1	Get pattern default state
+patterns	selectPattern	e0d540	3	Select pattern
+patterns	selectAll	e0d740	4	Select all patterns
+patterns	deselectAll	e0d870	4	Deselect all patterns
+patterns	clonePattern	e0dd90	1	Clone pattern
+patterns	movePattern	e0df00	1	Move pattern
+patterns	burnLoop	e0d9e0	3	Burn loop
+patterns	setLoopStarterRootNote	e0dbd0	3	Set the root note of Loopstarter, when its enabled
+patterns	getPatternGroupCount	e0e040	4	Get pattern group count
+patterns	getActivePatternGroup	e0e020	4	Get active pattern group
+patterns	getPatternGroupName	e0e070	1	Get pattern group name
+patterns	getPatternsInGroup	e0e150	1	Get patterns in group
+transport	globalTransport	e0e6d0	3	Global transport
+transport	start	e0e850	4	Start playback
+transport	stop	e0e910	4	Stop playback
+transport	record	e0e9d0	4	Start recording
+transport	isRecording	e0ea90	4	Get recording state
+transport	getLoopMode	e0eac0	4	Get loop mode
+transport	setLoopMode	e0eae0	4	Set loop mode
+transport	getSongPos	e0eba0	1	Get song position
+transport	setSongPos	e0ee00	3	Set song position
+transport	getSongPosHint	e0ef40	4	Get song position hint
+transport	rewind	e0f010	3	Rewind song
+transport	setPlaybackSpeed	e0f1a0	1	Set playback speed
+transport	fastForward	e0f2c0	1	Fast forward song pos
+transport	isPlaying	e0f3c0	4	Returns if the program is playing or stopped
+transport	markerJumpJog	e0f3f0	3	Jog marker jump
+transport	markerSelJog	e0f500	3	Jog marker selection
+transport	getHWBeatLEDState	e0f610	4	get HWBeatLEDState
+transport	continuousMovePos	e0f680	1	Continuous move pos
+transport	continuousMove	e0f7f0	1	Continuous move
+transport	getSongLength	e0f910	1	Get song length
+general	undo	e0fd50	4	Undo/redo last, or move down in undo history
+general	undoUp	e0fe10	4	Move up in undo history 
+general	undoDown	e0fed0	4	Move down in undo history 
+general	undoUpDown	e0ff90	1	Move up and down in undo history
+general	restoreUndo	e0fd50	4	Restore undo
+general	restoreUndoLevel	e100d0	1	Restore undo by level
+general	getUndoLevelHint	e101f0	4	Get undo level
+general	getRecPPB	e102a0	4	Get rec ppb
+general	getRecPPQ	e102c0	4	Get rec ppq
+general	setRecPPQ	e10350	1	Set rec ppq
+general	setNumerator	e104e0	1	Set numerator
+general	setDenominator	e10670	1	Set denominator
+general	getChangedFlag	e10790	4	Get changed flag 
+general	getUseMetronome	e107b0	4	Get use metronome
+general	getPrecount	e107d0	4	Get precounr
+general	saveUndo	e10890	3	Save undo
+general	getUndoHistoryPos	e10a20	4	Get undo history position
+general	getUndoHistoryCount	e10a40	4	Get undo history count
+general	getUndoHistoryLast	e10a60	4	Get undo history last
+general	setUndoHistoryPos	e10b10	1	Set undo history position
+general	setUndoHistoryCount	e10c30	1	Set undo history count
+general	setUndoHistoryLast	e10d50	1	Set undo history last
+general	getVersion	e10e70	4	Get Midi scripting version
+general	processRECEvent	e10e90	1	Process rec event
+general	dumpScoreLog	e10ff0	3	Dump score log
+general	clearLog	e11180	4	Clear log
+general	safeToEdit	e11250	4	Safe to edit stuff
+general	getProjectTitle	e11280	4	Get project title
+general	getProjectAuthor	e11330	4	Get project author
+general	getProjectGenre	e113e0	4	Get project genre
+ui	jog	e118f0	1	Generic jog (can be used to select stuff)
+ui	jog2	e119e0	1	Alternate generic jog (can be used to relocate stuff)
+ui	strip	e11ad0	1	Touch-sensitive jog strip (left .. center .. right)
+ui	stripJog	e11bc0	1	Touch-sensitive jog in jog mode
+ui	stripHold	e11cb0	1	to do
+ui	previous	e11da0	4	
+ui	next	e11e60	4	
+ui	moveJog	e11f20	1	Used to relocate items
+ui	up	e12010	1	Up keyboard key
+ui	down	e12100	1	Down keyboard key
+ui	left	e121f0	1	Left keyboard key
+ui	right	e122e0	1	Right keyboard key
+ui	horZoom	e123d0	1	Horizontal zoom
+ui	verZoom	e124c0	1	Vertical zoom
+ui	snapOnOff	e125b0	4	Snap on/off
+ui	getSnapMode	e12670	4	Get snap mode
+ui	setSnapMode	e12740	1	Set snap mode
+ui	snapMode	e12860	1	Toggle snap mode
+ui	cut	e12950	4	Cut
+ui	copy	e12a10	4	Copy
+ui	paste	e12ad0	4	Paste
+ui	insert	e12b90	4	Insert
+ui	delete	e12c50	4	Delete
+ui	enter	e12d10	4	Enter
+ui	escape	e12dd0	4	Escape
+ui	yes	e12e90	4	Yes
+ui	no	e12f50	4	No
+ui	nextWindow	e13010	4	Next window
+ui	selectWindow	e130d0	1	Select window
+ui	isClosing	e131c0	4	Get closing state
+ui	getProgTitle	e131e0	4	Get FL Studio title
+ui	getVersion	e13280	1	Get FL Studio version as string
+ui	getHintMsg	e13450	4	Get FL Studio hint
+ui	setHintMsg	e13540	1	Set FL Studio hint
+ui	showNotification	e13840	1	Show FL Studio notification
+ui	getFocusedFormCaption	e13960	4	Get focused form caption
+ui	getFocusedFormID	e13a10	4	Get focused form ID
+ui	getFocusedPluginName	e13a40	4	Get focused plugin name
+ui	getHintValue	e13af0	1	Get hint value
+ui	getTimeDispMin	e13bd0	4	Is time time display set to minutes
+ui	setTimeDispMin	e13c40	4	Is time time display set to minutes
+ui	getFocused	e13d10	1	Get form focus state
+ui	setFocused	e13de0	1	Set form focus state
+ui	getVisible	e13f00	1	Get form visible state
+ui	showWindow	e13fe0	1	Show window
+ui	hideWindow	e14100	1	Hide window
+ui	scrollWindow	e14290	1	Scroll window
+ui	launchAudioEditor	e144d0	1	Launch audio editor
+ui	isInPopupMenu	e14640	4	Is in popup menu
+ui	closeAllMenu	e14750	4	Close all menu
+ui	closeActivePopupMenu	e14870	4	Close active popup menu
+ui	isMetronomeEnabled	e14660	4	Is metronome enabled
+ui	isStartOnInputEnabled	e14680	4	Is start on input enabled
+ui	isPrecountEnabled	e146a0	4	Is precount enabled
+ui	isLoopRecEnabled	e146c0	4	Is loop recording enabled
+ui	crDisplayRect	e157b0	1	Display selection rectangle in channel rack
+ui	miDisplayRect	e15990	1	Display selection rectangle in mixer
+ui	miDisplayDockRect	e15b30	1	Display selection rectangle in mixer dock
+ui	navigateBrowser	e14a60	1	Navigate browser
+ui	toggleBrowserNode	e14c60	1	Toggle browser node
+ui	navigateBrowserTabs	e14e60	1	Navigate browser tabs
+ui	navigateBrowserMenu	e14a60	1	Navigate browser menu
+ui	selectBrowserMenuItem	e150f0	4	Select browser menu item
+ui	previewBrowserMenuItem	e15280	4	Preview browser menu item
+ui	getFocusedNodeFileType	e15350	4	Get focused node file type
+ui	getFocusedNodeCaption	e153c0	4	Get focused node caption
+ui	isBrowserAutoHide	e15c70	4	Get browser auto hide state
+ui	setBrowserAutoHide	e15d30	1	Set browser auto hide state
+ui	openEventEditor	e15eb0	1	Open event editor
+ui	getStepEditMode	e15ff0	4	Get step edit mode
+ui	setStepEditMode	e160a0	1	Set step edit mode
+device	midiOutMsg	e1b540	1	Send out midi message
+device	midiOutNewMsg	e1b630	1	Send out new midi message
+device	sendMsgGeneric	e1b6e0	3	Send out generic midi message
+device	midiOutSysex	e1b970	1	Send midi out sysex
+device	processMIDICC	e1bbe0	1	Send out generic midi message
+device	forwardMIDICC	e1bf70	3	Send  generic midi message to active plugin
+device	directFeedback	e1c0b0	1	Send out generic midi message
+device	dispatch	e1c200	1	Dispatch midi message
+device	dispatchReceiverCount	e1c4e0	4	Get dispatch midi message receiver count
+device	dispatchGetReceiverPortNumber	e1c670	1	Get receiver port number
+device	isAssigned	e1c850	4	Is device assigned
+device	isMidiOutAssigned	e1c890	4	Is device midi out assigned
+device	getPortNumber	e1c8d0	4	Is device assigned
+device	getName	e1c910	4	Get device name
+device	findEventID	e1c9b0	1	Find event id
+device	getLinkedValue	e1ca10	1	Get normalized value of linked control back or -1 if not linked
+device	getLinkedValueString	e1ca90	1	Get string value of linked control back or error if not linked
+device	getLinkedChannel	e1cb80	1	Get channel value of linked control back or -1 if not linked
+device	getLinkedParamName	e1cc30	1	Get string value of linked control back or error if not linked
+device	getLinkedInfo	e1cd20	1	Get linked control info back or -1 if not linked
+device	createRefreshThread	e1cd90	4	Create refresh thread
+device	destroyRefreshThread	e1cdd0	4	Destroy refresh thread
+device	fullRefresh	e1ce10	4	Perform full refresh
+device	isDoubleClick	e1ceb0	1	Double-clicking handling for MIDI
+device	repeatMidiEvent	e1d140	3	Repeat midi event
+device	stopRepeatMidiEvent	e1d2f0	4	stop repeat midi event
+device	setHasMeters	e1d410	4	Set has meters
+device	baseTrackSelect	e1d550	1	Base track select
+device	hardwareRefreshMixerTrack	e1d6b0	1	Hardware refresh mixer track
+device	getIdleElapsed	e1d7d0	4	Get idle elapsed
+device	setMasterSync	e1d8b0	1	Set device master sync
+device	getMasterSync	e1d9d0	4	Get device master sync
+device	linkToLastTweaked	e1dae0	3	Link controller control to last tweked parameter
+device	getDeviceID	e1dd40	4	Get device hardware id
+device	flrMidiNote	e1dfd0	3	send a midi note via FL Studio Remote scripting
+device	flrMidiCC	e1e250	3	send a midi cc value via FL Studio Remote scripting
+device	releaseCC	e1e440	3	allow a midi cc to be controlled by automation again
+arrangement	jumpToMarker	e1ed00	3	Jump to arrangement marker
+arrangement	getMarkerName	e1ee80	1	Get marker name
+arrangement	addAutoTimeMarker	e1f040	1	Add audio time marker
+arrangement	liveSelection	e1f220	1	Live selection
+arrangement	liveSelectionStart	e1f360	1	Live selection start
+arrangement	currentTime	e1f380	1	Current time
+arrangement	currentTimeHint	e1f400	1	Current time hint
+arrangement	selectionStart	e1f540	4	Selection start
+arrangement	selectionEnd	e1f560	4	Selection end
+arrangement	selectionIsActive	e1f580	4	Selection active
+arrangement	selectionClear	e1f610	4	Clear selection
+arrangement	selectionSet	e1f7a0	3	Set selection start
+launchMapPages	init	e1fe80	1	Init launchmap pages
+launchMapPages	length	e20010	4	Get launchmap pages length
+launchMapPages	updateMap	e200f0	1	Update launchmap page
+launchMapPages	getMapItemColor	e20230	1	Get launchmap item color
+launchMapPages	getMapCount	e203c0	1	Get launchmap items length
+launchMapPages	getMapItemChannel	e20510	1	Get launchmap item destination channel
+launchMapPages	getMapItemAftertouch	e20670	1	Get launchmap item aftertouch
+launchMapPages	processMapItem	e20a20	1	Process map item
+launchMapPages	releaseMapItem	e20b70	1	Release map item
+launchMapPages	checkMapForHiddenItem	e20e40	4	Check for launchpad hidden item
+launchMapPages	createOverlayMap	e20f90	1	Create overlay map
+launchMapPages	setMapItemTarget	e21200	1	Set map item destination target
+screen	init	e218a0	1	Init screen object
+screen	setup	e21960	1	Setup screen properties
+screen	addTextLine	e21a10	1	Add text line
+screen	removeTextLine	e21b60	1	Remove text line
+screen	addMeter	e21c00	1	Add meter
+screen	fillRect	e21ce0	1	Fill rectangle
+screen	drawRect	e21da0	1	Draw rectangle
+screen	deInit	e21e60	4	Destroy screen object
+screen	update	e21f00	1	Update screen
+screen	menuShowing	e21fd0	4	Return true when menu is showing
+screen	hideMenu	e22050	4	Hide menu
+screen	findTextLine	e22130	1	Find text line
+screen	displayBar	e224f0	1	Display bar
+screen	displayText	e228e0	1	Display text
+screen	drawText	e22b10	1	Draw text
+screen	eraseRect	e22d20	1	Erase rectangle
+screen	displayTimedText	e230f0	1	Display timed text
+screen	animateText	e232c0	1	Animate text
+screen	blank	e23460	1	Blank
+screen	unBlank	e235a0	1	Unblank
+screen	isBlanked	e23640	4	Is blanked
+screen	isUnBlank	e23690	4	Is Unblank
+screen	getScreenActiveCounter	e236e0	4	Get screen active counter
+screen	setScreenActiveCounter	e23720	1	Set screen active counter
+screen	menuItemClick	e23800	4	Menu item click
+screen	menuNext	e23920	4	Select next menu
+screen	menuPrev	e23a40	4	Select previous menu
+screen	keepDisplayActive	e23b10	4	Keep display active
+plugins	isValid	e25cd0	3	Get plugin validity
+plugins	getPluginName	e25e10	3	Get plugin name
+plugins	getParamCount	e26200	3	Get plugin parameter count
+plugins	getParamName	e26360	3	Get plugin parameter name
+plugins	getParamValue	e26ce0	3	Get plugin parameter value
+plugins	getParamValueString	e26810	3	Get plugin parameter value string
+plugins	setParamValue	e270a0	3	Set plugin parameter value
+plugins	nextPreset	e27560	3	Select next plugin preset
+plugins	prevPreset	e27740	3	Select previous plugin preset
+plugins	getPresetCount	e27920	1	Get preset count
+plugins	getColor	e27a90	3	Get plugin color
+plugins	getName	e27db0	3	Get plugin name
+plugins	getPadInfo	e28290	3	Get plugin pad info

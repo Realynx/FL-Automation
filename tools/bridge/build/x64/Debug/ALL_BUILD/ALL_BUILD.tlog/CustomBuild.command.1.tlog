@@ -1,0 +1,10 @@
+^C:\USERS\POOFI\SOURCE\REPOS\FRUITYLOOPSLLMLINK\TOOLS\BRIDGE\CMAKELISTS.TXT
+setlocal
+"C:\Program Files\CMake\bin\cmake.exe" -SC:/Users/poofi/source/repos/FruityLoopsLLMLink/tools/bridge -BC:/Users/poofi/source/repos/FruityLoopsLLMLink/tools/bridge/build --check-stamp-file C:/Users/poofi/source/repos/FruityLoopsLLMLink/tools/bridge/build/CMakeFiles/generate.stamp
+if %errorlevel% neq 0 goto :cmEnd
+:cmEnd
+endlocal & call :cmErrorLevel %errorlevel% & goto :cmDone
+:cmErrorLevel
+exit /b %1
+:cmDone
+if %errorlevel% neq 0 goto :VCEnd

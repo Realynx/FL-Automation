@@ -1,0 +1,23 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net9.0</TargetFramework>
+    <RootNamespace>FruityLink.Agent</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.SemanticKernel" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\FruityLink.Core\FruityLink.Core.csproj" />
+    <ProjectReference Include="..\FruityLink.Llm\FruityLink.Llm.csproj" />
+  </ItemGroup>
+
+  <!-- Expose the internal turn-engine seams (AgentTurnRunner, AgentKernelBuilder, ThinkTagParser,
+       ToolSubsetSelector, AutoInvokeIterationFilter, …) to the agent test project only. -->
+  <ItemGroup>
+    <InternalsVisibleTo Include="FruityLink.Agent.Tests" />
+  </ItemGroup>
+
+</Project>
