@@ -5,14 +5,16 @@
 # Builds the marketing-site and ai-gateway bundles locally, then provisions and
 # deploys over SSH/scp (key auth) to three Ubuntu servers:
 #
-#   Server A (DB_SSH)   PostgreSQL 16 — fl_automate + fl_gateway databases
-#   Server B (WEB_SSH)  marketing site  :3001  (systemd: fl-automate)
-#   Server C (GW_SSH)   AI gateway      :3002  (systemd: ai-gateway)
+#   Server A (DB_SSH)    PostgreSQL 16 — fl_automate + fl_gateway databases
+#   Server B (WEB_SSH)   marketing site  :3001  (systemd: fl-automate)
+#   Server C (GW_SSH)    AI gateway      :3002  (systemd: ai-gateway)
+#   Server D (ADMIN_SSH) Ops Console     :3005  (systemd: fl-console) VPN-ONLY
 #
 # Usage:
 #   cp servers.env.example servers.env       # fill in, never commit
-#   bash install-all.sh                      # full run: db + site + gateway
+#   bash install-all.sh                      # full run: db + site + gateway + admin
 #   bash install-all.sh --only site          # redeploy just the site
+#   bash install-all.sh --only db,admin      # e.g. DB access rules + the console
 #   bash install-all.sh --skip-build         # reuse the newest existing zips
 #   bash install-all.sh --config other.env
 #
@@ -30,7 +32,7 @@ ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 
 CONFIG="$SCRIPT_DIR/servers.env"
 SKIP_BUILD=0
-ONLY="db,site,gateway"
+ONLY="db,site,gateway,admin"
 
 usage() {
   sed -n '2,25p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
@@ -56,25 +58,48 @@ source "$CONFIG"
 
 # Optional settings default to empty.
 SITE_BETA_ACCESS_KEY="${SITE_BETA_ACCESS_KEY:-}"
+DB_LAN_ACCESS_CIDR="${DB_LAN_ACCESS_CIDR:-}"
+ADMIN_SEED_EMAIL="${ADMIN_SEED_EMAIL:-}"
+ADMIN_SEED_PASSWORD="${ADMIN_SEED_PASSWORD:-}"
+ADMIN_DOMAIN="${ADMIN_DOMAIN:-}"
 GATEWAY_PUBLIC_HOST="${GATEWAY_PUBLIC_HOST:-}"
-GATEWAY_ADMIN_KEY="${GATEWAY_ADMIN_KEY:-}"
-GATEWAY_UPSTREAM_PROVIDER="${GATEWAY_UPSTREAM_PROVIDER:-mock}"
+GATEWAY_UPSTREAM_PROVIDER="${GATEWAY_UPSTREAM_PROVIDER:-}"
 GATEWAY_UPSTREAM_BASE_URL="${GATEWAY_UPSTREAM_BASE_URL:-}"
 GATEWAY_UPSTREAM_API_KEY="${GATEWAY_UPSTREAM_API_KEY:-}"
 
-# Per-plan gateway routing (all optional). Collect every NON-EMPTY
-# GATEWAY_PLAN_<PLAN>_<FIELD> from the config into KEY=VALUE lines; the gateway
-# step upserts exactly these into /opt/ai-gateway/.env. Plans left empty fall
-# back to the legacy UPSTREAM_* settings on the gateway.
+# Gateway routing vars (all optional). Collect every NON-EMPTY
+# GATEWAY_PLAN_<PLAN>_<FIELD>, GATEWAY_BACKEND_<NAME>_<FIELD>, and the mapped
+# legacy GATEWAY_UPSTREAM_* from the config into KEY=VALUE lines; the gateway
+# step upserts exactly these into /opt/ai-gateway/.env. Vars left empty are
+# never written (set GATEWAY_UPSTREAM_PROVIDER="none" to explicitly disable
+# the legacy fallback — unconfigured plans then return 503 instead of mock).
 GATEWAY_PLAN_VARS=""
-for _plan in FREE BETA PRO STUDIO; do
-  for _field in PROVIDER BASE_URL API_KEY MODEL ALLOWED_MODELS; do
+for _plan in FREE BETA PRO STUDIO LABEL; do
+  for _field in PROVIDER BASE_URL API_KEY MODEL ALLOWED_MODELS MODELS EMBEDDING_MODEL; do
     _var="GATEWAY_PLAN_${_plan}_${_field}"
     _val="${!_var:-}"
     if [ -n "$_val" ]; then
       GATEWAY_PLAN_VARS="${GATEWAY_PLAN_VARS}${_var}=${_val}"$'\n'
     fi
   done
+done
+# Named backend blocks have arbitrary names, and the guardrail / chat-log
+# families are open-ended — pull the var names off the config file itself,
+# then read the (already-sourced) values via indirect expansion.
+while IFS= read -r _var; do
+  _val="${!_var:-}"
+  if [ -n "$_val" ]; then
+    GATEWAY_PLAN_VARS="${GATEWAY_PLAN_VARS}${_var}=${_val}"$'\n'
+  fi
+done < <(grep -oE '^GATEWAY_(BACKEND|GUARDRAIL|CHAT_LOG|MODEL_COSTS|COST_FALLBACK)[A-Z0-9_]*' "$CONFIG" | sort -u)
+# Legacy upstream fallback: upsert on re-runs too (names map GATEWAY_UPSTREAM_*
+# -> UPSTREAM_* in the gateway's .env).
+for _field in PROVIDER BASE_URL API_KEY; do
+  _var="GATEWAY_UPSTREAM_${_field}"
+  _val="${!_var:-}"
+  if [ -n "$_val" ]; then
+    GATEWAY_PLAN_VARS="${GATEWAY_PLAN_VARS}UPSTREAM_${_field}=${_val}"$'\n'
+  fi
 done
 unset _plan _field _var _val
 
@@ -90,6 +115,9 @@ require() {
 require SSH_KEY DB_SSH WEB_SSH GW_SSH \
         DB_PRIVATE_IP WEB_PRIVATE_IP GW_PRIVATE_IP \
         DB_SITE_PASSWORD DB_GATEWAY_PASSWORD APP_WEB_URL
+case ",$ONLY," in
+  *",admin,"*) require ADMIN_SSH ADMIN_PRIVATE_IP ;;
+esac
 
 if [ "$DB_SITE_PASSWORD" = "CHANGE-ME-SITE" ] || [ "$DB_GATEWAY_PASSWORD" = "CHANGE-ME-GATEWAY" ]; then
   echo "✖ Change the DB_*_PASSWORD placeholders in $CONFIG first."
@@ -151,7 +179,7 @@ PRELUDE
 # Preflight: can we reach every server we're about to touch?
 # ---------------------------------------------------------------------------
 step "Preflight — SSH connectivity"
-for pair in "db:$DB_SSH" "site:$WEB_SSH" "gateway:$GW_SSH"; do
+for pair in "db:$DB_SSH" "site:$WEB_SSH" "gateway:$GW_SSH" "admin:${ADMIN_SSH:-}"; do
   name="${pair%%:*}"; target="${pair#*:}"
   if want "$name"; then
     if rsh "$target" 'echo ok' >/dev/null; then
@@ -206,15 +234,21 @@ if [ "$SKIP_BUILD" = 0 ]; then
     step "Building AI gateway bundle"
     (cd "$ROOT/ai-gateway" && npm run build:zip)
   fi
+  if want admin; then
+    step "Building Ops Console bundle"
+    (cd "$ROOT/admin-console" && npm run build:zip)
+  fi
 fi
 
 newest_zip() { ls -t -- "$@" 2>/dev/null | head -n 1; }
 SITE_ZIP="$(newest_zip "$ROOT/marketing/artifacts"/fl-automate-site-v*.zip)"
 GW_ZIP="$(newest_zip "$ROOT/ai-gateway/artifacts"/ai-gateway-v*.zip)"
+ADMIN_ZIP="$(newest_zip "$ROOT/admin-console/artifacts"/fl-console-v*.zip || true)"
 # The installer artifact is optional by design (see the packaging warning above).
 INSTALLER_ZIP="$(newest_zip "$ROOT/installer/artifacts"/fl-automate-installer-v*.zip || true)"
 if want site && [ -z "$SITE_ZIP" ]; then echo "✖ No site zip in marketing/artifacts — run without --skip-build."; exit 1; fi
 if want gateway && [ -z "$GW_ZIP" ]; then echo "✖ No gateway zip in ai-gateway/artifacts — run without --skip-build."; exit 1; fi
+if want admin && [ -z "$ADMIN_ZIP" ]; then echo "✖ No console zip in admin-console/artifacts — run without --skip-build."; exit 1; fi
 
 # ---------------------------------------------------------------------------
 # Server A — PostgreSQL: install, roles/databases, private-network access.
@@ -240,6 +274,23 @@ LINE_GW="host fl_gateway fl_gateway $GW_PRIVATE_IP/32 scram-sha-256"
 \$SUDO grep -qF "\$LINE_SITE" "\$HBA" || echo "\$LINE_SITE" | \$SUDO tee -a "\$HBA" >/dev/null
 \$SUDO grep -qF "\$LINE_GW"   "\$HBA" || echo "\$LINE_GW"   | \$SUDO tee -a "\$HBA" >/dev/null
 
+# Ops Console (Server D) reads BOTH databases with the app credentials.
+if [ -n "${ADMIN_PRIVATE_IP:-}" ]; then
+  LINE_ADM_SITE="host fl_automate fl_automate $ADMIN_PRIVATE_IP/32 scram-sha-256"
+  LINE_ADM_GW="host fl_gateway fl_gateway $ADMIN_PRIVATE_IP/32 scram-sha-256"
+  \$SUDO grep -qF "\$LINE_ADM_SITE" "\$HBA" || echo "\$LINE_ADM_SITE" | \$SUDO tee -a "\$HBA" >/dev/null
+  \$SUDO grep -qF "\$LINE_ADM_GW"   "\$HBA" || echo "\$LINE_ADM_GW"   | \$SUDO tee -a "\$HBA" >/dev/null
+fi
+
+# Optional LAN/VPN-wide access (DB_LAN_ACCESS_CIDR in servers.env) for dev
+# machines and ad-hoc tooling — still password-authenticated, private net only.
+if [ -n "$DB_LAN_ACCESS_CIDR" ]; then
+  LINE_LAN_SITE="host fl_automate fl_automate $DB_LAN_ACCESS_CIDR scram-sha-256"
+  LINE_LAN_GW="host fl_gateway fl_gateway $DB_LAN_ACCESS_CIDR scram-sha-256"
+  \$SUDO grep -qF "\$LINE_LAN_SITE" "\$HBA" || echo "\$LINE_LAN_SITE" | \$SUDO tee -a "\$HBA" >/dev/null
+  \$SUDO grep -qF "\$LINE_LAN_GW"   "\$HBA" || echo "\$LINE_LAN_GW"   | \$SUDO tee -a "\$HBA" >/dev/null
+fi
+
 \$SUDO systemctl restart postgresql
 
 # Roles + databases (idempotent: create or refresh the password).
@@ -260,10 +311,16 @@ if ! \$AS_PG psql -tAc "SELECT 1 FROM pg_database WHERE datname='fl_gateway'" | 
   \$AS_PG createdb -O fl_gateway fl_gateway
 fi
 
-# Firewall: only the two app servers may reach 5432 (no-op if ufw is absent).
+# Firewall: the app servers (+ optional LAN CIDR) may reach 5432 (no-op if ufw absent).
 if command -v ufw >/dev/null 2>&1; then
   \$SUDO ufw allow from $WEB_PRIVATE_IP to any port 5432 proto tcp >/dev/null || true
   \$SUDO ufw allow from $GW_PRIVATE_IP to any port 5432 proto tcp >/dev/null || true
+  if [ -n "${ADMIN_PRIVATE_IP:-}" ]; then
+    \$SUDO ufw allow from ${ADMIN_PRIVATE_IP:-127.0.0.1} to any port 5432 proto tcp >/dev/null || true
+  fi
+  if [ -n "$DB_LAN_ACCESS_CIDR" ]; then
+    \$SUDO ufw allow from $DB_LAN_ACCESS_CIDR to any port 5432 proto tcp >/dev/null || true
+  fi
 fi
 
 echo "postgres ready: fl_automate + fl_gateway, listening on $DB_PRIVATE_IP:5432"
@@ -373,9 +430,6 @@ if [ ! -f .env ]; then
   \$SUDO cp .env.example .env
   \$SUDO sed -i "s|^DATABASE_URL=.*|DATABASE_URL=\"$GW_DB_URL\"|" .env
   \$SUDO sed -i "s|^JWT_PUBLIC_KEY=.*|JWT_PUBLIC_KEY=$JWT_PUB|" .env
-  if [ -n "$GATEWAY_ADMIN_KEY" ]; then
-    \$SUDO sed -i "s|^ADMIN_API_KEY=.*|ADMIN_API_KEY=$GATEWAY_ADMIN_KEY|" .env
-  fi
   \$SUDO sed -i "s|^UPSTREAM_PROVIDER=.*|UPSTREAM_PROVIDER=$GATEWAY_UPSTREAM_PROVIDER|" .env
   if [ -n "$GATEWAY_UPSTREAM_BASE_URL" ]; then
     \$SUDO sed -i "s|^UPSTREAM_BASE_URL=.*|UPSTREAM_BASE_URL=$GATEWAY_UPSTREAM_BASE_URL|" .env
@@ -443,25 +497,82 @@ EOF
 fi
 
 # ---------------------------------------------------------------------------
+# Server D — Ops Console (VPN-only back office; talks straight to Server A
+# with the same app credentials, so the db step must have added its pg_hba
+# entries first).
+# ---------------------------------------------------------------------------
+if want admin; then
+  step "Server D ($ADMIN_SSH) — Ops Console ($(basename "$ADMIN_ZIP"))"
+  rcp "$ADMIN_ZIP" "$ADMIN_SSH:/tmp/fl-console.zip"
+  rsh "$ADMIN_SSH" bash -s <<EOF
+$REMOTE_PRELUDE
+ensure_node
+
+\$SUDO mkdir -p /opt/fl-console
+\$SUDO unzip -qo /tmp/fl-console.zip -d /opt/fl-console
+cd /opt/fl-console
+
+if [ ! -f .env ]; then
+  # First install: write a ready .env pointed at Server A, with a fresh
+  # session secret and the seed login from servers.env. Re-runs never touch it.
+  \$SUDO cp .env.example .env
+  SECRET=\$(node -e 'console.log(require("crypto").randomBytes(32).toString("hex"))')
+  \$SUDO sed -i "s|^ADMIN_SESSION_SECRET=.*|ADMIN_SESSION_SECRET=\$SECRET|" .env
+  \$SUDO sed -i "s|^MARKETING_DATABASE_URL=.*|MARKETING_DATABASE_URL=\"$SITE_DB_URL\"|" .env
+  \$SUDO sed -i "s|^GATEWAY_DATABASE_URL=.*|GATEWAY_DATABASE_URL=\"$GW_DB_URL\"|" .env
+  if [ -n "$ADMIN_SEED_EMAIL" ]; then
+    \$SUDO sed -i "s|^ADMIN_SEED_EMAIL=.*|ADMIN_SEED_EMAIL=$ADMIN_SEED_EMAIL|" .env
+  fi
+  if [ -n "$ADMIN_SEED_PASSWORD" ]; then
+    \$SUDO sed -i "s|^ADMIN_SEED_PASSWORD=.*|ADMIN_SEED_PASSWORD=$ADMIN_SEED_PASSWORD|" .env
+  else
+    echo "!! WARNING: ADMIN_SEED_PASSWORD empty in servers.env — no seed account"
+    echo "   will be created; set it in /opt/fl-console/.env and restart fl-console."
+  fi
+  echo "wrote fresh .env"
+else
+  echo "existing .env kept as-is"
+  if ! grep -q '^MARKETING_DATABASE_URL=' .env; then
+    echo "MARKETING_DATABASE_URL=\"$SITE_DB_URL\"" | \$SUDO tee -a .env >/dev/null
+    echo "appended missing MARKETING_DATABASE_URL"
+  fi
+  if ! grep -q '^GATEWAY_DATABASE_URL=' .env; then
+    echo "GATEWAY_DATABASE_URL=\"$GW_DB_URL\"" | \$SUDO tee -a .env >/dev/null
+    echo "appended missing GATEWAY_DATABASE_URL"
+  fi
+fi
+
+# deps + three prisma clients + dist/generated sync + self-signed TLS cert
+# (CN from ADMIN_DOMAIN in servers.env; kept across re-runs) + console schema
+# + systemd (unit serves HTTPS :443 with an HTTP :80 redirect)
+\$SUDO env TLS_DOMAIN="${ADMIN_DOMAIN:-fl-console}" bash deploy/install.sh
+\$SUDO chown -R www-data:www-data /opt/fl-console
+\$SUDO systemctl restart fl-console
+\$SUDO rm -f /tmp/fl-console.zip
+EOF
+fi
+
+# ---------------------------------------------------------------------------
 # Health checks (from inside each box — public routing is Cloudflare's job).
 # ---------------------------------------------------------------------------
 step "Health checks"
 wait_health() {
   local target="$1" url="$2" i
   for i in $(seq 1 15); do
-    if rsh "$target" "curl -fsS --max-time 3 $url" >/dev/null 2>&1; then
+    if rsh "$target" "curl -fsSk --max-time 3 $url" >/dev/null 2>&1; then
       echo "  ✔ $target  $url"
       return 0
     fi
     sleep 2
   done
   echo "  ✖ $target  $url is not responding"
-  echo "    ssh -i $SSH_KEY $target 'journalctl -u fl-automate -u ai-gateway -n 50'"
+  echo "    ssh -i $SSH_KEY $target 'journalctl -u fl-automate -u ai-gateway -u fl-console -n 50'"
   return 1
 }
 HEALTH_OK=1
-if want site;    then wait_health "$WEB_SSH" "http://localhost:3001/api/health" || HEALTH_OK=0; fi
-if want gateway; then wait_health "$GW_SSH"  "http://localhost:3002/health"     || HEALTH_OK=0; fi
+if want site;    then wait_health "$WEB_SSH"   "http://localhost:3001/api/health" || HEALTH_OK=0; fi
+if want gateway; then wait_health "$GW_SSH"    "http://localhost:3002/health"     || HEALTH_OK=0; fi
+if want admin;   then wait_health "$ADMIN_SSH" "https://localhost/api/health" || HEALTH_OK=0; fi
 
 # ---------------------------------------------------------------------------
 # Network summary — everything you need for the Cloudflare dashboard and your
@@ -488,8 +599,8 @@ cat <<SUMMARY
 
 PORTS PER SERVER
   Server A  db       $DB_PRIVATE_IP
-    5432/tcp   PostgreSQL — PRIVATE network only. Accepts exactly:
-               $WEB_PRIVATE_IP (site) and $GW_PRIVATE_IP (gateway).
+    5432/tcp   PostgreSQL — PRIVATE network only. Accepts:
+               $WEB_PRIVATE_IP (site), $GW_PRIVATE_IP (gateway)${ADMIN_PRIVATE_IP:+, $ADMIN_PRIVATE_IP (console)}${DB_LAN_ACCESS_CIDR:+, and $DB_LAN_ACCESS_CIDR (LAN/VPN)}.
                Never expose this through Cloudflare or a public NIC.
     22/tcp     SSH (used by this script)
   Server B  site     $WEB_PRIVATE_IP
@@ -499,6 +610,10 @@ PORTS PER SERVER
   Server C  gateway  $GW_PRIVATE_IP
     3002/tcp   AI gateway /v1 + /admin (systemd: ai-gateway).
                Reached only via the Cloudflare Tunnel — no inbound port needed.
+    22/tcp     SSH
+  Server D  console  ${ADMIN_PRIVATE_IP:-"(not configured)"}
+    3005/tcp   Ops Console UI + /api (systemd: fl-console).
+               VPN/LAN ONLY — no Cloudflare hostname, no public exposure, ever.
     22/tcp     SSH
 
 DATABASES (on Server A — passwords are in $CONFIG)
@@ -524,8 +639,8 @@ fi
 cat <<SUMMARY
 
 OTHER ONE-TIME STEPS
-  * First admin (SSH to Server B):
-      cd /opt/fl-automate && node scripts/make-admin.mjs you@email.com
+  * Admin tooling lives ONLY on the VPN-only Ops Console (Server D):
+      https://$ADMIN_PRIVATE_IP/ — log in with the seed account from servers.env.
   * Currently BETA mode (HELCIM_API_TOKEN empty -> purchasing disabled).
     To start selling: fill in Helcim + email (GRAPH_*) in
     /opt/fl-automate/.env on Server B, then restart the fl-automate service.

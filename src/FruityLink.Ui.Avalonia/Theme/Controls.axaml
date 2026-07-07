@@ -33,7 +33,9 @@
         <Setter Property="Foreground" Value="{StaticResource HeadingTextBrush}" />
     </Style>
 
-    <Style Selector="TextBlock.body">
+    <!-- :is(TextBlock) so these also hit SelectableTextBlock (transcript text is selectable/copyable;
+         Avalonia selectors match the exact type unless :is() is used). -->
+    <Style Selector=":is(TextBlock).body">
         <Setter Property="FontFamily" Value="{StaticResource FontBody}" />
         <Setter Property="FontSize" Value="14" />
         <Setter Property="Foreground" Value="{StaticResource BodyTextBrush}" />
@@ -41,9 +43,21 @@
         <Setter Property="LineHeight" Value="21" />
     </Style>
 
-    <!-- Failed turn: soft red (matches the WPF chat's error colour). -->
-    <Style Selector="TextBlock.body.error">
+    <!-- Assistant reply text: full-strength near-white (StrongText #eceef6). The reply is the main
+         thing the producer reads — it gets the brightest body tier, on the opaque reply card. -->
+    <Style Selector=":is(TextBlock).body.asst">
+        <Setter Property="Foreground" Value="{StaticResource StrongTextBrush}" />
+    </Style>
+
+    <!-- Failed turn: soft red (matches the WPF chat's error colour). Declared AFTER .asst so error
+         red wins on assistant text. -->
+    <Style Selector=":is(TextBlock).body.error">
         <Setter Property="Foreground" Value="{StaticResource DangerBrush}" />
+    </Style>
+
+    <!-- Brand-violet selection highlight for the selectable transcript text. -->
+    <Style Selector="SelectableTextBlock">
+        <Setter Property="SelectionBrush" Value="#668b5cf6" />
     </Style>
 
     <Style Selector="TextBlock.muted">
@@ -57,6 +71,22 @@
         <Setter Property="FontFamily" Value="{StaticResource FontBody}" />
         <Setter Property="FontSize" Value="12" />
         <Setter Property="FontWeight" Value="Medium" />
+        <Setter Property="Foreground" Value="{StaticResource MetaTextBrush}" />
+    </Style>
+
+    <!-- Assistant author label ("FL Automate" on each reply) — brighter than meta (the old MetaText
+         Ink300 read as washed-out) and display-face so it echoes the wordmark. -->
+    <Style Selector="TextBlock.author">
+        <Setter Property="FontFamily" Value="{StaticResource FontDisplay}" />
+        <Setter Property="FontSize" Value="12" />
+        <Setter Property="FontWeight" Value="SemiBold" />
+        <Setter Property="Foreground" Value="{StaticResource StrongTextBrush}" />
+    </Style>
+
+    <!-- Tiny per-message timestamp — quietest text on the surface, deliberately unobtrusive. -->
+    <Style Selector="TextBlock.timestamp">
+        <Setter Property="FontFamily" Value="{StaticResource FontBody}" />
+        <Setter Property="FontSize" Value="10.5" />
         <Setter Property="Foreground" Value="{StaticResource MetaTextBrush}" />
     </Style>
 
@@ -136,16 +166,19 @@
         <Setter Property="BoxShadow" Value="0 8 26 -12 #997C3AED" />
     </Style>
 
-    <!-- Assistant: glass, left-aligned. -->
+    <!-- Assistant: OPAQUE reply card, left-aligned. Was 5% glass — the aurora glow bled through
+         behind the reply text and it read as translucent (user feedback). The opaque fill +
+         soft drop shadow makes the reply the most legible surface in the transcript. -->
     <Style Selector="Border.asstBubble">
-        <Setter Property="Background" Value="{StaticResource Glass05Brush}" />
+        <Setter Property="Background" Value="{StaticResource AsstBubbleBrush}" />
         <Setter Property="BorderBrush" Value="{StaticResource BorderWhite10Brush}" />
         <Setter Property="BorderThickness" Value="1" />
         <Setter Property="CornerRadius" Value="14,14,14,4" />
-        <Setter Property="Padding" Value="13,9" />
+        <Setter Property="Padding" Value="14,11" />
         <Setter Property="HorizontalAlignment" Value="Left" />
         <Setter Property="MaxWidth" Value="460" />
         <Setter Property="Margin" Value="0,4,48,4" />
+        <Setter Property="BoxShadow" Value="0 6 18 -8 #99000000" />
     </Style>
 
     <!-- Info / system line: quiet, centered-ish, no strong fill. -->
@@ -191,6 +224,29 @@
     </Style>
     <Style Selector="Button.pill:pressed">
         <Setter Property="RenderTransform" Value="translateY(0)" />
+    </Style>
+
+    <!-- Link: borderless accent text that behaves like a hyperlink (opens external pages). -->
+    <Style Selector="Button.link">
+        <Setter Property="FontFamily" Value="{StaticResource FontBody}" />
+        <Setter Property="FontSize" Value="13" />
+        <Setter Property="Foreground" Value="{StaticResource Accent300Brush}" />
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="BorderThickness" Value="0" />
+        <Setter Property="Padding" Value="0" />
+        <Setter Property="Cursor" Value="Hand" />
+        <Setter Property="HorizontalContentAlignment" Value="Left" />
+    </Style>
+    <Style Selector="Button.link /template/ ContentPresenter#PART_ContentPresenter">
+        <Setter Property="Background" Value="Transparent" />
+    </Style>
+    <Style Selector="Button.link:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="Foreground" Value="{StaticResource Accent200Brush}" />
+    </Style>
+    <Style Selector="Button.link:pressed /template/ ContentPresenter#PART_ContentPresenter">
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="Foreground" Value="{StaticResource Accent400Brush}" />
     </Style>
 
     <!-- Primary: brand gradient + violet glow (kept across all interaction states). -->
@@ -273,6 +329,81 @@
     </Style>
     <Style Selector="Button.icon.recording">
         <Setter Property="Foreground" Value="White" />
+    </Style>
+
+    <!-- Tiny inline icon button (per-message copy). Invisible chrome until hovered so it never
+         competes with the reply text. -->
+    <Style Selector="Button.miniIcon">
+        <Setter Property="Width" Value="26" />
+        <Setter Property="Height" Value="26" />
+        <Setter Property="Padding" Value="0" />
+        <Setter Property="CornerRadius" Value="8" />
+        <Setter Property="Cursor" Value="Hand" />
+        <Setter Property="Foreground" Value="{StaticResource MutedTextBrush}" />
+        <Setter Property="HorizontalContentAlignment" Value="Center" />
+        <Setter Property="VerticalContentAlignment" Value="Center" />
+    </Style>
+    <Style Selector="Button.miniIcon /template/ ContentPresenter#PART_ContentPresenter">
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="BorderThickness" Value="0" />
+        <Setter Property="Padding" Value="0" />
+        <Setter Property="HorizontalContentAlignment" Value="Center" />
+        <Setter Property="VerticalContentAlignment" Value="Center" />
+    </Style>
+    <Style Selector="Button.miniIcon:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+        <Setter Property="Background" Value="{StaticResource Glass08Brush}" />
+    </Style>
+    <Style Selector="Button.miniIcon:pointerover">
+        <Setter Property="Foreground" Value="{StaticResource StrongTextBrush}" />
+    </Style>
+
+    <!-- Floating "jump to latest" pill over the transcript (shown when the user scrolls up). Opaque
+         surface + violet-tinted shadow so it reads above the aurora. -->
+    <Style Selector="Button.jump">
+        <Setter Property="Width" Value="38" />
+        <Setter Property="Height" Value="38" />
+        <Setter Property="Padding" Value="0" />
+        <Setter Property="CornerRadius" Value="9999" />
+        <Setter Property="Cursor" Value="Hand" />
+        <Setter Property="Foreground" Value="{StaticResource StrongTextBrush}" />
+        <Setter Property="HorizontalContentAlignment" Value="Center" />
+        <Setter Property="VerticalContentAlignment" Value="Center" />
+    </Style>
+    <Style Selector="Button.jump /template/ ContentPresenter#PART_ContentPresenter">
+        <Setter Property="Background" Value="{StaticResource SurfaceStrongBrush}" />
+        <Setter Property="BorderBrush" Value="{StaticResource BorderWhite20Brush}" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="Padding" Value="0" />
+        <Setter Property="HorizontalContentAlignment" Value="Center" />
+        <Setter Property="VerticalContentAlignment" Value="Center" />
+        <Setter Property="BoxShadow" Value="0 8 24 -8 #CC7C3AED" />
+    </Style>
+    <Style Selector="Button.jump:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+        <Setter Property="Background" Value="{StaticResource Ink700}" />
+        <Setter Property="BorderBrush" Value="{StaticResource Brand500Brush}" />
+    </Style>
+
+    <!-- Suggestion chip (empty-state quick prompts): pill glass that lights brand on hover. -->
+    <Style Selector="Button.suggestion">
+        <Setter Property="FontFamily" Value="{StaticResource FontBody}" />
+        <Setter Property="FontSize" Value="12.5" />
+        <Setter Property="Foreground" Value="{StaticResource BodyTextBrush}" />
+        <Setter Property="CornerRadius" Value="9999" />
+        <Setter Property="Padding" Value="14,8" />
+        <Setter Property="Cursor" Value="Hand" />
+    </Style>
+    <Style Selector="Button.suggestion /template/ ContentPresenter#PART_ContentPresenter">
+        <Setter Property="Background" Value="{StaticResource Glass04Brush}" />
+        <Setter Property="BorderBrush" Value="{StaticResource BorderWhite10Brush}" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="CornerRadius" Value="9999" />
+    </Style>
+    <Style Selector="Button.suggestion:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+        <Setter Property="Background" Value="{StaticResource Glass08Brush}" />
+        <Setter Property="BorderBrush" Value="{StaticResource Brand500Brush}" />
+    </Style>
+    <Style Selector="Button.suggestion:pointerover">
+        <Setter Property="Foreground" Value="{StaticResource StrongTextBrush}" />
     </Style>
 
     <!-- =============================== Composer =============================== -->

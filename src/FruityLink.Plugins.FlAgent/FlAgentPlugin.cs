@@ -164,7 +164,8 @@ public sealed class FlAgentPlugin : IFlPlugin
 
         var presenter = new AvaloniaChatPresenter(
             host, chat.ViewModel, agent, context.Log, dictation, ownsDictation,
-            accountGateway, versionGateway, versionCoordinator);
+            accountGateway, versionGateway, versionCoordinator,
+            AgentComposition.BuildBugReportClient());   // "Report bug" on failed turns → gateway
 
         // The user's OS-close (X) on the EXTERNAL window hides it (keeps it re-showable), mirroring FL's
         // View-menu windows. (In the embedded case FL's native close is handled by the bridge instead.)

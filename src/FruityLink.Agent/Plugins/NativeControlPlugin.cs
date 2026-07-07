@@ -1,5 +1,6 @@
 using System.ComponentModel;
 using System.Text.Json;
+using FruityLink.Agent.Versioning;
 using FruityLink.Core.Abstractions;
 using Microsoft.SemanticKernel;
 using static FruityLink.Agent.Plugins.PluginSupport;
@@ -15,8 +16,11 @@ namespace FruityLink.Agent.Plugins;
 /// backends parse every result the same way. Descriptions are deliberately terse: the system prompt
 /// states the shared PPQ/MIDI conventions ONCE, so tools don't restate them.
 /// </summary>
-public sealed class NativeControlPlugin(INativeFlControl fl)
+public sealed class NativeControlPlugin(INativeFlControl fl, ChangeCapture? capture = null)
 {
+    // The read-before-write seam every Phase-1 mutating tool routes through. Inert (no journaling) when
+    // no capture is supplied — then the tools behave exactly as before. One instance, one code path.
+    private readonly ChangeCapture _capture = capture ?? ChangeCapture.Disabled(fl);
     // Intentionally NOT a [KernelFunction] (tool-surface prune): every native_* tool already returns
     // a clear ERR when the bridge is down, so a dedicated probe only invited warm-up calls that
     // burned a round-trip. Kept public — the UI/probe check bridge health through it explicitly.
@@ -28,7 +32,8 @@ public sealed class NativeControlPlugin(INativeFlControl fl)
     public Task<string> SetTempoAsync([Description("BPM")] double bpm, CancellationToken ct = default) => Run(async () =>
     {
         double v = Math.Clamp(bpm, 10.0, 522.0);
-        await fl.SetTempoAsync(v, ct);
+        await _capture.ScalarAsync(InverseOps.Tempo, JournalDict.Empty, JournalDict.Of("value", v),
+            c => fl.SetTempoAsync(v, c), ct);
         return ClampReport("tempo", bpm, v, 10.0, 522.0);
     });
 
@@ -52,7 +57,8 @@ public sealed class NativeControlPlugin(INativeFlControl fl)
     public Task<string> SetMasterPitchAsync([Description("Cents, -1200..1200")] int cents, CancellationToken ct = default) => Run(async () =>
     {
         int c = Math.Clamp(cents, -1200, 1200);
-        await fl.SetMasterPitchAsync(c, ct);
+        await _capture.ScalarAsync(InverseOps.MasterPitch, JournalDict.Empty, JournalDict.Of("value", c),
+            k => fl.SetMasterPitchAsync(c, k), ct);
         return ClampReport("master pitch(cents)", cents, c, -1200, 1200);
     });
 
@@ -61,7 +67,8 @@ public sealed class NativeControlPlugin(INativeFlControl fl)
     public Task<string> SetShuffleAsync([Description("0-128")] int value, CancellationToken ct = default) => Run(async () =>
     {
         int v = Math.Clamp(value, 0, 128);
-        await fl.SetShuffleAsync(v, ct);
+        await _capture.ScalarAsync(InverseOps.Shuffle, JournalDict.Empty, JournalDict.Of("value", v),
+            c => fl.SetShuffleAsync(v, c), ct);
         return ClampReport("shuffle", value, v, 0, 128);
     });
 
@@ -73,7 +80,8 @@ public sealed class NativeControlPlugin(INativeFlControl fl)
     {
         if (Guard("mixer track", track, 0, 125) is { } e) return e;
         int v = Math.Clamp(value, 0, 12800);
-        await fl.SetMixerVolumeAsync(track, v, ct);
+        await _capture.ScalarAsync(InverseOps.MixerVolume, JournalDict.Of("track", track), JournalDict.Of("value", v),
+            c => fl.SetMixerVolumeAsync(track, v, c), ct);
         return ClampReport($"mixer {track} vol", value, v, 0, 12800);
     });
 
@@ -85,7 +93,8 @@ public sealed class NativeControlPlugin(INativeFlControl fl)
     {
         if (Guard("mixer track", track, 0, 125) is { } e) return e;
         int v = Math.Clamp(value, 0, 12800);
-        await fl.SetMixerPanAsync(track, v, ct);
+        await _capture.ScalarAsync(InverseOps.MixerPan, JournalDict.Of("track", track), JournalDict.Of("value", v),
+            c => fl.SetMixerPanAsync(track, v, c), ct);
         return ClampReport($"mixer {track} pan", value, v, 0, 12800);
     });
 
@@ -107,7 +116,8 @@ public sealed class NativeControlPlugin(INativeFlControl fl)
     {
         if (Guard("channel", channel, 0, int.MaxValue) is { } e) return e;
         int v = Math.Clamp(value, 0, 12800);
-        await fl.SetChannelVolumeAsync(channel, v, ct);
+        await _capture.ScalarAsync(InverseOps.ChannelVolume, JournalDict.Of("channel", channel), JournalDict.Of("value", v),
+            c => fl.SetChannelVolumeAsync(channel, v, c), ct);
         return ClampReport($"chan {channel} vol", value, v, 0, 12800);
     });
 
@@ -119,7 +129,8 @@ public sealed class NativeControlPlugin(INativeFlControl fl)
     {
         if (Guard("channel", channel, 0, int.MaxValue) is { } e) return e;
         int v = Math.Clamp(value, 0, 12800);
-        await fl.SetChannelPanAsync(channel, v, ct);
+        await _capture.ScalarAsync(InverseOps.ChannelPan, JournalDict.Of("channel", channel), JournalDict.Of("value", v),
+            c => fl.SetChannelPanAsync(channel, v, c), ct);
         return ClampReport($"chan {channel} pan", value, v, 0, 12800);
     });
 
@@ -130,7 +141,8 @@ public sealed class NativeControlPlugin(INativeFlControl fl)
         [Description("Cents (0 = center)")] int cents, CancellationToken ct = default) => Run(async () =>
     {
         if (Guard("channel", channel, 0, int.MaxValue) is { } e) return e;
-        await fl.SetChannelPitchAsync(channel, cents, ct);
+        await _capture.ScalarAsync(InverseOps.ChannelPitch, JournalDict.Of("channel", channel), JournalDict.Of("value", cents),
+            c => fl.SetChannelPitchAsync(channel, cents, c), ct);
         return Ok($"chan {channel} pitch={cents} cents");
     });
 
@@ -141,7 +153,8 @@ public sealed class NativeControlPlugin(INativeFlControl fl)
         [Description("true = mute, false = unmute")] bool muted, CancellationToken ct = default) => Run(async () =>
     {
         if (Guard("channel", channel, 0, int.MaxValue) is { } e) return e;
-        await fl.SetChannelMutedAsync(channel, muted, ct);
+        await _capture.ScalarAsync(InverseOps.ChannelMuted, JournalDict.Of("channel", channel), JournalDict.Of("value", muted),
+            c => fl.SetChannelMutedAsync(channel, muted, c), ct);
         return Ok($"chan {channel} {(muted ? "muted" : "unmuted")}");
     });
 
@@ -153,7 +166,8 @@ public sealed class NativeControlPlugin(INativeFlControl fl)
     {
         if (Guard("channel", channel, 0, int.MaxValue) is { } ce) return ce;
         if (Guard("mixer track", mixerTrack, 0, 125) is { } me) return me;
-        await fl.SetChannelFxRouteAsync(channel, mixerTrack, ct);
+        await _capture.ScalarAsync(InverseOps.ChannelRoute, JournalDict.Of("channel", channel), JournalDict.Of("value", mixerTrack),
+            c => fl.SetChannelFxRouteAsync(channel, mixerTrack, c), ct);
         return Ok($"chan {channel} -> mixer {mixerTrack}");
     });
 
@@ -275,6 +289,13 @@ public sealed class NativeControlPlugin(INativeFlControl fl)
     });
 
     // ---------------- Mixer (sends / EQ) ----------------
+
+    [KernelFunction("native_list_mixer_tracks")]
+    [Description("List NAMED mixer tracks as 'index: name' to map a bus/track NAME to the index mixer tools need " +
+                 "(0=Master, 1-125=Inserts, 126=Current). Call FIRST when the user names a bus instead of a number; " +
+                 "don't scan channels.")]
+    public Task<string> ListMixerTracksAsync(CancellationToken ct = default) => Run(async () =>
+        Ok(await fl.ListMixerTracksAsync(ct)));
 
     [KernelFunction("native_set_mixer_send")]
     [Description("Route + set mixer send srcTrack->dstTrack, level 0.0-1.25 (1.0 = unity).")]
@@ -541,7 +562,8 @@ public sealed class NativeControlPlugin(INativeFlControl fl)
         [Description("New name")] string name, CancellationToken ct = default) => Run(async () =>
     {
         if (Guard("track", track, 1, 500) is { } e) return e;
-        await fl.SetTrackNameAsync(track, name, ct);
+        await _capture.ScalarAsync(InverseOps.TrackName, JournalDict.Of("track", track), JournalDict.Of("value", name),
+            c => fl.SetTrackNameAsync(track, name, c), ct);
         return Ok($"track {track} = '{name}'");
     });
 
@@ -559,7 +581,8 @@ public sealed class NativeControlPlugin(INativeFlControl fl)
         if (hex.Length != 6 || !hex.All(Uri.IsHexDigit))
             return Err("color must be RGB hex like #FF8800");
         int rgb = Convert.ToInt32(hex, 16);
-        await fl.SetTrackColorAsync(track, rgb, ct);
+        await _capture.ScalarAsync(InverseOps.TrackColor, JournalDict.Of("track", track), JournalDict.Of("value", rgb),
+            c => fl.SetTrackColorAsync(track, rgb, c), ct);
         return Ok($"track {track} color #{rgb:X6}");
     });
 
@@ -570,7 +593,8 @@ public sealed class NativeControlPlugin(INativeFlControl fl)
         [Description("true = mute, false = unmute")] bool muted, CancellationToken ct = default) => Run(async () =>
     {
         if (Guard("track", track, 1, 500) is { } e) return e;
-        await fl.SetTrackMuteAsync(track, muted, ct);
+        await _capture.ScalarAsync(InverseOps.TrackMute, JournalDict.Of("track", track), JournalDict.Of("value", muted),
+            c => fl.SetTrackMuteAsync(track, muted, c), ct);
         return Ok($"track {track} {(muted ? "muted" : "unmuted")}");
     });
 
@@ -581,7 +605,8 @@ public sealed class NativeControlPlugin(INativeFlControl fl)
         [Description("true = collapse, false = expand")] bool collapsed, CancellationToken ct = default) => Run(async () =>
     {
         if (Guard("track", track, 1, 500) is { } e) return e;
-        await fl.SetTrackCollapsedAsync(track, collapsed, ct);
+        await _capture.ScalarAsync(InverseOps.TrackCollapsed, JournalDict.Of("track", track), JournalDict.Of("value", collapsed),
+            c => fl.SetTrackCollapsedAsync(track, collapsed, c), ct);
         return Ok($"track {track} {(collapsed ? "collapsed" : "expanded")}");
     });
 
@@ -643,7 +668,8 @@ public sealed class NativeControlPlugin(INativeFlControl fl)
             toPlace.Add(s);
         }
         if (toPlace.Count == 0) return Ok($"all {specs.Count} clip(s) already placed (skipped {skipped} duplicate(s))");
-        await fl.AddPatternClipsAsync(toPlace, ct);
+        // Journal each placed clip as a Create (identity = pattern+track+start) so undo deletes it by identity.
+        await _capture.PatternClipsAddedAsync(toPlace, c => fl.AddPatternClipsAsync(toPlace, c), ct);
         return Ok($"placed {toPlace.Count} clip(s)" + (skipped > 0 ? $"; skipped {skipped} duplicate(s)" : ""));
     });
 
@@ -857,7 +883,7 @@ public sealed class NativeControlPlugin(INativeFlControl fl)
         if (parsed.Count == 0) return Err("no moves parsed — provide '[{\"index\":0,\"start\":0,\"track\":3}]'");
         foreach (var m in parsed)
             if (m.Track > 0 && Guard("track", m.Track, 1, 500) is { } e) return e;
-        await fl.MoveClipsAsync(parsed, ct);
+        await _capture.ClipMovesAsync(parsed, c => fl.MoveClipsAsync(parsed, c), ct);
         return Ok($"moved {parsed.Count} clip(s)");
     });
 
@@ -870,7 +896,7 @@ public sealed class NativeControlPlugin(INativeFlControl fl)
         var (parsed, err) = ParseResizes(resizes);
         if (err is not null) return Err(err);
         if (parsed.Count == 0) return Err("no resizes parsed — provide '[{\"index\":0,\"length\":7680}]'");
-        await fl.ResizeClipsAsync(parsed, ct);
+        await _capture.ClipResizesAsync(parsed, c => fl.ResizeClipsAsync(parsed, c), ct);
         return Ok($"resized {parsed.Count} clip(s)");
     });
 
@@ -885,7 +911,9 @@ public sealed class NativeControlPlugin(INativeFlControl fl)
                 ? $"bad index '{bad}' in indices — use integers as CSV or a JSON array, e.g. '0,2,5'"
                 : "no indices — provide clip slots like '0,2,5' or '[0,2,5]'");
         int n = list.Distinct().Count();
-        await fl.DeleteClipsAsync(list, ct);
+        // Snapshot each clip's full spec BEFORE deleting so undo can re-add it (pattern clips only; an
+        // audio/automation clip in the batch taints the turn → whole-commit .flp fallback).
+        await _capture.ClipsDeletedAsync(list, c => fl.DeleteClipsAsync(list, c), ct);
         return Ok($"deleted {n} clip(s)");
     });
 
@@ -899,7 +927,8 @@ public sealed class NativeControlPlugin(INativeFlControl fl)
             return Err(bad.Length > 0
                 ? $"bad index '{bad}' in indices — use integers as CSV or a JSON array, e.g. '0,2,5'"
                 : "no indices — provide clip slots like '0,2,5' or '[0,2,5]'");
-        await fl.SetClipsMutedAsync(list, muted, ct);
+        // Journal each clip's prior mute state (identity-addressed) so undo restores it exactly.
+        await _capture.ClipMutesAsync(list, muted, c => fl.SetClipsMutedAsync(list, muted, c), ct);
         return Ok($"{(muted ? "muted" : "unmuted")} {list.Distinct().Count()} clip(s)");
     });
 
@@ -918,7 +947,9 @@ public sealed class NativeControlPlugin(INativeFlControl fl)
     public Task<string> DuplicateClipAsync(
         [Description("Clip slot index")] int clipIndex, CancellationToken ct = default) => Run(async () =>
     {
-        await fl.DuplicateClipAsync(clipIndex, ct);
+        // Journal the duplicate as a Create by diffing the clip list before/after (undo deletes the new copy
+        // by identity). A non-pattern (audio/automation) duplicate has no re-addable identity → taints → .flp.
+        await _capture.ClipDuplicatedAsync(c => fl.DuplicateClipAsync(clipIndex, c), ct);
         return Ok($"clip {clipIndex} duplicated");
     });
 
@@ -934,7 +965,8 @@ public sealed class NativeControlPlugin(INativeFlControl fl)
     public Task<string> SetSongModeAsync(
         [Description("true = song mode, false = pattern mode")] bool song, CancellationToken ct = default) => Run(async () =>
     {
-        await fl.SetSongModeAsync(song, ct);
+        await _capture.ScalarAsync(InverseOps.SongMode, JournalDict.Empty, JournalDict.Of("value", song),
+            c => fl.SetSongModeAsync(song, c), ct);
         return Ok($"{(song ? "song" : "pattern")} mode");
     });
 
@@ -1038,8 +1070,10 @@ public sealed class NativeControlPlugin(INativeFlControl fl)
     public Task<string> MakeArrangementAsync(
         [Description("Optional name; empty = FL default")] string name = "", CancellationToken ct = default) => Run(async () =>
     {
-        int i = await fl.AddArrangementAsync(string.IsNullOrWhiteSpace(name) ? null : name, ct);
-        return Ok($"arrangement {i} created{(string.IsNullOrWhiteSpace(name) ? string.Empty : $" '{name}'")}");
+        string? nm = string.IsNullOrWhiteSpace(name) ? null : name;
+        // Journal as a Create keyed by the returned index; undo deletes that arrangement, redo re-makes it.
+        int i = await _capture.ArrangementCreatedAsync(c => fl.AddArrangementAsync(nm, c), clone: false, src: 0, name: nm, ct);
+        return Ok($"arrangement {i} created{(nm is null ? string.Empty : $" '{name}'")}");
     });
 
     [KernelFunction("native_clone_arrangement")]
@@ -1050,8 +1084,13 @@ public sealed class NativeControlPlugin(INativeFlControl fl)
     {
         // 0 or negative = current: weak models use 0 and -1 interchangeably for "the current one".
         // To clone arrangement 0 explicitly while another is current, select it first, then clone.
-        int i = await fl.CloneArrangementAsync(srcIndex <= 0 ? -1 : srcIndex, string.IsNullOrWhiteSpace(name) ? null : name, ct);
-        return Ok($"cloned -> arrangement {i}{(string.IsNullOrWhiteSpace(name) ? string.Empty : $" '{name}'")}");
+        string? nm = string.IsNullOrWhiteSpace(name) ? null : name;
+        // Resolve a CONCRETE source index NOW so a redo re-clones from the same source (passing "-1 = current"
+        // would re-resolve against whatever the undo made current). Undo deletes the returned clone index.
+        int resolvedSrc = srcIndex > 0 ? srcIndex : ArrangementList.CurrentIndex(await fl.ListArrangementsAsync(ct));
+        int i = await _capture.ArrangementCreatedAsync(
+            c => fl.CloneArrangementAsync(srcIndex <= 0 ? -1 : srcIndex, nm, c), clone: true, src: resolvedSrc, name: nm, ct);
+        return Ok($"cloned -> arrangement {i}{(nm is null ? string.Empty : $" '{name}'")}");
     });
 
     [KernelFunction("native_rename_arrangement")]
@@ -1061,7 +1100,8 @@ public sealed class NativeControlPlugin(INativeFlControl fl)
         [Description("New name")] string name, CancellationToken ct = default) => Run(async () =>
     {
         if (Guard("arrangement index", index, 0, int.MaxValue) is { } e) return e;
-        await fl.RenameArrangementAsync(index, name, ct);
+        await _capture.ScalarAsync(InverseOps.ArrangementName, JournalDict.Of("arrangement", index), JournalDict.Of("value", name),
+            c => fl.RenameArrangementAsync(index, name, c), ct);
         return Ok($"arrangement {index} = '{name}'");
     });
 
@@ -1106,7 +1146,10 @@ public sealed class NativeControlPlugin(INativeFlControl fl)
     {
         if (Guard("channel", channel, 0, int.MaxValue) is { } e) return e;
         double v = Math.Clamp(value, 0.0, 1.0);
-        await fl.AddAutomationPointAsync(channel, timeBeats, v, Math.Clamp(tension, -1.0, 1.0), ct);
+        double tn = Math.Clamp(tension, -1.0, 1.0);
+        // Journal as a Create (identity = channel+time); undo deletes the point, redo re-adds the same spec.
+        await _capture.AutomationAddedAsync(channel, timeBeats, v, tn,
+            c => fl.AddAutomationPointAsync(channel, timeBeats, v, tn, c), ct);
         return ClampReport($"auto point chan {channel} @beat {timeBeats:0.###}", value, v, 0.0, 1.0);
     });
 
@@ -1118,7 +1161,9 @@ public sealed class NativeControlPlugin(INativeFlControl fl)
     {
         if (Guard("channel", channel, 0, int.MaxValue) is { } ce) return ce;
         if (Guard("point index", index, 0, int.MaxValue) is { } pe) return pe;
-        await fl.DeleteAutomationPointAsync(channel, index, ct);
+        // Snapshot the point BEFORE deleting so undo re-adds it (a non-zero curve, which AddAutomationPoint
+        // can't reproduce, taints the turn → .flp rather than a lossy undo).
+        await _capture.AutomationDeletedAsync(channel, index, c => fl.DeleteAutomationPointAsync(channel, index, c), ct);
         return Ok($"auto point {index} deleted (chan {channel})");
     });
 

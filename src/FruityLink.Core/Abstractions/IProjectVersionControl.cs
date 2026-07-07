@@ -36,13 +36,17 @@ public interface IProjectVersionControl
 
     /// <summary>Capture a commit now: save the <c>.flp</c> backup, append to history and advance HEAD.
     /// <paramref name="chatNodeId"/> links the chat checkpoint; <paramref name="operations"/> are drained
-    /// op summaries (also used to auto-label when <paramref name="label"/> is null). Returns null when
-    /// there was nothing to capture (e.g. bridge unavailable / no session open).</summary>
+    /// op summaries (also used to auto-label when <paramref name="label"/> is null). <paramref name="changes"/>
+    /// are the drained inverse-journal records for this turn: when supplied and fully invertible they are
+    /// written to <c>{commitId}.ops.json</c> to enable granular undo/redo (null/empty ⇒ the commit stays
+    /// <c>.flp</c>-only, i.e. today's behavior). Returns null when there was nothing to capture (e.g. bridge
+    /// unavailable / no session open).</summary>
     Task<ProjectCommit?> CommitAsync(
         string? label = null,
         string? chatNodeId = null,
         IReadOnlyList<string>? operations = null,
         CommitTrigger trigger = CommitTrigger.Manual,
+        IReadOnlyList<ChangeRecord>? changes = null,
         CancellationToken ct = default);
 
     /// <summary>Move HEAD to its parent and restore that commit (safety-backup, then open its <c>.flp</c>).</summary>

@@ -49,4 +49,14 @@ Hero usage: bg `ink-950`, body text `ink-200`, headline white + gradient, badge 
 - Headline gradient text → gradient brush on the `TextBlock.Foreground` (Avalonia supports gradient foreground). Glass → semi-transparent fill + `BlurEffect`/acrylic. Grid → tiled `DrawingBrush`.
 - Fonts: bundle Space Grotesk + Inter as app assets (don't rely on system). Theme = a dark `FluentTheme` override or custom ControlThemes keyed off these tokens.
 
+## Product-app deltas (Theme/Tokens.axaml deviates from the hero on purpose)
+- **Assistant reply card is OPAQUE `#15151F`** (`AsstBubbleBrush`), not white/5 glass: in the app the
+  bubble sits directly over the aurora blobs and hero-style glass made replies read as translucent /
+  hard to read. Reply text = `ink-50 #eceef6` (`.body.asst`), author label bright Space Grotesk.
+- **Aurora centre alphas run dimmer in-app**: violet 0.20 / magenta 0.16 / cyan 0.12 (hero: 0.30/0.24/0.18)
+  because the blobs sit behind transcript text.
+- **Logo mark** (`LogoGradientBrush` + `LogoStrokeBrush`, `Controls/LogoMark`): 1:1 port of
+  `marketing/web/public/favicon.svg` — 5-bar equalizer, `#0b0b12` tile, diagonal `#9d74ff → #d946ef →
+  #22d3ee` gradient, 65%-alpha gradient outline.
+
 Sources: `marketing/web/src/index.css`, `.../components/sections/Hero.tsx`, `.../ui/Button.tsx`, `.../visuals/ProductMockup.tsx`, `.../index.html`.

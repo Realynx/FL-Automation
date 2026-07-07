@@ -69,6 +69,11 @@
     <SolidColorBrush x:Key="SurfaceStrongBrush" Color="{StaticResource Ink800}" />
     <SolidColorBrush x:Key="SurfaceTranslucentBrush" Color="#99000000" />                    <!-- deep well behind glass -->
 
+    <!-- Assistant reply card: FULLY OPAQUE (between Ink800/Ink700) so the aurora glow can never
+         bleed through behind reply text (user feedback: replies read as translucent / hard to read
+         on the 5% glass fill). The hero's white/4-over-dark look is baked into the flat colour. -->
+    <SolidColorBrush x:Key="AsstBubbleBrush" Color="#15151F" />
+
     <!-- Text ramp. Primary/body text is kept bright + fully opaque for readability on the dark base
          (user feedback: earlier body text read as too translucent). Muted/meta stay dimmer but legible. -->
     <SolidColorBrush x:Key="HeadingTextBrush" Color="White" />
@@ -123,20 +128,36 @@
         <GradientStop Color="#00FFFFFF" Offset="1.0" />
     </LinearGradientBrush>
 
+    <!-- Brand logo mark (ported 1:1 from marketing/web/public/favicon.svg — the 5-bar equalizer):
+         diagonal violet→magenta→cyan gradient for the bars, and the same gradient at 65% alpha
+         for the rounded-square outline. Used by Controls/LogoMark. -->
+    <LinearGradientBrush x:Key="LogoGradientBrush" StartPoint="0%,0%" EndPoint="100%,100%">
+        <GradientStop Color="{StaticResource Brand400}" Offset="0.0" />
+        <GradientStop Color="{StaticResource Magenta500}" Offset="0.5" />
+        <GradientStop Color="{StaticResource Accent400}" Offset="1.0" />
+    </LinearGradientBrush>
+    <LinearGradientBrush x:Key="LogoStrokeBrush" StartPoint="0%,0%" EndPoint="100%,100%">
+        <GradientStop Color="#A69d74ff" Offset="0.0" />
+        <GradientStop Color="#A6d946ef" Offset="0.5" />
+        <GradientStop Color="#A622d3ee" Offset="1.0" />
+    </LinearGradientBrush>
+
     <!-- ============================== Aurora glows ============================= -->
     <!-- Radial glow blobs echoing the hero background (violet / magenta / cyan).
-         Alpha at centre matches the hero (0.30 / 0.24 / 0.18); fades to fully
-         transparent (same RGB, 00 alpha → no grey halo) by 70% radius. -->
+         Centre alphas run DIMMER than the hero (0.20 / 0.16 / 0.12 vs 0.30 / 0.24 / 0.18):
+         in the app the blobs sit directly behind transcript text, and the hero-strength glow
+         washed out reply contrast. Fades to fully transparent (same RGB, 00 alpha → no grey
+         halo) by 70% radius. -->
     <RadialGradientBrush x:Key="AuroraVioletBrush" Center="50%,50%" GradientOrigin="50%,50%" RadiusX="50%" RadiusY="50%">
-        <GradientStop Color="#4D7C3AED" Offset="0.0" />
+        <GradientStop Color="#337C3AED" Offset="0.0" />
         <GradientStop Color="#007C3AED" Offset="0.70" />
     </RadialGradientBrush>
     <RadialGradientBrush x:Key="AuroraMagentaBrush" Center="50%,50%" GradientOrigin="50%,50%" RadiusX="50%" RadiusY="50%">
-        <GradientStop Color="#3DD946EF" Offset="0.0" />
+        <GradientStop Color="#29D946EF" Offset="0.0" />
         <GradientStop Color="#00D946EF" Offset="0.70" />
     </RadialGradientBrush>
     <RadialGradientBrush x:Key="AuroraCyanBrush" Center="50%,50%" GradientOrigin="50%,50%" RadiusX="50%" RadiusY="50%">
-        <GradientStop Color="#2E06B6D4" Offset="0.0" />
+        <GradientStop Color="#1F06B6D4" Offset="0.0" />
         <GradientStop Color="#0006B6D4" Offset="0.70" />
     </RadialGradientBrush>
 

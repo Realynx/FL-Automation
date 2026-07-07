@@ -39,6 +39,10 @@
     <PackageVersion Include="AngleSharp" Version="1.5.1" />
   </ItemGroup>
 
+  <ItemGroup Label="Manual ingestion tool (offline data-prep)">
+    <PackageVersion Include="ReverseMarkdown" Version="4.6.0" />
+  </ItemGroup>
+
   <ItemGroup Label="Test">
     <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="18.7.0" />
     <PackageVersion Include="xunit" Version="2.9.3" />

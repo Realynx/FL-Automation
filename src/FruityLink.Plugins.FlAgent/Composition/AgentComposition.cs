@@ -1,9 +1,14 @@
 using System.IO;
+using System.Net;
 using System.Net.Http;
+using System.Threading;
 using FruityLink.Agent;
 using FruityLink.Agent.Plugins;
+using FruityLink.Agent.Versioning;
 using FruityLink.Core.Abstractions;
+using FruityLink.Core.Configuration;
 using FruityLink.Core.Domain;
+using FruityLink.Knowledge;
 using FruityLink.Llm;
 using FruityLink.Llm.Auth;
 using FruityLink.Llm.Diagnostics;
@@ -36,6 +41,13 @@ internal static class AgentComposition
     private static readonly StoragePaths SharedPaths = new();
     private static readonly JsonSettingsStore SharedSettings = new(SharedPaths);
     private static readonly DpapiSecretStore SharedSecrets = new(SharedPaths);
+
+    // ── Shared inverse-operation journal + registry (granular undo/redo) ─────────────────────────
+    // One journal (the per-turn recorder) + one populated registry (op-id → read/apply), shared by the
+    // NativeControlPlugin capture seam, the version-control store (undo/redo replay), and the coordinator
+    // (turn-boundary drain). They carry no per-project state, so a single process-wide instance is correct.
+    private static readonly ChangeJournal SharedJournal = new();
+    private static readonly IInverseOpRegistry SharedRegistry = InverseOps.CreateRegistry();
 
     // ── Shared FL Automate account auth (single session for everything) ──────────────────────
     // ONE auth service over the shared stores: the kernel factory's gateway handler, the settings
@@ -78,7 +90,9 @@ internal static class AgentComposition
         var toolFilter = new ToolCallFilter();
 
         var music = new MusicTheoryPlugin(audit, settingsStore);
-        var nativeControl = new NativeControlPlugin(context.Fl);            // <-- shared host FL bridge
+        // Wire the capture seam so each Phase-1 mutating tool journals its BEFORE-value for granular undo.
+        var nativeControl = new NativeControlPlugin(
+            context.Fl, new ChangeCapture(context.Fl, SharedJournal, SharedRegistry));   // <-- shared host FL bridge
         var knowledge = new KnowledgePlugin(ResolveRetriever(context));
         var subAgents = new SubAgentService(
             kernelFactory, settingsStore, music, nativeControl, knowledge, toolFilter);
@@ -100,6 +114,11 @@ internal static class AgentComposition
     /// store instances address the exact same files the agent uses whether it's the host's shared
     /// agent or a self-composed one.
     /// </summary>
+    /// <summary>Client for the gateway's <c>/v1/bug-reports</c> endpoint (the chat's "Report bug"
+    /// button on failed turns). Rides the same shared auth session + settings as everything else.</summary>
+    public static BugReportClient BuildBugReportClient()
+        => new(SharedAuthHttp, SharedAuth, SharedSettings);
+
     public static IAccountGateway BuildAccountGateway(FruityLink.Agent.FlAgent agent)
     {
         var connectivity = new GatewayConnectivity(SharedAuthHttp, SharedAuth);
@@ -111,7 +130,11 @@ internal static class AgentComposition
     // live under the SAME %APPDATA%\FLAutomate data dir (SharedPaths) as the rest, and it drives FL
     // through the host's single safe bridge (context.Fl). Keyed on a stable session id so history +
     // crash-recovery survive restarts (follow-up: key on the real chat/project session).
-    private const string VersionSessionId = "default";
+    // FRESH per-RUNTIME session id: undo history covers ONLY the current FL run. A shared "default" session
+    // let the user undo a change from a PRIOR run against a now-different project state → crash. On close
+    // those changes are gone (or already baked into the saved .flp, so reverting them is meaningless).
+    // OpenSessionAsync purges every other session's data so stale runs can never be undone.
+    private static readonly string VersionSessionId = "run-" + System.Guid.NewGuid().ToString("N");
 
     /// <summary>
     /// Builds the backend project version-control store bound to the host's FL bridge, opens its session
@@ -122,7 +145,7 @@ internal static class AgentComposition
     {
         try
         {
-            var vc = new JsonProjectVersionControl(SharedPaths, context.Fl);
+            var vc = new JsonProjectVersionControl(SharedPaths, context.Fl, SharedRegistry);
             _ = vc.OpenSessionAsync(VersionSessionId);   // fire-and-forget: load index + detect recovery
             return vc;
         }
@@ -140,7 +163,7 @@ internal static class AgentComposition
     /// </summary>
     public static FruityLink.Agent.ProjectVersionCoordinator BuildVersionCoordinator(
         FruityLink.Agent.FlAgent agent, FruityLink.Core.Abstractions.IProjectVersionControl vc)
-        => new(vc, agent);
+        => new(vc, agent, audit: null, journal: SharedJournal, granularTools: InverseOps.GranularToolNames);
 
     /// <summary>Adapts the backend <see cref="FruityLink.Core.Abstractions.IProjectVersionControl"/> onto the
     /// UI-local gateway the Avalonia history panel binds to (mirrors <see cref="BuildAccountGateway"/>).</summary>
@@ -177,15 +200,116 @@ internal static class AgentComposition
         }
     }
 
-    /// <summary>Reuse the host's RAG retriever if present; otherwise a no-op (search returns nothing).</summary>
+    /// <summary>
+    /// Resolves the RAG retriever for <c>search_manual</c>/<c>search_knowledge</c>:
+    /// the host's own if it exposes one; else — when the shipped FL Studio manual vector DB is
+    /// present — a retriever backed by it that embeds queries THROUGH THE GATEWAY (metered,
+    /// per-tier model), matching how the corpus was embedded; else a no-op.
+    /// </summary>
     private static IKnowledgeRetriever ResolveRetriever(IPluginContext context)
-        => context.Services?.GetService(typeof(IKnowledgeRetriever)) as IKnowledgeRetriever
-           ?? new NullKnowledgeRetriever();
+    {
+        if (context.Services?.GetService(typeof(IKnowledgeRetriever)) is IKnowledgeRetriever hosted)
+            return hosted;
+
+        string? dbPath = LocateManualDb();
+        if (dbPath is null)
+        {
+            context.Log("[fl-agent] FL Studio manual DB not found — manual search returns nothing until it is installed.");
+            return new NullKnowledgeRetriever();
+        }
+
+        context.Log($"[fl-agent] FL Studio manual RAG enabled ({dbPath}).");
+        return new GatewayManualRetriever(dbPath, SharedSettings, SharedAuth, context);
+    }
+
+    /// <summary>Finds the shipped manual DB: %APPDATA%\FLAutomate first, then next to this plugin.</summary>
+    private static string? LocateManualDb()
+    {
+        string appData = SharedPaths.KnowledgeDbFile;
+        string asmDir = Path.GetDirectoryName(typeof(AgentComposition).Assembly.Location) ?? AppContext.BaseDirectory;
+        foreach (string candidate in new[]
+                 {
+                     appData,
+                     Path.Combine(asmDir, "knowledge", "fl-manual.db"),
+                     Path.Combine(asmDir, "fl-manual.db"),
+                 })
+        {
+            if (File.Exists(candidate)) return candidate;
+        }
+        return null;
+    }
 
     /// <summary>Empty knowledge base: keeps the agent fully functional minus RAG when none is wired.</summary>
     private sealed class NullKnowledgeRetriever : IKnowledgeRetriever
     {
         public Task<IReadOnlyList<KnowledgeHit>> SearchAsync(string query, int topK = 5, CancellationToken ct = default)
             => Task.FromResult<IReadOnlyList<KnowledgeHit>>(Array.Empty<KnowledgeHit>());
+    }
+
+    /// <summary>
+    /// RAG retriever over the shipped FL Studio manual vector DB. The underlying
+    /// <see cref="KnowledgeService"/> is built LAZILY on the first search (off the plugin-enable
+    /// path), reading the gateway base URL from settings and embedding the query through the
+    /// gateway's <c>/v1/embeddings</c> with the account JWT — so the query uses the SAME model the
+    /// corpus was embedded with, and the call is metered/quota-checked like chat. If the user isn't
+    /// signed in (or the gateway is unreachable) the search fails gracefully via the tool's ERR path.
+    /// </summary>
+    private sealed class GatewayManualRetriever : IKnowledgeRetriever
+    {
+        private readonly string _dbPath;
+        private readonly JsonSettingsStore _settings;
+        private readonly IAccountAuth _auth;
+        private readonly IPluginContext _context;
+        private readonly SemaphoreSlim _gate = new(1, 1);
+        private volatile KnowledgeService? _service;
+
+        public GatewayManualRetriever(
+            string dbPath, JsonSettingsStore settings, IAccountAuth auth, IPluginContext context)
+        {
+            _dbPath = dbPath;
+            _settings = settings;
+            _auth = auth;
+            _context = context;
+        }
+
+        public async Task<IReadOnlyList<KnowledgeHit>> SearchAsync(
+            string query, int topK = 5, CancellationToken ct = default)
+        {
+            KnowledgeService service = await EnsureServiceAsync(ct).ConfigureAwait(false);
+            return await service.SearchAsync(query, topK, ct).ConfigureAwait(false);
+        }
+
+        private async Task<KnowledgeService> EnsureServiceAsync(CancellationToken ct)
+        {
+            if (_service is not null) return _service;
+            await _gate.WaitAsync(ct).ConfigureAwait(false);
+            try
+            {
+                if (_service is null)
+                {
+                    FruityLink.Core.Configuration.AppSettings app =
+                        await _settings.LoadAsync(ct).ConfigureAwait(false);
+                    // Gateway OpenAI-compatible base ("{gateway}/v1"); the embeddings client posts to
+                    // "{base}/embeddings". The gateway ignores the requested model and uses the plan's
+                    // fixed embedding model, so "default"/dimensions here are placeholders.
+                    string endpoint = app.AccountOrDefault.GatewayOpenAiBase;
+
+                    // JWT is stamped per-request by GatewayAuthHandler (no static api key on the client).
+                    var authed = new GatewayAuthHandler(
+                        _auth, new HttpClientHandler { AutomaticDecompression = DecompressionMethods.All });
+                    var http = new HttpClient(authed) { Timeout = TimeSpan.FromSeconds(60) };
+
+                    var embeddings = new OpenAiCompatibleEmbeddingClient(
+                        http, new EmbeddingSettings(Endpoint: endpoint, Model: "default", Dimensions: 3072));
+                    _service = new KnowledgeService(embeddings, _dbPath, http);
+                    _context.Log("[fl-agent] manual RAG retriever ready (gateway embeddings).");
+                }
+                return _service;
+            }
+            finally
+            {
+                _gate.Release();
+            }
+        }
     }
 }

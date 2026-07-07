@@ -31,6 +31,10 @@
     <ProjectReference Include="..\FruityLink.Llm\FruityLink.Llm.csproj" />
     <ProjectReference Include="..\FruityLink.Agent\FruityLink.Agent.csproj" />
     <ProjectReference Include="..\FruityLink.Persistence\FruityLink.Persistence.csproj" />
+    <!-- RAG engine for FL Studio manual search (SqliteVectorStore + cosine). Pulls in
+         Microsoft.Data.Sqlite (native e_sqlite3) transitively — the publish/stage step must carry
+         the native SQLite assets into the plugin output like the other native deps above. -->
+    <ProjectReference Include="..\FruityLink.Knowledge\FruityLink.Knowledge.csproj" />
     <!-- Local Whisper speech-to-text (mic dictation in the chat composer). Pulls in Whisper.net +
          Whisper.net.Runtime (native whisper) + NAudio transitively; the publish/stage step must
          carry those native assets into the plugin's output + .deps.json (host loads via its ALC). -->
@@ -41,6 +45,15 @@
          the publish/stage step MUST carry those into plugins\fl-agent\ (a missing libSkiaSharp.dll throws
          on Avalonia init inside FL). -->
     <ProjectReference Include="..\FruityLink.Ui.Avalonia\FruityLink.Ui.Avalonia.csproj" />
+  </ItemGroup>
+
+  <!-- Ship the prebuilt FL Studio manual vector DB next to the plugin when it has been staged here
+       (produced offline by tools/FruityLink.ManualIngest). Conditioned on Exists so the build works
+       before the DB is generated; the agent also looks in %APPDATA%\FLAutomate at runtime. -->
+  <ItemGroup Condition="Exists('knowledge\fl-manual.db')">
+    <Content Include="knowledge\fl-manual.db" Link="knowledge\fl-manual.db">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
   </ItemGroup>
 
 </Project>

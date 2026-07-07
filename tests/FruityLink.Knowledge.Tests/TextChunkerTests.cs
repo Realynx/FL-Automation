@@ -89,6 +89,26 @@ public sealed class TextChunkerTests
     }
 
     [Fact]
+    public void Chunk_LongUrlTokenInProse_TerminatesAndCoversTailText()
+    {
+        // Regression: a 100+ char unbroken token (a URL) embedded in prose used to send the
+        // overlap alignment BACK to the token's start — at or before the current chunk start —
+        // re-emitting the same window forever (an infinite CPU spin, seen on a real manual page).
+        // It must now terminate and still capture the text AFTER the long token.
+        var chunker = new TextChunker(Max, Overlap);
+        string url = "https://www.image-line.com/fl-studio-learning/fl-studio-online-manual/html/plugins/envelopetools_scalelevel.htm";
+        string text = "Scale Level tool. Source: " + url +
+                      " Adjust the scaling of envelope levels within the selected time region precisely.";
+
+        var chunks = chunker.Chunk(text); // must return, not spin
+
+        chunks.ShouldNotBeEmpty();
+        foreach (string chunk in chunks)
+            chunk.Length.ShouldBeLessThanOrEqualTo(Max);
+        string.Join(" ", chunks).ShouldContain("selected time region");
+    }
+
+    [Fact]
     public void Constructor_InvalidArguments_Throw()
     {
         Should.Throw<ArgumentOutOfRangeException>(() => new TextChunker(0, 0));

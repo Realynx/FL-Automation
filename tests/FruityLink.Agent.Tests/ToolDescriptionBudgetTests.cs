@@ -25,10 +25,12 @@ public sealed class ToolDescriptionBudgetTests
 
     /// <summary>The post-prune advertised-tool count measured 2026-07-02 (NativeControl 77 +
     /// MusicTheory 3 + Knowledge 1 + Orchestration 1), raised by 2 for Versioning
-    /// (list_versions + get_version_changes) in the same change that added them. The ratchet only
-    /// stops growth — shrinking the surface is always welcome; if a new tool is genuinely needed,
-    /// raise this literal in the same change that adds it.</summary>
-    private const int MaxAdvertisedToolCount = 84;
+    /// (list_versions + get_version_changes), then by 2 more for the plugin "man db" on Knowledge
+    /// (list_plugin_manuals + get_plugin_manual), then by 2 more (2026-07-07): Knowledge search_manual
+    /// (FL Studio manual RAG) + NativeControl native_list_mixer_tracks (resolve a mixer bus NAME to
+    /// its index instead of scanning). The ratchet only stops growth — shrinking the surface is always
+    /// welcome; if a new tool is genuinely needed, raise this literal in the same change that adds it.</summary>
+    private const int MaxAdvertisedToolCount = 88;
 
     /// <summary>Every plugin type whose [KernelFunction] methods reach the model.</summary>
     private static readonly Type[] AdvertisedPluginTypes =

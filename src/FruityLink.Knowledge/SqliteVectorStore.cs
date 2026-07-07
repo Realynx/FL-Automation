@@ -48,7 +48,7 @@ internal sealed class SqliteVectorStore
         }.ToString();
     }
 
-    /// <summary>Creates the schema if it does not already exist.</summary>
+    /// <summary>Creates the schema if it does not already exist (and upgrades older DBs).</summary>
     public void CreateSchema()
     {
         using SqliteConnection connection = Open();
@@ -60,7 +60,8 @@ internal sealed class SqliteVectorStore
                 uri TEXT NOT NULL,
                 title TEXT NOT NULL,
                 added_at TEXT NOT NULL,
-                chunk_count INTEGER NOT NULL
+                chunk_count INTEGER NOT NULL,
+                content_hash TEXT NOT NULL DEFAULT ''
             );
             CREATE TABLE IF NOT EXISTS chunks(
                 id TEXT PRIMARY KEY,
@@ -73,10 +74,31 @@ internal sealed class SqliteVectorStore
             CREATE INDEX IF NOT EXISTS ix_chunks_source ON chunks(source_id);
             """;
         command.ExecuteNonQuery();
+
+        // Upgrade a DB created before content_hash existed (idempotent, incremental
+        // re-embedding depends on it). SQLite has no "ADD COLUMN IF NOT EXISTS".
+        EnsureColumn(connection, "sources", "content_hash", "TEXT NOT NULL DEFAULT ''");
     }
 
-    /// <summary>Inserts or replaces a source row.</summary>
-    public void UpsertSource(KnowledgeSource source)
+    private static void EnsureColumn(
+        SqliteConnection connection, string table, string column, string definition)
+    {
+        using (SqliteCommand check = connection.CreateCommand())
+        {
+            check.CommandText = $"SELECT COUNT(*) FROM pragma_table_info('{table}') WHERE name = $c;";
+            check.Parameters.AddWithValue("$c", column);
+            if (Convert.ToInt64(check.ExecuteScalar()) > 0) return;
+        }
+        using SqliteCommand alter = connection.CreateCommand();
+        alter.CommandText = $"ALTER TABLE {table} ADD COLUMN {column} {definition};";
+        alter.ExecuteNonQuery();
+    }
+
+    /// <summary>
+    /// Inserts or replaces a source row. <paramref name="contentHash"/> records a fingerprint of
+    /// the ingested text so re-ingestion can skip unchanged sources (incremental embedding).
+    /// </summary>
+    public void UpsertSource(KnowledgeSource source, string contentHash = "")
     {
         ArgumentNullException.ThrowIfNull(source);
 
@@ -84,20 +106,39 @@ internal sealed class SqliteVectorStore
         using SqliteCommand command = connection.CreateCommand();
         command.CommandText =
             """
-            INSERT INTO sources(id, uri, title, added_at, chunk_count)
-            VALUES($id, $uri, $title, $added_at, $chunk_count)
+            INSERT INTO sources(id, uri, title, added_at, chunk_count, content_hash)
+            VALUES($id, $uri, $title, $added_at, $chunk_count, $content_hash)
             ON CONFLICT(id) DO UPDATE SET
                 uri = excluded.uri,
                 title = excluded.title,
                 added_at = excluded.added_at,
-                chunk_count = excluded.chunk_count;
+                chunk_count = excluded.chunk_count,
+                content_hash = excluded.content_hash;
             """;
         command.Parameters.AddWithValue("$id", source.Id);
         command.Parameters.AddWithValue("$uri", source.Uri);
         command.Parameters.AddWithValue("$title", source.Title);
         command.Parameters.AddWithValue("$added_at", source.AddedAt.ToString("O"));
         command.Parameters.AddWithValue("$chunk_count", source.ChunkCount);
+        command.Parameters.AddWithValue("$content_hash", contentHash ?? "");
         command.ExecuteNonQuery();
+    }
+
+    /// <summary>
+    /// Returns the stored content hash + chunk count for a source id, or null when the source is
+    /// not present. Used to decide whether a re-ingested source's text changed.
+    /// </summary>
+    public (string ContentHash, int ChunkCount)? GetSourceMeta(string sourceId)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(sourceId);
+
+        using SqliteConnection connection = Open();
+        using SqliteCommand command = connection.CreateCommand();
+        command.CommandText = "SELECT content_hash, chunk_count FROM sources WHERE id = $id;";
+        command.Parameters.AddWithValue("$id", sourceId);
+        using SqliteDataReader reader = command.ExecuteReader();
+        if (!reader.Read()) return null;
+        return (reader.IsDBNull(0) ? "" : reader.GetString(0), reader.GetInt32(1));
     }
 
     /// <summary>

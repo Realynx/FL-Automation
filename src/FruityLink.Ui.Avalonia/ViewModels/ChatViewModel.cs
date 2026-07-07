@@ -79,9 +79,18 @@ public sealed class ChatViewModel : ViewModelBase
 
         Messages.CollectionChanged += (_, _) => OnPropertyChanged(nameof(HasMessages));
 
-        AddInfo("FL Automate ready. Ask me to chop samples, organize your session, route the mixer, or set "
-              + "up sidechains — I drive FL Studio natively. Enter sends; Shift+Enter for a new line.");
+        // No seeded "ready" info line: it duplicated the empty-state greeting AND made HasMessages true
+        // from first load, so the branded empty state (headline + suggestion chips) never showed.
     }
+
+    /// <summary>Quick-start prompts shown as chips on the empty state; clicking one fills the composer.</summary>
+    public IReadOnlyList<string> Suggestions { get; } =
+    [
+        "Chop this sample into 16 slices",
+        "Sidechain the kick to the bass",
+        "Clean up and color-code my mixer",
+        "Build a 4-bar drum pattern",
+    ];
 
     public ObservableCollection<ChatMessage> Messages { get; } = new();
 
@@ -93,6 +102,25 @@ public sealed class ChatViewModel : ViewModelBase
 
     /// <summary>Raised (on the UI thread) when the user clicks the mic button (start/stop dictation).</summary>
     public event Action? MicToggleRequested;
+
+    /// <summary>Raised (on the UI thread) when the user clicks "Report bug" on a failed turn. The host
+    /// (FL Agent presenter) subscribes and POSTs the report to the gateway's bug-report endpoint.</summary>
+    public event Action<ChatMessage>? BugReportRequested;
+
+    /// <summary>Route a "Report bug" click for a failed turn to the host (see <see cref="BugReportRequested"/>).</summary>
+    public void RequestBugReport(ChatMessage message)
+    {
+        Action<ChatMessage>? handler = BugReportRequested;
+        if (handler is not null)
+        {
+            handler(message);
+            FlashStatus("Bug report sent — thank you!", 2200);
+        }
+        else
+        {
+            FlashStatus("Bug reporting needs the FL host", 2200);   // standalone dev head: no gateway wired
+        }
+    }
 
     public ICommand SendCommand { get; }
     public ICommand MicCommand { get; }
@@ -109,7 +137,7 @@ public sealed class ChatViewModel : ViewModelBase
     public bool HasMessages => Messages.Count > 0;
 
     /// <summary>The FL Automate ACCOUNT card shown in the Settings panel (sign in/out, plan display,
-    /// model, advanced URLs), backed by the agent's real auth service + settings store.</summary>
+    /// model picker), backed by the agent's real auth service + settings store.</summary>
     public AccountSettingsViewModel Account => _account;
 
     /// <summary>The AI edit-history / undo-redo / restore panel (project version control). Backed by the
@@ -177,7 +205,11 @@ public sealed class ChatViewModel : ViewModelBase
     public string InputText
     {
         get => _inputText;
-        set => SetProperty(ref _inputText, value);
+        set
+        {
+            if (SetProperty(ref _inputText, value))
+                OnPropertyChanged(nameof(CanSend));
+        }
     }
 
     public bool IsBusy
@@ -188,10 +220,20 @@ public sealed class ChatViewModel : ViewModelBase
             if (SetProperty(ref _isBusy, value))
             {
                 OnPropertyChanged(nameof(SendButtonText));
+                OnPropertyChanged(nameof(CanSend));
                 UpdateStatus();
+
+                // Turn settled → no reply is still streaming; clears any "Thinking…" placeholder
+                // (e.g. a turn cancelled before the first token landed).
+                if (!value)
+                    foreach (ChatMessage m in Messages)
+                        m.IsStreaming = false;
             }
         }
     }
+
+    /// <summary>Send is enabled with text to send — or always while busy, when the button is Cancel.</summary>
+    public bool CanSend => _isBusy || !string.IsNullOrWhiteSpace(_inputText);
 
     /// <summary>The Send button doubles as Cancel while a turn is streaming.</summary>
     public string SendButtonText => _isBusy ? "Cancel" : "Send";
@@ -309,6 +351,7 @@ public sealed class ChatViewModel : ViewModelBase
         {
             ThoughtsVisible = _showThoughts,
             ToolCallsVisible = _showToolCalls,
+            IsStreaming = true,   // shows the "Thinking…" placeholder until the first text lands
         };
         Messages.Add(msg);
         return msg;
@@ -331,6 +374,27 @@ public sealed class ChatViewModel : ViewModelBase
         _transientStatus = text;
         IsFinalizing = text is not null && text.Contains("Transcrib", StringComparison.OrdinalIgnoreCase);
         UpdateStatus();
+    }
+
+    /// <summary>Flash a short-lived note in the header status pill (e.g. "Copied to clipboard"),
+    /// then fall back to the state-based status. One-shot timer — safe in the embedded host
+    /// (unlike continuous animations, which crash it).</summary>
+    public void FlashStatus(string text, int milliseconds = 1500)
+    {
+        _transientStatus = text;
+        UpdateStatus();
+
+        var timer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(milliseconds) };
+        timer.Tick += (_, _) =>
+        {
+            timer.Stop();
+            if (_transientStatus == text)   // don't clobber a newer status (e.g. dictation progress)
+            {
+                _transientStatus = null;
+                UpdateStatus();
+            }
+        };
+        timer.Start();
     }
 
     // ---- dictation host seams (optional; wired by an updated presenter) -----
@@ -398,12 +462,29 @@ public sealed class ChatViewModel : ViewModelBase
             Action<string>? handler = MessageSubmitted;
             handler?.Invoke(text);
 
-            // Standalone dev run (no agent host): keep the shell visibly interactive.
+            // Standalone dev run (no agent host): keep the shell visibly interactive, and
+            // exercise the real turn UX — thinking indicator, then token-by-token streaming —
+            // so the dev head demos exactly what a live turn looks like.
             if (handler is null)
             {
-                var m = StartAssistantMessage();
-                m.Text = "This is the themed UI shell — no agent is wired in standalone mode. "
-                       + "Inside FL Studio your message streams back here with reasoning and tool calls.";
+                ChatMessage m = StartAssistantMessage();
+                IsBusy = true;
+                try
+                {
+                    await Task.Delay(1400);   // "Thinking…" (animated dots) shows here
+                    const string canned =
+                        "This is the themed UI shell — no agent is wired in standalone mode. "
+                        + "Inside FL Studio your message streams back here with reasoning and tool calls.";
+                    foreach (string word in canned.Split(' '))
+                    {
+                        m.Text += m.Text.Length == 0 ? word : " " + word;
+                        await Task.Delay(30);
+                    }
+                }
+                finally
+                {
+                    IsBusy = false;
+                }
             }
         }
         finally

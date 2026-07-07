@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using FruityLink.Core.Abstractions;
@@ -13,9 +14,11 @@ namespace FruityLink.Plugins.FlAgent.Composition;
 /// <summary>
 /// Bridges the backend-agnostic Avalonia Settings ACCOUNT card (<see cref="IAccountGateway"/>) to
 /// the AGENT's real world: sign in/out through <see cref="IAccountAuth"/> (marketing API + rotating
-/// refresh token in the encrypted secret store), connection settings through the SAME
-/// <see cref="ISettingsStore"/> (→ <c>settings.json</c>) the agent loads from, and the connection
-/// test through the gateway's <c>/v1/models</c>. After every state change it live-applies: the
+/// refresh token in the encrypted secret store), the model choice through the SAME
+/// <see cref="ISettingsStore"/> (→ <c>settings.json</c>) the agent loads from, and the model list /
+/// connection test through the gateway's <c>/v1/models</c>. The API/gateway base URLs never cross
+/// this seam — they stay in settings.json as dev-only hand-editable overrides the UI can't touch.
+/// After every state change it live-applies: the
 /// in-FL chat tab's kernel is invalidated and <see cref="FruityLink.Agent.FlAgent.ConfigureAsync"/>
 /// rebuilds the main agent — no FL restart needed.
 ///
@@ -46,6 +49,11 @@ internal sealed class AgentAccountGateway : IAccountGateway
         _chatBridge = chatBridge;
     }
 
+    /// <summary>Derived from the settings' API base so a dev/staging override in settings.json
+    /// points the link at the matching site.</summary>
+    public string AccountPageUrl
+        => _settings.LoadAsync().GetAwaiter().GetResult().AccountOrDefault.AccountPageUrl;
+
     public AccountSnapshot Load()
     {
         // Small local JSON read; the store uses ConfigureAwait(false) throughout so this can't
@@ -62,8 +70,6 @@ internal sealed class AgentAccountGateway : IAccountGateway
             Email = session?.Email ?? account.Email ?? string.Empty,
             Plan = session?.Plan ?? account.Plan ?? string.Empty,
             Model = account.Model,
-            ApiBaseUrl = account.ApiBaseUrl,
-            GatewayBaseUrl = account.GatewayBaseUrl,
         };
     }
 
@@ -83,22 +89,21 @@ internal sealed class AgentAccountGateway : IAccountGateway
         return Load();
     }
 
-    public async Task SaveAsync(string model, string apiBaseUrl, string gatewayBaseUrl, CancellationToken ct = default)
+    public async Task SaveModelAsync(string model, CancellationToken ct = default)
     {
         CoreAppSettings app = await _settings.LoadAsync(ct).ConfigureAwait(false);
 
         // Build from the LOADED record via `with`, not the positional constructor: AccountSettings
-        // carries non-UI-surfaced init properties (AllowParallelToolCalls, the display identity)
-        // that a positional rebuild would silently reset on every save from the settings card.
+        // carries non-UI-surfaced init properties (the base URLs — dev-only settings.json
+        // overrides — plus AllowParallelToolCalls and the display identity) that a positional
+        // rebuild would silently reset on every save from the settings card.
         AccountSettings account = app.AccountOrDefault with
         {
             Model = string.IsNullOrWhiteSpace(model) ? AccountSettings.DefaultModel : model.Trim(),
-            ApiBaseUrl = apiBaseUrl.Trim().TrimEnd('/'),
-            GatewayBaseUrl = gatewayBaseUrl.Trim().TrimEnd('/'),
         };
 
-        // Persist FIRST (this is the durable part); only the account connection changes — theme/
-        // embeddings/etc. on the existing AppSettings are preserved via the record `with`.
+        // Persist FIRST (this is the durable part); only the model changes — theme/embeddings/etc.
+        // on the existing AppSettings are preserved via the record `with`.
         await _settings.SaveAsync(app with { Account = account }, ct).ConfigureAwait(false);
 
         // Then live-apply. If this throws, the save has already landed on disk — the caller
@@ -106,10 +111,20 @@ internal sealed class AgentAccountGateway : IAccountGateway
         await ReconfigureAgentsAsync(ct).ConfigureAwait(false);
     }
 
+    public async Task<IReadOnlyList<AccountModel>> ListModelsAsync(CancellationToken ct = default)
+    {
+        CoreAppSettings app = await _settings.LoadAsync(ct).ConfigureAwait(false);
+        IReadOnlyList<GatewayModel> models = await _connectivity
+            .ListModelsAsync(app.AccountOrDefault.GatewayBaseUrl, ct).ConfigureAwait(false);
+        return models.Select(m => new AccountModel(m.Id, m.DisplayName)).ToList();
+    }
+
     public async Task<IReadOnlyList<string>> TestConnectionAsync(CancellationToken ct = default)
     {
         CoreAppSettings app = await _settings.LoadAsync(ct).ConfigureAwait(false);
-        return await _connectivity.ListModelsAsync(app.AccountOrDefault.GatewayBaseUrl, ct).ConfigureAwait(false);
+        IReadOnlyList<GatewayModel> models = await _connectivity
+            .ListModelsAsync(app.AccountOrDefault.GatewayBaseUrl, ct).ConfigureAwait(false);
+        return models.Select(m => m.DisplayName).ToList();
     }
 
     /// <summary>

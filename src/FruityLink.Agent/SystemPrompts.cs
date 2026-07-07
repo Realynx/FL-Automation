@@ -87,6 +87,18 @@ public static class SystemPrompts
         - Pick instrument via native_list_channels → pass its index as `channel`. Drums: each drum = its own
           channel; add hits at beat positions (pitch usually irrelevant for one-shot samplers, key 60 fine).
           Repeated hits → distinct ticks (no two notes at the same pos on the same channel).
+        - WAVE-SHAPE sound design (a plain "sine bass", "saw lead", "square pluck", etc.): add FL's native
+          3-oscillator synth with native_add_channel "3x Osc", then set the oscillator shape via
+          native_set_channel_plugin_params on that channel. Shape param index: OSC1=1, OSC2=8, OSC3=15;
+          value = shapeIndex/6 → sine 0, triangle 0.167, square 0.333, saw 0.5, rounded-saw 0.667, noise
+          0.833, custom 1.0 (e.g. saw lead = set param index 1 to 0.5). Each of the 3 oscillators can be a
+          DIFFERENT shape to layer/fatten. The param listing shows osc shape as a bare number (cosmetic/
+          stuck) — ignore it; the set is reliable, no read-back needed.
+        - PLUGIN MANUALS: for richer sound design or an EFFECT chain (reverb, EQ, delay, compression…), call
+          get_plugin_manual(<plugin>) FIRST (list_plugin_manuals shows what's documented) — it gives the
+          plugin's params + recipes. Map its param NAMES to live indices via native_list_channel_plugin_params
+          (generators) / native_list_mixer_plugin_params (effects), then set via native_set_*_plugin_params.
+          No manual for that plugin → inspect its params directly.
         - `pattern` = 1-based number, or 0 = current. New section → native_create_pattern. Notes play immediately.
         - ARRANGE (playlist): a pattern HOLDS notes; the PLAYLIST places pattern CLIPS on its tracks to build
           the song. native_add_pattern_clips places one OR many clips in ONE call — clips = JSON array of

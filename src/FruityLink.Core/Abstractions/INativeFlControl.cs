@@ -17,30 +17,50 @@ public interface INativeFlControl
     Task<double> GetTempoAsync(CancellationToken ct = default);
     /// <summary>Master volume, 0..12800 (≈7624 ≈ 0 dB).</summary>
     Task SetMasterVolumeAsync(int value, CancellationToken ct = default);
+    /// <summary>Read master volume, 0..12800 (symmetric with <see cref="SetMasterVolumeAsync"/>).</summary>
+    Task<int> GetMasterVolumeAsync(CancellationToken ct = default);
     /// <summary>Master pitch in cents, -1200..+1200.</summary>
     Task SetMasterPitchAsync(int cents, CancellationToken ct = default);
+    /// <summary>Read master pitch in cents (symmetric with <see cref="SetMasterPitchAsync"/>).</summary>
+    Task<int> GetMasterPitchAsync(CancellationToken ct = default);
     /// <summary>Global shuffle/swing, 0..128.</summary>
     Task SetShuffleAsync(int value, CancellationToken ct = default);
+    /// <summary>Read global shuffle/swing, 0..128 (symmetric with <see cref="SetShuffleAsync"/>).</summary>
+    Task<int> GetShuffleAsync(CancellationToken ct = default);
 
     // --- mixer (live-verified track volume; same protocol for pan/FX) ---
     /// <summary>Mixer track volume 0..12800 (track 0 = master).</summary>
     Task SetMixerVolumeAsync(int track, int value, CancellationToken ct = default);
+    /// <summary>Read a mixer track volume 0..12800 (symmetric with <see cref="SetMixerVolumeAsync"/>).</summary>
+    Task<long> GetMixerVolumeAsync(int track, CancellationToken ct = default);
     /// <summary>Mixer track pan 0..12800 (6400 = center).</summary>
     Task SetMixerPanAsync(int track, int value, CancellationToken ct = default);
+    /// <summary>Read a mixer track pan 0..12800 (symmetric with <see cref="SetMixerPanAsync"/>).</summary>
+    Task<int> GetMixerPanAsync(int track, CancellationToken ct = default);
     /// <summary>A mixer FX-slot plugin parameter (normalized fixed-point value).</summary>
     Task SetMixerFxParamAsync(int track, int slot, int paramIndex, long value, CancellationToken ct = default);
 
     // --- channel rack (live-verified) ---
     /// <summary>Channel volume 0..12800 (10000 = default 78%).</summary>
     Task SetChannelVolumeAsync(int channel, int value, CancellationToken ct = default);
+    /// <summary>Read channel volume 0..12800 (symmetric with <see cref="SetChannelVolumeAsync"/>).</summary>
+    Task<long> GetChannelVolumeAsync(int channel, CancellationToken ct = default);
     /// <summary>Channel pan 0..12800 (6400 = center).</summary>
     Task SetChannelPanAsync(int channel, int value, CancellationToken ct = default);
+    /// <summary>Read channel pan 0..12800 (symmetric with <see cref="SetChannelPanAsync"/>).</summary>
+    Task<int> GetChannelPanAsync(int channel, CancellationToken ct = default);
     /// <summary>Channel pitch in cents (0 = center).</summary>
     Task SetChannelPitchAsync(int channel, int cents, CancellationToken ct = default);
+    /// <summary>Read channel pitch in cents (symmetric with <see cref="SetChannelPitchAsync"/>).</summary>
+    Task<int> GetChannelPitchAsync(int channel, CancellationToken ct = default);
     /// <summary>Mute/unmute a channel.</summary>
     Task SetChannelMutedAsync(int channel, bool muted, CancellationToken ct = default);
+    /// <summary>Read a channel's mute state (symmetric with <see cref="SetChannelMutedAsync"/>).</summary>
+    Task<bool> GetChannelMutedAsync(int channel, CancellationToken ct = default);
     /// <summary>Route a channel to a mixer track (0..125).</summary>
     Task SetChannelFxRouteAsync(int channel, int mixerTrack, CancellationToken ct = default);
+    /// <summary>Read a channel's mixer-track route (symmetric with <see cref="SetChannelFxRouteAsync"/>).</summary>
+    Task<int> GetChannelFxRouteAsync(int channel, CancellationToken ct = default);
 
     // --- piano roll (current pattern) ---
     /// <summary>Add a note to a pattern's piano roll for a channel (pattern: 1-based, or &lt;=0 = current).
@@ -70,6 +90,14 @@ public interface INativeFlControl
     Task SelectChannelAsync(int index, CancellationToken ct = default);
     Task<string> GetChannelNameAsync(int index, CancellationToken ct = default);
     Task<string> ListChannelsAsync(CancellationToken ct = default);
+
+    // --- mixer tracks (identity: resolve a bus/track NAME to its index) ---
+    /// <summary>Number of mixer tracks (127 at rest: master + 125 inserts + current).</summary>
+    Task<int> GetMixerTrackCountAsync(CancellationToken ct = default);
+    /// <summary>Effective mixer track name (custom if set, else default by type: Master/Insert n/Current).</summary>
+    Task<string> GetMixerTrackNameAsync(int track, CancellationToken ct = default);
+    /// <summary>Custom-named mixer tracks (+ Master) as "index: name", for name→index resolution.</summary>
+    Task<string> ListMixerTracksAsync(CancellationToken ct = default);
 
     // --- mixer sends / EQ ---
     /// <summary>Set a mixer send srcTrack-&gt;dstTrack at level (1.0 ≈ unity).</summary>
@@ -119,9 +147,17 @@ public interface INativeFlControl
     // --- playlist tracks ---
     Task<string> ListPlaylistTracksAsync(CancellationToken ct = default);
     Task SetTrackNameAsync(int track, string name, CancellationToken ct = default);
+    /// <summary>Read a playlist track's name ("" when default; symmetric with <see cref="SetTrackNameAsync"/>).</summary>
+    Task<string> GetTrackNameAsync(int track, CancellationToken ct = default);
     Task SetTrackColorAsync(int track, int rgb, CancellationToken ct = default);
+    /// <summary>Read a playlist track's RGB color (symmetric with <see cref="SetTrackColorAsync"/>).</summary>
+    Task<int> GetTrackColorAsync(int track, CancellationToken ct = default);
     Task SetTrackMuteAsync(int track, bool muted, CancellationToken ct = default);
+    /// <summary>Read a playlist track's mute state (symmetric with <see cref="SetTrackMuteAsync"/>).</summary>
+    Task<bool> GetTrackMuteAsync(int track, CancellationToken ct = default);
     Task SetTrackCollapsedAsync(int track, bool collapsed, CancellationToken ct = default);
+    /// <summary>Read a playlist track's collapsed state (symmetric with <see cref="SetTrackCollapsedAsync"/>).</summary>
+    Task<bool> GetTrackCollapsedAsync(int track, CancellationToken ct = default);
     Task SelectTrackAsync(int track, CancellationToken ct = default);
 
     // --- playlist clips (arrangement) ---
@@ -135,6 +171,9 @@ public interface INativeFlControl
     Task DeleteClipAsync(int clipIndex, CancellationToken ct = default);
     /// <summary>Mute/unmute a playlist clip.</summary>
     Task SetClipMutedAsync(int clipIndex, bool muted, CancellationToken ct = default);
+    /// <summary>Read a playlist clip's mute state (clip+0x13 bit 0x20), symmetric with
+    /// <see cref="SetClipMutedAsync"/> — the read-before-write for granular clip-mute undo.</summary>
+    Task<bool> GetClipMutedAsync(int clipIndex, CancellationToken ct = default);
 
     // --- playlist clips: BULK (single call, single refresh/repaint at the end) ---
     // Each of these applies the whole batch and refreshes/repaints ONCE. The singular methods above
@@ -159,6 +198,8 @@ public interface INativeFlControl
 
     // --- song / transport state ---
     Task<string> GetSongStateAsync(CancellationToken ct = default);
+    /// <summary>Read song mode (true) vs pattern mode (false) — symmetric with <see cref="SetSongModeAsync"/>.</summary>
+    Task<bool> GetSongModeAsync(CancellationToken ct = default);
     /// <summary>
     /// FL's current status/hint bar text (the name/tooltip of whatever is under the mouse + current-operation
     /// messages, e.g. "Opening: Fruity Wrapper" at load), cleaned of FL's internal "tooltip|status" split and
@@ -193,6 +234,8 @@ public interface INativeFlControl
     /// <summary>Clone an arrangement (deep copy incl. clips); srcIdx&lt;0 = current. Returns the new index.</summary>
     Task<int> CloneArrangementAsync(int srcIdx, string? name, CancellationToken ct = default);
     Task RenameArrangementAsync(int idx, string name, CancellationToken ct = default);
+    /// <summary>Read an arrangement's name ("" when unnamed; symmetric with <see cref="RenameArrangementAsync"/>).</summary>
+    Task<string> GetArrangementNameAsync(int idx, CancellationToken ct = default);
     Task DeleteArrangementAsync(int idx, CancellationToken ct = default);
     Task SelectArrangementAsync(int idx, CancellationToken ct = default);
 

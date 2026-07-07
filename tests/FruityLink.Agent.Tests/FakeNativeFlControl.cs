@@ -1,3 +1,4 @@
+using System.Text;
 using FruityLink.Core.Abstractions;
 
 namespace FruityLink.Agent.Tests;
@@ -40,6 +41,9 @@ internal sealed class FakeNativeFlControl : INativeFlControl
     public Task SetShuffleAsync(int value, CancellationToken ct = default) => Record($"SetShuffleAsync({value})");
 
     // --- mixer ---
+    public Task<int> GetMixerTrackCountAsync(CancellationToken ct = default) => Record($"GetMixerTrackCountAsync()", 127);
+    public Task<string> GetMixerTrackNameAsync(int track, CancellationToken ct = default) => Record($"GetMixerTrackNameAsync({track})", track == 0 ? "Master" : $"Insert {track}");
+    public Task<string> ListMixerTracksAsync(CancellationToken ct = default) => Record($"ListMixerTracksAsync()", "0: Master");
     public Task SetMixerVolumeAsync(int track, int value, CancellationToken ct = default) => Record($"SetMixerVolumeAsync({track},{value})");
     public Task SetMixerPanAsync(int track, int value, CancellationToken ct = default) => Record($"SetMixerPanAsync({track},{value})");
     public Task SetMixerFxParamAsync(int track, int slot, int paramIndex, long value, CancellationToken ct = default) =>
@@ -122,30 +126,96 @@ internal sealed class FakeNativeFlControl : INativeFlControl
     public Task SetTrackCollapsedAsync(int track, bool collapsed, CancellationToken ct = default) => Record($"SetTrackCollapsedAsync({track},{collapsed})");
     public Task SelectTrackAsync(int track, CancellationToken ct = default) => Record($"SelectTrackAsync({track})");
 
-    // --- playlist clips ---
-    public Task<string> ListClipsAsync(int offset = 0, int track = -1, CancellationToken ct = default) =>
-        Record($"ListClipsAsync({offset},{track})", "0: pattern 1 @0 len 384 track 1");
-    public Task AddPatternClipAsync(int pattern, int track, int startTick, int lengthTick, CancellationToken ct = default) =>
-        Record($"AddPatternClipAsync({pattern},{track},{startTick},{lengthTick})");
+    // --- playlist clips (model-backed so add/delete/duplicate/mute round-trip; identity = pattern+track+start) ---
+    private sealed class FakeClip { public int Track, Start, Length, Pattern, Channel; public bool Muted; }
+    private readonly List<FakeClip> _clips = new()
+    {
+        new FakeClip { Track = 1, Start = 0,   Length = 384, Pattern = 1 },
+        new FakeClip { Track = 2, Start = 768, Length = 384, Pattern = 2 },
+    };
+
+    /// <summary>Stage an extra clip (tests use this for muted / audio (pattern &lt; 0) clips before an op).</summary>
+    public void SeedClip(int track, int start, int length, int pattern, bool muted = false, int channel = 0) =>
+        _clips.Add(new FakeClip { Track = track, Start = start, Length = length, Pattern = pattern, Muted = muted, Channel = channel });
+
+    public Task<string> ListClipsAsync(int offset = 0, int track = -1, CancellationToken ct = default)
+    {
+        Calls.Add(FormattableString.Invariant($"ListClipsAsync({offset},{track})"));
+        var sb = new StringBuilder();
+        int matched = 0, shown = 0;
+        for (int i = 0; i < _clips.Count; i++)
+        {
+            var c = _clips[i];
+            if (track > 0 && c.Track != track) continue;
+            matched++;
+            if (matched <= offset) continue;
+            string src = c.Pattern >= 0 ? $"pattern {c.Pattern}" : $"channel {c.Channel}";
+            sb.Append(FormattableString.Invariant($"[{i}] track {c.Track} start={c.Start} len={c.Length} {src}{(c.Muted ? " muted" : "")}\n"));
+            shown++;
+        }
+        return Task.FromResult(shown == 0 ? "(no clips)" : $"{shown} clips:\n" + sb.ToString().TrimEnd());
+    }
+
+    public Task AddPatternClipAsync(int pattern, int track, int startTick, int lengthTick, CancellationToken ct = default)
+    {
+        Calls.Add(FormattableString.Invariant($"AddPatternClipAsync({pattern},{track},{startTick},{lengthTick})"));
+        _clips.Add(new FakeClip { Track = track, Start = startTick, Length = lengthTick, Pattern = pattern });
+        return Task.CompletedTask;
+    }
     public Task MoveClipAsync(int clipIndex, int startTick, int track, CancellationToken ct = default) =>
         Record($"MoveClipAsync({clipIndex},{startTick},{track})");
     public Task ResizeClipAsync(int clipIndex, int lengthTick, CancellationToken ct = default) => Record($"ResizeClipAsync({clipIndex},{lengthTick})");
-    public Task DeleteClipAsync(int clipIndex, CancellationToken ct = default) => Record($"DeleteClipAsync({clipIndex})");
-    public Task SetClipMutedAsync(int clipIndex, bool muted, CancellationToken ct = default) => Record($"SetClipMutedAsync({clipIndex},{muted})");
+    public Task DeleteClipAsync(int clipIndex, CancellationToken ct = default) => DeleteClipsAsync(new[] { clipIndex }, ct);
+    public Task SetClipMutedAsync(int clipIndex, bool muted, CancellationToken ct = default)
+    {
+        Calls.Add(FormattableString.Invariant($"SetClipMutedAsync({clipIndex},{muted})"));
+        if (clipIndex >= 0 && clipIndex < _clips.Count) _clips[clipIndex].Muted = muted;
+        return Task.CompletedTask;
+    }
+    public Task<bool> GetClipMutedAsync(int clipIndex, CancellationToken ct = default)
+    {
+        Calls.Add(FormattableString.Invariant($"GetClipMutedAsync({clipIndex})"));
+        return Task.FromResult(clipIndex >= 0 && clipIndex < _clips.Count && _clips[clipIndex].Muted);
+    }
     public Task SliceClipAsync(int clipIndex, int tick, CancellationToken ct = default) => Record($"SliceClipAsync({clipIndex},{tick})");
-    public Task DuplicateClipAsync(int clipIndex, CancellationToken ct = default) => Record($"DuplicateClipAsync({clipIndex})");
+    public Task DuplicateClipAsync(int clipIndex, CancellationToken ct = default)
+    {
+        Calls.Add(FormattableString.Invariant($"DuplicateClipAsync({clipIndex})"));
+        if (clipIndex >= 0 && clipIndex < _clips.Count)
+        {
+            var s = _clips[clipIndex];
+            // FL's duplicate copies right after the source on the same track (mute state included).
+            _clips.Insert(clipIndex + 1, new FakeClip
+            { Track = s.Track, Start = s.Start + s.Length, Length = s.Length, Pattern = s.Pattern, Channel = s.Channel, Muted = s.Muted });
+        }
+        return Task.CompletedTask;
+    }
 
     // --- playlist clips (bulk) ---
-    public Task DeleteClipsAsync(IReadOnlyList<int> clipIndices, CancellationToken ct = default) =>
-        Record($"DeleteClipsAsync([{string.Join(",", clipIndices)}])");
+    public Task DeleteClipsAsync(IReadOnlyList<int> clipIndices, CancellationToken ct = default)
+    {
+        Calls.Add(FormattableString.Invariant($"DeleteClipsAsync([{string.Join(",", clipIndices)}])"));
+        foreach (int idx in clipIndices.Distinct().OrderByDescending(i => i))
+            if (idx >= 0 && idx < _clips.Count) _clips.RemoveAt(idx);
+        return Task.CompletedTask;
+    }
     public Task MoveClipsAsync(IReadOnlyList<ClipMove> moves, CancellationToken ct = default) =>
         Record($"MoveClipsAsync([{moves.Count} moves])");
-    public Task AddPatternClipsAsync(IReadOnlyList<PatternClipSpec> clips, CancellationToken ct = default) =>
-        Record($"AddPatternClipsAsync([{clips.Count} clips])");
+    public Task AddPatternClipsAsync(IReadOnlyList<PatternClipSpec> clips, CancellationToken ct = default)
+    {
+        Calls.Add(FormattableString.Invariant($"AddPatternClipsAsync([{clips.Count} clips])"));
+        foreach (var s in clips)
+            _clips.Add(new FakeClip { Track = s.Track, Start = s.StartTick, Length = s.LengthTick, Pattern = s.Pattern });
+        return Task.CompletedTask;
+    }
     public Task ResizeClipsAsync(IReadOnlyList<ClipResize> resizes, CancellationToken ct = default) =>
         Record($"ResizeClipsAsync([{resizes.Count} resizes])");
-    public Task SetClipsMutedAsync(IReadOnlyList<int> clipIndices, bool muted, CancellationToken ct = default) =>
-        Record($"SetClipsMutedAsync([{string.Join(",", clipIndices)}],{muted})");
+    public Task SetClipsMutedAsync(IReadOnlyList<int> clipIndices, bool muted, CancellationToken ct = default)
+    {
+        Calls.Add(FormattableString.Invariant($"SetClipsMutedAsync([{string.Join(",", clipIndices)}],{muted})"));
+        foreach (int idx in clipIndices) if (idx >= 0 && idx < _clips.Count) _clips[idx].Muted = muted;
+        return Task.CompletedTask;
+    }
 
     // --- song / transport state ---
     public Task<string> GetSongStateAsync(CancellationToken ct = default) => Record($"GetSongStateAsync()", "stopped @0, pattern mode");
@@ -166,7 +236,7 @@ internal sealed class FakeNativeFlControl : INativeFlControl
     public Task<string> ListRecentProjectsAsync(CancellationToken ct = default) => Record($"ListRecentProjectsAsync()", "C:\\songs\\demo.flp");
 
     // --- arrangements ---
-    public Task<string> ListArrangementsAsync(CancellationToken ct = default) => Record($"ListArrangementsAsync()", "0: Arrangement *");
+    public Task<string> ListArrangementsAsync(CancellationToken ct = default) => Record($"ListArrangementsAsync()", "* [0] Arrangement");
     public Task<int> AddArrangementAsync(string? name, CancellationToken ct = default) => Record($"AddArrangementAsync({name})", 1);
     public Task<int> CloneArrangementAsync(int srcIdx, string? name, CancellationToken ct = default) =>
         Record($"CloneArrangementAsync({srcIdx},{name})", 2);
@@ -174,13 +244,60 @@ internal sealed class FakeNativeFlControl : INativeFlControl
     public Task DeleteArrangementAsync(int idx, CancellationToken ct = default) => Record($"DeleteArrangementAsync({idx})");
     public Task SelectArrangementAsync(int idx, CancellationToken ct = default) => Record($"SelectArrangementAsync({idx})");
 
-    // --- automation clips ---
-    public Task<string> ListAutomationPointsAsync(int channel, CancellationToken ct = default) =>
-        Record($"ListAutomationPointsAsync({channel})", "0: @0 beats value 0.5 tension 0");
-    public Task AddAutomationPointAsync(int channel, double timeBeats, double value, double tension, CancellationToken ct = default) =>
-        Record($"AddAutomationPointAsync({channel},{timeBeats},{value},{tension})");
-    public Task DeleteAutomationPointAsync(int channel, int index, CancellationToken ct = default) =>
-        Record($"DeleteAutomationPointAsync({channel},{index})");
+    // --- automation clips (model-backed, real ListAutomationPoints format so identity parsing is realistic) ---
+    private sealed class FakePoint { public double Time, Value, Tension; public int Curve; }
+    private readonly Dictionary<int, List<FakePoint>> _autos = new();
+
+    /// <summary>Seed an automation point (delete-capture reads it; a non-zero curve forces a taint/.flp).</summary>
+    public void SeedAutomationPoint(int channel, double time, double value, double tension = 0, int curve = 0)
+    {
+        if (!_autos.TryGetValue(channel, out var list)) _autos[channel] = list = new();
+        list.Add(new FakePoint { Time = time, Value = value, Tension = tension, Curve = curve });
+        list.Sort((a, b) => a.Time.CompareTo(b.Time));
+    }
+
+    public Task<string> ListAutomationPointsAsync(int channel, CancellationToken ct = default)
+    {
+        Calls.Add(FormattableString.Invariant($"ListAutomationPointsAsync({channel})"));
+        if (!_autos.TryGetValue(channel, out var list) || list.Count == 0) return Task.FromResult("(no points)");
+        var sb = new StringBuilder(FormattableString.Invariant($"{list.Count} points (time in beats):\n"));
+        for (int i = 0; i < list.Count; i++)
+            sb.Append(FormattableString.Invariant(
+                $"  [{i}] t={list[i].Time:0.###} value={list[i].Value:0.###} tension={list[i].Tension:0.###} curve={list[i].Curve}\n"));
+        return Task.FromResult(sb.ToString().TrimEnd());
+    }
+
+    public Task AddAutomationPointAsync(int channel, double timeBeats, double value, double tension, CancellationToken ct = default)
+    {
+        Calls.Add(FormattableString.Invariant($"AddAutomationPointAsync({channel},{timeBeats},{value},{tension})"));
+        SeedAutomationPoint(channel, timeBeats, value, tension, 0);   // AddAutomationPoint always writes linear (curve 0)
+        return Task.CompletedTask;
+    }
+
+    public Task DeleteAutomationPointAsync(int channel, int index, CancellationToken ct = default)
+    {
+        Calls.Add(FormattableString.Invariant($"DeleteAutomationPointAsync({channel},{index})"));
+        if (_autos.TryGetValue(channel, out var list) && index >= 0 && index < list.Count) list.RemoveAt(index);
+        return Task.CompletedTask;
+    }
+
+    // --- symmetric getters (inverse-journal read-before-write) ---
+    public Task<int> GetMasterVolumeAsync(CancellationToken ct = default) => Record($"GetMasterVolumeAsync()", 7624);
+    public Task<int> GetMasterPitchAsync(CancellationToken ct = default) => Record($"GetMasterPitchAsync()", -100);
+    public Task<int> GetShuffleAsync(CancellationToken ct = default) => Record($"GetShuffleAsync()", 64);
+    public Task<long> GetMixerVolumeAsync(int track, CancellationToken ct = default) => Record($"GetMixerVolumeAsync({track})", 10000L);
+    public Task<int> GetMixerPanAsync(int track, CancellationToken ct = default) => Record($"GetMixerPanAsync({track})", 6400);
+    public Task<long> GetChannelVolumeAsync(int channel, CancellationToken ct = default) => Record($"GetChannelVolumeAsync({channel})", 10000L);
+    public Task<int> GetChannelPanAsync(int channel, CancellationToken ct = default) => Record($"GetChannelPanAsync({channel})", 6400);
+    public Task<int> GetChannelPitchAsync(int channel, CancellationToken ct = default) => Record($"GetChannelPitchAsync({channel})", -1200);
+    public Task<bool> GetChannelMutedAsync(int channel, CancellationToken ct = default) => Record($"GetChannelMutedAsync({channel})", false);
+    public Task<int> GetChannelFxRouteAsync(int channel, CancellationToken ct = default) => Record($"GetChannelFxRouteAsync({channel})", 3);
+    public Task<string> GetTrackNameAsync(int track, CancellationToken ct = default) => Record($"GetTrackNameAsync({track})", "OldName");
+    public Task<int> GetTrackColorAsync(int track, CancellationToken ct = default) => Record($"GetTrackColorAsync({track})", 0x112233);
+    public Task<bool> GetTrackMuteAsync(int track, CancellationToken ct = default) => Record($"GetTrackMuteAsync({track})", false);
+    public Task<bool> GetTrackCollapsedAsync(int track, CancellationToken ct = default) => Record($"GetTrackCollapsedAsync({track})", false);
+    public Task<bool> GetSongModeAsync(CancellationToken ct = default) => Record($"GetSongModeAsync()", false);
+    public Task<string> GetArrangementNameAsync(int idx, CancellationToken ct = default) => Record($"GetArrangementNameAsync({idx})", "Arr");
 
     // --- render / export ---
     public Task OpenExportDialogAsync(int formatIndex = 0, CancellationToken ct = default) => Record($"OpenExportDialogAsync({formatIndex})");

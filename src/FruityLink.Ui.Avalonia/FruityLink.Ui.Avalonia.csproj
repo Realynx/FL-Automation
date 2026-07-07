@@ -40,6 +40,7 @@
     <PackageReference Include="Avalonia.Fonts.Inter" Version="11.3.18" />
     <!-- Dev-only visual tree inspector (F12). Compiled out of Release. -->
     <PackageReference Include="Avalonia.Diagnostics" Version="11.3.18" Condition="'$(Configuration)' == 'Debug'" />
+    <PackageReference Include="Markdown.Avalonia.Tight" Version="11.0.3" />
   </ItemGroup>
 
   <ItemGroup>

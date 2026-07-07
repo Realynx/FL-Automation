@@ -1,7 +1,25 @@
+using System.Security.Cryptography;
+using System.Text;
 using FruityLink.Core.Abstractions;
 using FruityLink.Core.Domain;
 
 namespace FruityLink.Knowledge;
+
+/// <summary>
+/// Outcome of an incremental text ingest. <see cref="Reused"/> is true when the source's content
+/// was unchanged since the last build and its existing embeddings were kept (no embedding call).
+/// </summary>
+/// <param name="SourceId">Stable source id (derived from the URI).</param>
+/// <param name="Uri">Source URI.</param>
+/// <param name="Title">Source title.</param>
+/// <param name="ChunkCount">Number of chunks now indexed for the source.</param>
+/// <param name="Reused">True when embeddings were reused (content unchanged); false when embedded.</param>
+public sealed record TextIngestResult(
+    string SourceId,
+    string Uri,
+    string Title,
+    int ChunkCount,
+    bool Reused);
 
 /// <summary>
 /// RAG knowledge engine: ingests web and file sources, embeds their chunks, persists them to a
@@ -74,6 +92,60 @@ public sealed class KnowledgeService : IKnowledgeIngestor, IKnowledgeRetriever
         return await IngestAsync(uri: path, title: title, text: text, ct).ConfigureAwait(false);
     }
 
+    /// <summary>
+    /// Ingests pre-extracted text (already plain/markdown) under an explicit citation URI and
+    /// title — the chunk → embed → persist pipeline, skipping HTML/PDF extraction. Used by the
+    /// offline manual-corpus builder.
+    ///
+    /// <para>INCREMENTAL: the source id is derived deterministically from <paramref name="uri"/>
+    /// and the text is fingerprinted. If a source with the same URI and identical content is
+    /// already indexed, its embeddings are REUSED and no embedding call is made
+    /// (<see cref="TextIngestResult.Reused"/> = true). This makes re-builds cheap (only changed
+    /// pages are re-embedded) and makes a long first build resumable after a failure.</para>
+    /// </summary>
+    /// <param name="uri">Canonical source URI recorded for citation (e.g. the online manual URL).</param>
+    /// <param name="title">Human-readable source title.</param>
+    /// <param name="text">The source text to chunk and embed.</param>
+    /// <param name="ct">Cancellation token.</param>
+    public async Task<TextIngestResult> AddTextSourceAsync(
+        string uri, string title, string text, CancellationToken ct = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(uri);
+        ArgumentException.ThrowIfNullOrWhiteSpace(title);
+        text ??= string.Empty;
+
+        string sourceId = StableSourceId(uri);
+        string hash = ContentHash(text);
+
+        // Skip unchanged content (a non-empty hash match) — reuse existing embeddings.
+        if (_store.GetSourceMeta(sourceId) is { } meta && hash.Length > 0 && meta.ContentHash == hash)
+            return new TextIngestResult(sourceId, uri, title, meta.ChunkCount, Reused: true);
+
+        KnowledgeSource source = await EmbedAndPersistAsync(sourceId, uri, title, text, hash, ct)
+            .ConfigureAwait(false);
+        return new TextIngestResult(sourceId, uri, title, source.ChunkCount, Reused: false);
+    }
+
+    /// <summary>
+    /// Removes every indexed source whose URI is NOT in <paramref name="keepUris"/> — used after a
+    /// re-crawl to drop pages that no longer exist upstream. Returns the number pruned. Intended
+    /// for a DEDICATED corpus database (it will delete any source not in the keep set).
+    /// </summary>
+    public Task<int> PruneSourcesNotInAsync(IEnumerable<string> keepUris, CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(keepUris);
+        var keepIds = new HashSet<string>(keepUris.Select(StableSourceId), StringComparer.Ordinal);
+
+        int pruned = 0;
+        foreach (KnowledgeSource source in _store.ListSources())
+        {
+            ct.ThrowIfCancellationRequested();
+            if (!keepIds.Contains(source.Id) && _store.DeleteSource(source.Id))
+                pruned++;
+        }
+        return Task.FromResult(pruned);
+    }
+
     /// <inheritdoc />
     public Task<IReadOnlyList<KnowledgeSource>> ListSourcesAsync(CancellationToken ct = default)
     {
@@ -122,8 +194,16 @@ public sealed class KnowledgeService : IKnowledgeIngestor, IKnowledgeRetriever
             .ToList();
     }
 
-    /// <summary>Shared chunk → embed → persist pipeline for both web and file sources.</summary>
-    private async Task<KnowledgeSource> IngestAsync(string uri, string title, string text, CancellationToken ct)
+    /// <summary>Shared chunk → embed → persist pipeline for web/file sources (random source id).</summary>
+    private Task<KnowledgeSource> IngestAsync(string uri, string title, string text, CancellationToken ct)
+        => EmbedAndPersistAsync(NewSourceId(), uri, title, text, contentHash: "", ct);
+
+    /// <summary>
+    /// Chunk → embed → persist for an EXPLICIT source id and content hash. Replaces any existing
+    /// chunks for the id (idempotent), so a changed source is re-embedded cleanly in place.
+    /// </summary>
+    private async Task<KnowledgeSource> EmbedAndPersistAsync(
+        string sourceId, string uri, string title, string text, string contentHash, CancellationToken ct)
     {
         // The chunker already trims and drops blanks; filter once more so a malformed source can
         // never send an empty/whitespace chunk to the embedding API (a guaranteed failure for many backends).
@@ -131,13 +211,12 @@ public sealed class KnowledgeService : IKnowledgeIngestor, IKnowledgeRetriever
             .Where(c => !string.IsNullOrWhiteSpace(c))
             .ToList();
 
-        string sourceId = NewSourceId();
         var source = new KnowledgeSource(sourceId, uri, title, DateTimeOffset.UtcNow, chunkTexts.Count);
 
         if (chunkTexts.Count == 0)
         {
             // Nothing to embed; still register the (empty) source so it appears in listings.
-            _store.UpsertSource(source);
+            _store.UpsertSource(source, contentHash);
             _store.UpsertChunks(sourceId, Array.Empty<ChunkRecord>());
             return source;
         }
@@ -153,10 +232,18 @@ public sealed class KnowledgeService : IKnowledgeIngestor, IKnowledgeRetriever
         for (int i = 0; i < chunkTexts.Count; i++)
             records.Add(new ChunkRecord(Id: $"{sourceId}:{i}", Ordinal: i, Text: chunkTexts[i], Vector: vectors[i]));
 
-        _store.UpsertSource(source);
+        _store.UpsertSource(source, contentHash);
         _store.UpsertChunks(sourceId, records);
         return source;
     }
 
     private static string NewSourceId() => Guid.NewGuid().ToString("N");
+
+    /// <summary>A deterministic source id derived from the URI (stable across rebuilds).</summary>
+    private static string StableSourceId(string uri)
+        => Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(uri))).ToLowerInvariant();
+
+    /// <summary>A content fingerprint of the source text (empty string for empty text).</summary>
+    private static string ContentHash(string text)
+        => text.Length == 0 ? "" : Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(text))).ToLowerInvariant();
 }

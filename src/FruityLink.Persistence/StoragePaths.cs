@@ -26,6 +26,7 @@ public sealed class StoragePaths
         ProjectVersionsDirectory = Path.Combine(VersionsDirectory, "project");
         SettingsFile = Path.Combine(BaseDirectory, "settings.json");
         SecretsFile = Path.Combine(BaseDirectory, "secrets.json");
+        KnowledgeDbFile = Path.Combine(BaseDirectory, "fl-manual.db");
 
         EnsureDirectories();
     }
@@ -47,6 +48,10 @@ public sealed class StoragePaths
 
     /// <summary>Full path to the encrypted secrets JSON file.</summary>
     public string SecretsFile { get; }
+
+    /// <summary>Full path to the shipped FL Studio manual RAG vector DB (<c>fl-manual.db</c>),
+    /// staged here by the installer/build. May not exist (manual search then stays disabled).</summary>
+    public string KnowledgeDbFile { get; }
 
     /// <summary>Returns the path to a chat session's JSON file.</summary>
     /// <param name="sessionId">Chat session id.</param>
@@ -74,6 +79,12 @@ public sealed class StoragePaths
     /// <summary>The readable state snapshot for a commit (<c>.../{commitId}.state.json</c>).</summary>
     public string ProjectStateFile(string sessionId, string commitId) =>
         Path.Combine(ProjectVersionDir(sessionId), commitId + ".state.json");
+
+    /// <summary>The inverse-operation journal for a commit (<c>.../{commitId}.ops.json</c>): the per-op
+    /// before/after values that drive granular undo/redo, written once at commit and read only when that
+    /// commit is undone/redone.</summary>
+    public string ProjectOpsFile(string sessionId, string commitId) =>
+        Path.Combine(ProjectVersionDir(sessionId), commitId + ".ops.json");
 
     /// <summary>Creates the base, chats and versions directories if they do not yet exist.</summary>
     public void EnsureDirectories()

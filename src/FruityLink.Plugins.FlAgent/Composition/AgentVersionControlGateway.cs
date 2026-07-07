@@ -32,7 +32,7 @@ internal sealed class AgentVersionControlGateway : IProjectVersionControl
     public VersionCommit? Current => _backend.Head is { } h ? Map(h) : null;
 
     public Task CommitAsync(string label, CancellationToken ct = default) =>
-        _backend.CommitAsync(label, null, null, CommitTrigger.Manual, ct);
+        _backend.CommitAsync(label, null, null, CommitTrigger.Manual, changes: null, ct);
 
     public Task UndoAsync(CancellationToken ct = default) => _backend.UndoAsync(ct);
 

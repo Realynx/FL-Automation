@@ -191,6 +191,7 @@ public sealed class VersioningPluginTests
         public Task OpenSessionAsync(string sessionId, CancellationToken ct = default) => Task.CompletedTask;
         public Task<ProjectCommit?> CommitAsync(string? label = null, string? chatNodeId = null,
             IReadOnlyList<string>? operations = null, CommitTrigger trigger = CommitTrigger.Manual,
+            IReadOnlyList<ChangeRecord>? changes = null,
             CancellationToken ct = default) => Task.FromResult<ProjectCommit?>(null);
         public Task<ProjectCommit?> UndoAsync(CancellationToken ct = default) => Task.FromResult<ProjectCommit?>(null);
         public Task<ProjectCommit?> RedoAsync(CancellationToken ct = default) => Task.FromResult<ProjectCommit?>(null);

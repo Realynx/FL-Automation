@@ -29,6 +29,7 @@ internal sealed class AvaloniaChatPresenter : IDisposable
     private readonly bool _ownsDictation;
     private readonly Action<string> _log;
     private readonly FruityLink.Agent.ProjectVersionCoordinator? _versionCoordinator;
+    private readonly FruityLink.Llm.Auth.BugReportClient? _bugReports;
 
     private CancellationTokenSource? _turnCts;
     private ChatMessage? _current;
@@ -44,7 +45,8 @@ internal sealed class AvaloniaChatPresenter : IDisposable
         bool ownsDictation,
         IAccountGateway? accountGateway = null,
         FruityLink.Ui.Avalonia.Services.IProjectVersionControl? versionControl = null,
-        FruityLink.Agent.ProjectVersionCoordinator? versionCoordinator = null)
+        FruityLink.Agent.ProjectVersionCoordinator? versionCoordinator = null,
+        FruityLink.Llm.Auth.BugReportClient? bugReports = null)
     {
         _host = host;
         _vm = vm;
@@ -53,8 +55,15 @@ internal sealed class AvaloniaChatPresenter : IDisposable
         _dictation = dictation;
         _ownsDictation = ownsDictation;
         _versionCoordinator = versionCoordinator;
+        _bugReports = bugReports;
 
-        _host.Post(() => _vm.CanDictate = _dictation is not null);   // show the mic only when wired
+        _host.Post(() =>
+        {
+            _vm.CanDictate = _dictation is not null;   // show the mic only when wired
+            // Deterministic "finish dictation before Send": Send awaits this (stop → final render → apply)
+            // instead of the VM's racy toggle-then-observe fallback that sent before IsFinalizing was set.
+            if (_dictation is not null) _vm.DictationFinalizer = FinalizeDictationForSendAsync;
+        });
 
         // Point the Settings ACCOUNT card at the agent's real FL Automate account (auth service +
         // settings.json). Marshalled onto the Avalonia UI thread; until then the card shows
@@ -70,6 +79,7 @@ internal sealed class AvaloniaChatPresenter : IDisposable
         _vm.MessageSubmitted += OnMessageSubmitted;
         _vm.CancelRequested += OnCancel;
         _vm.MicToggleRequested += OnMicToggle;
+        if (_bugReports is not null) _vm.BugReportRequested += OnBugReportRequested;
         _agent.ToolInvoked += OnToolInvoked;
         if (_dictation is not null)
         {
@@ -127,7 +137,24 @@ internal sealed class AvaloniaChatPresenter : IDisposable
             // Surface a clear, reassuring message (with the backend's HTTP status when it's a
             // transient 5xx/network failure worth retrying) instead of a raw exception string.
             string message = BuildTurnErrorMessage(ex);
-            _host.Post(() => { msg.Text = message; msg.IsError = true; });
+            _host.Post(() =>
+            {
+                if (msg.Text.Length > 0)
+                {
+                    // The stream died AFTER answer text reached the bubble: KEEP the partial and
+                    // APPEND a marker (mirroring the cancellation branch above) — overwriting here
+                    // would throw away text the user is mid-reading. The runner recorded the same
+                    // partial as the assistant turn in history, so "continue" picks up from it.
+                    // Not flagged IsError: the partial is real answer content, and the error-style
+                    // retry affordance would misrepresent a half-delivered reply as a total loss.
+                    msg.Text += PartialKeptNotice;
+                }
+                else
+                {
+                    msg.Text = message;
+                    msg.IsError = true;
+                }
+            });
             _log("[fl-agent] turn error: " + ex.Message);
         }
         finally
@@ -145,6 +172,12 @@ internal sealed class AvaloniaChatPresenter : IDisposable
                 _ = Task.Run(() => coordinator.OnTurnCompletedAsync(null, CancellationToken.None));
         }
     }
+
+    /// <summary>Appended to a bubble whose stream died AFTER partial answer text arrived — the
+    /// partial is kept (it is also recorded in the agent's history) and the user is told how to
+    /// resume.</summary>
+    internal const string PartialKeptNotice =
+        "\n\n⚠ Connection dropped mid-reply — partial answer kept. Say \"continue\" to pick up from here.";
 
     /// <summary>
     /// Builds the user-facing text for a failed turn. Because a failed turn now KEEPS the user's
@@ -195,6 +228,52 @@ internal sealed class AvaloniaChatPresenter : IDisposable
         catch { /* already disposed / cancelled */ }
     }
 
+    // ---- bug reports ("Report bug" on a failed turn; fires on the UI thread) ----
+
+    /// <summary>How many trailing transcript turns ride along with a bug report (context for triage).</summary>
+    private const int BugReportTranscriptTurns = 12;
+
+    private void OnBugReportRequested(ChatMessage failed)
+    {
+        FruityLink.Llm.Auth.BugReportClient? client = _bugReports;
+        if (client is null) return;
+
+        // Snapshot the transcript ON the UI thread (Messages is UI-thread-owned), then ship it on a
+        // background task — a bug report must never block or break the chat.
+        var transcript = new List<FruityLink.Llm.Auth.BugReportTurn>();
+        foreach (ChatMessage m in _vm.Messages)
+        {
+            string role = m.IsUser ? "user" : m.IsAssistant ? "assistant" : "system";
+            string content = m.Text;
+            if (m.IsAssistant && m.HasToolCalls)
+                content = string.Join("\n", m.ToolCalls) + (content.Length > 0 ? "\n" + content : string.Empty);
+            if (content.Length > 0)
+                transcript.Add(new FruityLink.Llm.Auth.BugReportTurn(role, content));
+        }
+        if (transcript.Count > BugReportTranscriptTurns)
+            transcript.RemoveRange(0, transcript.Count - BugReportTranscriptTurns);
+
+        string errorMessage = failed.Text;
+        string clientVersion = typeof(AvaloniaChatPresenter).Assembly.GetName().Version?.ToString() ?? "unknown";
+
+        _ = Task.Run(async () =>
+        {
+            bool sent = await client.SendAsync(errorMessage, transcript, clientVersion).ConfigureAwait(false);
+            if (sent)
+            {
+                _log("[fl-agent] bug report filed with the gateway.");
+            }
+            else
+            {
+                // The VM already flashed an optimistic "sent" — correct the record with a quiet info
+                // line rather than a new error bubble (a bug report must never cause a new bug).
+                _log("[fl-agent] bug report could not be delivered (offline or signed out).");
+                _host.Post(() => _vm.AddInfo(
+                    "Couldn't deliver the bug report (offline or signed out). It's safe to try again later."));
+            }
+        });
+    }
+
     private void OnToolInvoked(ToolCallInfo info)
     {
         // Raised on the SK execution thread — marshal to the Avalonia UI thread.
@@ -240,9 +319,36 @@ internal sealed class AvaloniaChatPresenter : IDisposable
         string text;
         try { text = await _dictation.StopAndTranscribeAsync().ConfigureAwait(false); }
         catch (Exception ex) { _host.Post(() => _vm.SetTransientStatus("Transcription failed: " + ex.Message)); return; }
-        // Route through the VM race guard: if a send already consumed the composer, this late final
-        // transcript is dropped instead of resurrecting stale text as a duplicate.
-        _host.Post(() => _vm.ApplyDictatedText(Combine(prefix, text)));
+        // Route through the VM race guard (drops a late transcript if a send already consumed the box) and
+        // AWAIT the apply so a caller awaiting this method (the Send finalizer) sees the populated composer.
+        await PostAwait(() => _vm.ApplyDictatedText(Combine(prefix, text)));
+    }
+
+    /// <summary>Awaitable "finish dictation for a Send", wired to <see cref="ChatViewModel.DictationFinalizer"/>:
+    /// stop the mic, await the FINAL Whisper render, and apply the transcript to the composer BEFORE
+    /// returning — so Send waits for the text instead of racing it (the VM's toggle-then-observe fallback
+    /// sent before the "Transcribing" state was even set). Idempotent: safe when idle / already finalizing.</summary>
+    private async Task FinalizeDictationForSendAsync()
+    {
+        if (_dictation is null) return;
+        if (_dictation.State == DictationState.Recording)
+        {
+            await FinalizeDictationAsync().ConfigureAwait(false);   // stop + transcribe + (awaited) apply
+            return;
+        }
+        // A finalize is already running (mic toggled off just before Send): wait for it to settle to Idle,
+        // then flush so its queued ApplyDictatedText post lands before Send reads the composer.
+        for (int i = 0; i < 400 && _dictation.State == DictationState.Transcribing; i++)
+            await Task.Delay(25).ConfigureAwait(false);
+        await PostAwait(() => { }).ConfigureAwait(false);
+    }
+
+    /// <summary>Run <paramref name="action"/> on the UI thread and AWAIT its completion (via the host post).</summary>
+    private Task PostAwait(Action action)
+    {
+        var tcs = new TaskCompletionSource();
+        _host.Post(() => { try { action(); } finally { tcs.TrySetResult(); } });
+        return tcs.Task;
     }
 
     private static string Combine(string prefix, string text)
@@ -280,6 +386,7 @@ internal sealed class AvaloniaChatPresenter : IDisposable
         _vm.MessageSubmitted -= OnMessageSubmitted;
         _vm.CancelRequested -= OnCancel;
         _vm.MicToggleRequested -= OnMicToggle;
+        if (_bugReports is not null) _vm.BugReportRequested -= OnBugReportRequested;
         _agent.ToolInvoked -= OnToolInvoked;
         try { _versionCoordinator?.Dispose(); } catch { /* best-effort */ }
 

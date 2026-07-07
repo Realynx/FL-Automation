@@ -9,6 +9,14 @@
     <PackageReference Include="Microsoft.SemanticKernel" />
   </ItemGroup>
 
+  <!-- The plugin "man db": each plugin manual is a markdown file under Manuals\ embedded into this
+       assembly, so ManualStore loads them from FruityLink.Agent.dll wherever it deploys (incl. the FL
+       Agent plugin publish closure) with no build-and-stage change. Adding a plugin = drop a new
+       Manuals\*.md file and rebuild; it is auto-discovered. Logical name: FruityLink.Agent.Manuals.<file>.md -->
+  <ItemGroup>
+    <EmbeddedResource Include="Manuals\**\*.md" />
+  </ItemGroup>
+
   <ItemGroup>
     <ProjectReference Include="..\FruityLink.Core\FruityLink.Core.csproj" />
     <ProjectReference Include="..\FruityLink.Llm\FruityLink.Llm.csproj" />

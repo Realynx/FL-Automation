@@ -204,7 +204,7 @@ CMAKE_STATIC_LINKER_FLAGS_RELWITHDEBINFO:STRING=
 CMAKE_VERBOSE_MAKEFILE:BOOL=FALSE
 
 //Compile the external debug named-pipe server + debug plugin commands
-FRUITYLINK_DEBUG:BOOL=OFF
+FRUITYLINK_DEBUG:BOOL=ON
 
 //Value Computed by CMake
 FlBridge_BINARY_DIR:STATIC=C:/Users/poofi/source/repos/FruityLoopsLLMLink/tools/bridge/build

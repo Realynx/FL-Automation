@@ -41,6 +41,7 @@ internal static class ToolSubsetSelector
         "get_creative_soul",
         "list_scales",
         "build_chord_progression",
+        "search_manual",        // FL Studio manual RAG — always available so "how do I…" always works
         "search_knowledge",
         "run_parallel_tasks",   // resolves only on the main agent (sub-agents don't register it)
         // native_set_tempo is edit-distance-1 from native_get_tempo, which the CoreReadPrefixes rule

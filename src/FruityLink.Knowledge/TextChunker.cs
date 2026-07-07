@@ -64,11 +64,16 @@ internal sealed class TextChunker
 
             AddIfNotBlank(chunks, normalized[start..breakAt]);
 
-            // Advance, keeping ~overlap characters, but always make forward progress.
+            // Advance, keeping ~overlap characters, but ALWAYS make forward progress. The overlap
+            // alignment walks back to the start of a word; on a long UNBROKEN token (e.g. a 100+
+            // char URL) that walk can land at or before `start`, which would re-emit the same
+            // window forever (an infinite loop / CPU spin). breakAt is always > start, so fall back
+            // to it whenever the aligned overlap fails to advance.
             int next = breakAt - _overlapChars;
             if (next <= start)
                 next = breakAt;
-            start = AlignOverlapToWordStart(normalized, next, breakAt);
+            int aligned = AlignOverlapToWordStart(normalized, next, breakAt);
+            start = aligned > start ? aligned : breakAt;
         }
 
         return chunks;

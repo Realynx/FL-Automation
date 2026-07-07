@@ -1,6 +1,6 @@
 using System.Net;
 using System.Net.Http;
-using System.Net.Http.Json;
+using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using FruityLink.Core.Abstractions;
@@ -75,8 +75,8 @@ public sealed class AccountAuthService : IAccountAuth
         try
         {
             // Exact body shape — the API validates strictly and rejects unknown fields.
-            response = await _http.PostAsJsonAsync(
-                    $"{apiBase}/auth/login", new LoginRequest(email.Trim(), password), Json, ct)
+            response = await _http.PostAsync(
+                    $"{apiBase}/auth/login", JsonBody(new LoginRequest(email.Trim(), password)), ct)
                 .ConfigureAwait(false);
         }
         catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException && !ct.IsCancellationRequested)
@@ -96,8 +96,7 @@ public sealed class AccountAuthService : IAccountAuth
                 throw new AccountAuthException(await ReadErrorAsync(response,
                     $"Sign-in failed ({(int)response.StatusCode}). Please try again.", ct).ConfigureAwait(false));
 
-            TokenPairResponse? tokens = await response.Content
-                .ReadFromJsonAsync<TokenPairResponse>(Json, ct).ConfigureAwait(false);
+            TokenPairResponse? tokens = await ReadJsonAsync<TokenPairResponse>(response, ct).ConfigureAwait(false);
             if (tokens?.AccessToken is null || tokens.RefreshToken is null)
                 throw new AccountAuthException("Sign-in failed: the server returned an unexpected response.");
 
@@ -140,8 +139,8 @@ public sealed class AccountAuthService : IAccountAuth
             try
             {
                 string apiBase = await GetApiBaseAsync(ct).ConfigureAwait(false);
-                using HttpResponseMessage _ = await _http.PostAsJsonAsync(
-                        $"{apiBase}/auth/logout", new RefreshRequest(refreshToken), Json, ct)
+                using HttpResponseMessage _ = await _http.PostAsync(
+                        $"{apiBase}/auth/logout", JsonBody(new RefreshRequest(refreshToken)), ct)
                     .ConfigureAwait(false);
             }
             catch { /* offline logout still succeeds locally */ }
@@ -216,8 +215,8 @@ public sealed class AccountAuthService : IAccountAuth
             HttpResponseMessage response;
             try
             {
-                response = await _http.PostAsJsonAsync(
-                        $"{apiBase}/auth/refresh", new RefreshRequest(refreshToken), Json, ct)
+                response = await _http.PostAsync(
+                        $"{apiBase}/auth/refresh", JsonBody(new RefreshRequest(refreshToken)), ct)
                     .ConfigureAwait(false);
             }
             catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException && !ct.IsCancellationRequested)
@@ -244,8 +243,7 @@ public sealed class AccountAuthService : IAccountAuth
                     return null;
                 }
 
-                TokenPairResponse? tokens = await response.Content
-                    .ReadFromJsonAsync<TokenPairResponse>(Json, ct).ConfigureAwait(false);
+                TokenPairResponse? tokens = await ReadJsonAsync<TokenPairResponse>(response, ct).ConfigureAwait(false);
                 if (tokens?.AccessToken is null || tokens.RefreshToken is null)
                     return null;
 
@@ -261,6 +259,21 @@ public sealed class AccountAuthService : IAccountAuth
     }
 
     // ── helpers ──────────────────────────────────────────────────────────────────────────────
+
+    // Deliberately NOT System.Net.Http.Json (PostAsJsonAsync/ReadFromJsonAsync): the plugin ALC
+    // loads its own System.Text.Json (10.x) while System.Net.Http.Json resolves from the host
+    // framework (9.x), and the mixed type identities blow up with MissingMethodException inside
+    // FL. Serializing by hand keeps every JSON type on the plugin-local assembly.
+    private static StringContent JsonBody<T>(T body)
+        => new(JsonSerializer.Serialize(body, Json), Encoding.UTF8, "application/json");
+
+    private static async Task<T?> ReadJsonAsync<T>(HttpResponseMessage response, CancellationToken ct)
+        where T : class
+    {
+        string body = await response.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
+        try { return JsonSerializer.Deserialize<T>(body, Json); }
+        catch (JsonException) { return null; } // callers treat null as "unexpected response"
+    }
 
     private static bool HasSlack(string token)
         => AccessTokenPayload.Decode(token) is { } p && p.ExpiresAt - DateTimeOffset.UtcNow > RefreshSkew;

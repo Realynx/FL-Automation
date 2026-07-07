@@ -32,16 +32,35 @@ Integer-only workarounds exist (poke + recompute) for automation; param read can
 - Arrangements: count `0x11FB1A0`, name `0x11FB160`, add `0x11FABC0`, delete `0x11FB1C0`, setCurrent `0x11FC880`.
 - → tools native_list_playlist_tracks, native_set_track_name/color/mute/solo/collapse/group/height/select.
 
-## Transport / song state — task #29
-- Playhead READ: songTick `*(int*)0x14A92D0`; ticks/beat `*(int*)0x14A9E40`; ticks/bar `*(int*)0x14A8540`.
-- Song-vs-pattern mode READ `*(int*)0x14A8670` (0 pat/1 song); TOGGLE `FLgl_GlobalCommandDispatch(15,1,2,0xf)`.
-- Playing `*(int*)0x14A81C0==1`. Controls: PLAY(10,1,2,8) STOP(11,0,0,8) RECtoggle(12,1,0,0xf).
-- Song arrangement obj `arr = *(0x14ABA80) ?: *(0x14AAB88)` (`FLpl_GetSongArrangementObj @0xE1EC70`).
-- Loop sel: start `*(int*)(arr+0xd4c)`, end `+0xd50`. Song length(bars) `*(int*)(arr+0xb04)`.
-- Markers: mgr `*(arr+0xd5c)`; arr `*mgr`; count `*(int*)(arr-8)`; entry `+i*0x34`: tick`+0`, type`+4`, name=UStr@`*(entry+8)`.
-  Add `FLtr_AddTimelineMarkerCore(arr,tick,nameStr,0,4,4) @0xD523C0`; jump ops 5/6.
-- Seek `FLtr_SeekToSongTick(double,byte) @0x10E3470` — XMM double (needs bridge enh) or poke 0x14A92D0 + refresh.
-- → tools native_get_song_state, native_set_song_mode, native_set_loop, native_list/add_marker (+ seek when XMM lands).
+## Transport / song state — task #29  ⚠️ CORRECTED 2026-07-03 (live-verified; the reads below were WRONG)
+- **Indirection gotcha:** `0x14A8670` (mode), `0x14A81C0` (playing), `0x14A92D0` (tick), the play-range
+  globals `0x14A95F8`/`0x14ABB38`, and `0x14AA4C8` (toolbar) are all **.data→.bss POINTER slots**, NOT direct
+  ints. Correct read is `*(*(slot))`. Reading `*(int*)0x14A8670` returns the *pointer* (never 0/1), which
+  silently broke mode/play detection (and made `SetSongMode` toggle blindly). The task-#29 `*(int*)0x14A...`
+  forms above are all one deref short.
+- **Mode** = `*(*(0x14A8670))` (0 pat / 1 song), TOGGLE `FLgl_GlobalCommandDispatch(15,1,2,0xf)`.
+  **Playing** = `*(*(0x14A81C0))==1`. Controls: PLAY(10,1,2,8) STOP(11,1,2,8) RECtoggle(12,1,2,0xf).
+- **Playhead + PLAY RANGE (what the transport actually loops between):** the song-position slider hangs off
+  the TOOLBAR form — `toolbar = *(*(0x14AA4C8))`; `sp = *(toolbar+0x7E8)`. Then `sp+0x3C0` = current tick,
+  `sp+0x3B8` = range MIN, `sp+0x3BC` = range MAX (= song end - 1, or an active time-selection end). VERIFIED:
+  the playhead only advances inside `[sp+0x3B8, sp+0x3BC]`.
+- **Song length (ticks)** = `*(*(0x14AAB88)) + 0xB04` (the field `FLpy_transport_getSongLength @0xE0F910`
+  reads). The SLIDER (`0x14ABEA8`→`0x14ABB38`) is recomputed EVERY transport tick FROM +0xB04 — so poking the
+  transient range globals is overwritten; but +0xB04 itself is refreshed from the playlist ONLY on: an
+  arrangement switch (`FLpl_SetCurrentArrangement @0x11FC880`), or a pattern whose playlist-block length
+  changed (`FLpat_RebuildPatternAndRefresh @0x11D4140` → `FUN_00D37450`, whose length scan is mode-gated on
+  songObj+0xB00>=2 and dereferences the possibly-null songObj+0xD04). ⇒ after a RAW clip add/move/delete,
+  recompute in TWO steps (re/25 "RECURRED AGAIN"): (1) re-select the current arrangement
+  `FLpl_SetCurrentArrangement(*(int*)0x149E8B4)` for FL's full refresh — its `FUN_00D37450(songObj,1)` runs
+  UNCONDITIONALLY (NO same-index short-circuit; verified by decompile+live), so this is correct WHEN b00>=2 &
+  d04 valid; (2) THEN, mode/d04-INDEPENDENTLY, grow `*(*(0x14AAB88))+0xB04` to `max(clip start+len)` read
+  straight from the clip collection, so it's right even when step 1's gated scan no-ops. A +0xB04 write to the
+  TRUE clip max is stable across ticks (only a value FL's own scan disagrees with gets "corrected" back).
+  `FUN_00D37450`'s song branch: `songObj+0xB04 = max(playlist clip end, marker end)`.
+- Loop/time selection: start `*(songObj+0xd4c)`, end `+0xd50` (active when `+0xd50>=0`); `d4ca90` makes it
+  OVERRIDE the song-length range. Markers: mgr `*(songObj+0xd5c)`; entries `+i*0x34` (tick+0/type+4/name UStr@*(e+8)).
+- Seek `FLtr_SeekToSongTick(double,byte) @0x10E3470` — XMM double (bridge `CallFAbsAsync`); clamps to song length.
+- → tools native_get_song_state, native_set_song_mode, native_set_loop, native_list/add_marker.
 
 ## Project lifecycle (headless-capable) — task #26
 - `projMgr = *(*(0x14abca8)+0x10)`; ctrl = `*(0x14a8750)`; song obj = `DAT_01581200`; cur path = `DAT_01581298`; FL install = `DAT_01580F40`.

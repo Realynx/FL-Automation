@@ -160,7 +160,7 @@ public sealed class ChatBridgeService(
         // loop swallows exceptions and continues, so a poisoned history would otherwise wedge the tab
         // for the rest of the FL session.
         TurnResult result = await _runner
-            .RunTurnAsync(agentKernel.Kernel, agentKernel.Chat, _history, input, agentKernel.Settings, ct)
+            .RunTurnAsync(agentKernel.Kernel, agentKernel.Chat, _history, input, agentKernel.Settings, ct: ct)
             .ConfigureAwait(false);
 
         // The in-FL tab shows plain text only (no thoughts pane): the runner already stripped the

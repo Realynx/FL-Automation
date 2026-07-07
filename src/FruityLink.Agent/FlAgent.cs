@@ -1,4 +1,5 @@
 using System.Runtime.CompilerServices;
+using System.Threading.Channels;
 using FruityLink.Core.Abstractions;
 using FruityLink.Core.Domain;
 using FruityLink.Llm;
@@ -65,9 +66,16 @@ public sealed class FlAgent(
     }
 
     /// <summary>
-    /// Sends the user's message and streams the assistant's reply as <see cref="AgentDelta"/>s
-    /// (visible text and, where the model exposes it, reasoning "thoughts"). Tools are invoked
-    /// automatically and surfaced via <see cref="ToolInvoked"/>.
+    /// Sends the user's message and streams the assistant's reply as <see cref="AgentDelta"/>s —
+    /// incremental token deltas while the reply arrives (the default), or one whole thought + one
+    /// whole text when <see cref="FruityLink.Core.Configuration.AccountSettings.StreamResponses"/>
+    /// is off. Tools are invoked automatically and surfaced via <see cref="ToolInvoked"/>.
+    ///
+    /// <para>The runner's push-style delta callback is bridged onto this pull-style iterator via
+    /// an unbounded channel: the reader deliberately ignores <paramref name="ct"/> so that when a
+    /// turn faults or is cancelled MID-STREAM, every already-streamed delta still drains to the
+    /// caller FIRST (the partial answer must reach the bubble) and the turn's exception surfaces
+    /// after — from the awaited turn task below, exactly like the pre-streaming behavior.</para>
     /// </summary>
     public async IAsyncEnumerable<AgentDelta> StreamAsync(
         string userInput, [EnumeratorCancellation] CancellationToken ct = default)
@@ -79,15 +87,25 @@ public sealed class FlAgent(
                 await ConfigureCoreAsync(ct).ConfigureAwait(false);
 
             AgentKernel agentKernel = _agentKernel!;
-            TurnResult result = await _runner
-                .RunTurnAsync(agentKernel.Kernel, agentKernel.Chat, _history, userInput, agentKernel.Settings, ct)
-                .ConfigureAwait(false);
+            var deltas = Channel.CreateUnbounded<AgentDelta>(
+                new UnboundedChannelOptions { SingleReader = true, SingleWriter = false });
 
-            if (!string.IsNullOrEmpty(result.Thought))
-                yield return new AgentDelta(AgentDeltaKind.Thought, result.Thought);
+            Task<TurnResult> turn = _runner.RunTurnAsync(
+                agentKernel.Kernel, agentKernel.Chat, _history, userInput, agentKernel.Settings,
+                onDelta: d => deltas.Writer.TryWrite(d), ct: ct);
 
-            if (!string.IsNullOrEmpty(result.Text))
-                yield return new AgentDelta(AgentDeltaKind.Text, result.Text);
+            // Complete the channel when the turn ends — success, fault, or cancel — so the drain
+            // below terminates; the fault itself is observed by the awaited turn task after.
+            _ = turn.ContinueWith(
+                _ => deltas.Writer.TryComplete(),
+                CancellationToken.None,
+                TaskContinuationOptions.ExecuteSynchronously,
+                TaskScheduler.Default);
+
+            await foreach (AgentDelta delta in deltas.Reader.ReadAllAsync(CancellationToken.None).ConfigureAwait(false))
+                yield return delta;
+
+            await turn.ConfigureAwait(false);
         }
         finally
         {

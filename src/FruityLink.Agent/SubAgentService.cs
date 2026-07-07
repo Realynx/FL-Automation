@@ -40,7 +40,7 @@ public sealed class SubAgentService(
         history.AddSystemMessage(SystemPrompts.BuildSubAgent(_promptOptions));
 
         TurnResult result = await _runner
-            .RunTurnAsync(agentKernel.Kernel, agentKernel.Chat, history, task, agentKernel.Settings, ct)
+            .RunTurnAsync(agentKernel.Kernel, agentKernel.Chat, history, task, agentKernel.Settings, ct: ct)
             .ConfigureAwait(false);
 
         // A sub-agent that ends on a tool call with empty content (common with weak models) would

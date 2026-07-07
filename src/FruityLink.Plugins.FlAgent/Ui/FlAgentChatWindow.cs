@@ -521,8 +521,17 @@ internal sealed class FlAgentChatWindow : Window
                     detail += " — " + ex.InnerException.Message;
                 if (_currentAnswer is not null)
                 {
-                    _currentAnswer.Text = "⚠ " + detail;
-                    _currentAnswer.Foreground = Frozen(0xF2, 0x8B, 0x82);
+                    // Mirror AvaloniaChatPresenter: when the stream died AFTER partial answer text
+                    // arrived, keep it and append the marker instead of clobbering it with the error.
+                    if (_currentAnswer.Text.Length > 0)
+                    {
+                        _currentAnswer.Text += AvaloniaChatPresenter.PartialKeptNotice;
+                    }
+                    else
+                    {
+                        _currentAnswer.Text = "⚠ " + detail;
+                        _currentAnswer.Foreground = Frozen(0xF2, 0x8B, 0x82);
+                    }
                 }
                 _log("[fl-agent] turn error: " + ex.Message);
             }

@@ -1,0 +1,23 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- View-model tests only: AccountSettingsViewModel & friends are plain INPC classes, so these
+       run WITHOUT an Avalonia runtime/dispatcher (no headless platform needed). Anything that
+       needs real controls belongs in a manual run of the dev head, not here. -->
+  <PropertyGroup>
+    <TargetFramework>net9.0</TargetFramework>
+    <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <PackageReference Include="xunit" />
+    <PackageReference Include="xunit.runner.visualstudio" />
+    <PackageReference Include="Shouldly" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\FruityLink.Ui.Avalonia\FruityLink.Ui.Avalonia.csproj" />
+  </ItemGroup>
+
+</Project>

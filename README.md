@@ -105,6 +105,42 @@ request it handles), which together pinpoint any issue.
 Everything is stored under `%APPDATA%\FruityLink`: `settings.json`, `chats\`, `versions\`,
 `knowledge.db`, and DPAPI-encrypted `secrets.json` (API keys, encrypted per Windows user).
 
+## Plugin knowledge base (sound design + FX chains)
+
+The agent reads a per-plugin **manual** at runtime (`get_plugin_manual`; discover what's available with
+`list_plugin_manuals`) to learn a plugin's parameters and recipes, then drives the knobs via the
+plugin-param tools (`native_*_channel_plugin_params` for generators, `native_*_mixer_plugin_params` for
+effects). Manuals are markdown embedded in `FruityLink.Agent.dll` (`src/FruityLink.Agent/Manuals/`) —
+**add coverage by dropping a `Manuals/<plugin>.md` and rebuilding**, no code changes.
+
+**Generators (sound design) — documented (7):**
+
+| Plugin | Notes |
+|---|---|
+| 3xOSC | osc-shape control (sine/tri/square/saw/rounded-saw/noise) — live-verified |
+| Sytrus | FM / RM + subtractive |
+| FLEX | preset-first ROMpler |
+| Harmor | additive resynthesis |
+| Slicex | beat slicer / loop chopper |
+| FPC | drum pads (kit builder) |
+| Serum | 3rd-party wavetable VST (param path proven) |
+
+**Effects (FX chains) — documented (7):**
+
+| Plugin | Role |
+|---|---|
+| Fruity Parametric EQ 2 | 7-band parametric EQ |
+| Fruity Compressor | single-band compressor |
+| Fruity Limiter | compressor + limiter + gate (master/bus) |
+| Fruity Delay 3 | delay / echo |
+| Fruity Reverb 2 | reverb |
+| Maximus | multiband maximizer / mastering |
+| Gross Beat | time + volume FX (stutter, sidechain-gate, tape-stop) |
+
+**Next up (not yet documented — pick from here to extend coverage):**
+- *Generators:* Sawer, Harmless, PoiZone, Toxic Biohazard, GMS (Groove Machine Synth), DirectWave, FL Keys, BooBass, Fruit Kick, Slayer; 3rd-party VSTs: Vital, Massive, Kontakt.
+- *Effects:* Fruity Reverb (v1), Fruity Chorus, Fruity Flanger, Fruity Phaser, Fruity Filter / Fast LP, Fruity Balance, Fruity Stereo Enhancer, Fruity Soft Clipper, Fruity Multiband Compressor, Fruity Blood Overdrive, Fruity Delay Bank, Fruity Love Philter, Transient Processor, Fruity Fast Dist.
+
 ## Roadmap
 
 - [x] Core music-theory engine (12 scales/modes, diatonic progressions) + SysEx protocol codec

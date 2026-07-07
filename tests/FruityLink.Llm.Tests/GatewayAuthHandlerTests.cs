@@ -117,6 +117,42 @@ public sealed class GatewayAuthHandlerTests
     }
 
     [Fact]
+    public async Task Maps_503_no_backend_configured_preferring_the_server_message()
+    {
+        var inner = FakeHttpMessageHandler.Json(HttpStatusCode.ServiceUnavailable,
+            """{"error":"no_backend_configured","message":"Your plan's AI backend is being provisioned."}""");
+        using HttpClient http = Make(inner, new FakeAccountAuth());
+
+        var ex = await Should.ThrowAsync<HttpRequestException>(() => http.SendAsync(ChatRequest()));
+
+        ex.Message.ShouldBe("Your plan's AI backend is being provisioned.");
+    }
+
+    [Fact]
+    public async Task Maps_503_no_backend_configured_without_a_message_to_the_default_text()
+    {
+        var inner = FakeHttpMessageHandler.Json(HttpStatusCode.ServiceUnavailable,
+            """{"error":"no_backend_configured"}""");
+        using HttpClient http = Make(inner, new FakeAccountAuth());
+
+        var ex = await Should.ThrowAsync<HttpRequestException>(() => http.SendAsync(ChatRequest()));
+
+        ex.Message.ShouldContain("isn't configured for your plan yet");
+    }
+
+    [Fact]
+    public async Task An_unrelated_503_passes_through_for_the_retry_layer()
+    {
+        var inner = FakeHttpMessageHandler.Json(HttpStatusCode.ServiceUnavailable,
+            """{"error":"upstream_restarting"}""");
+        using HttpClient http = Make(inner, new FakeAccountAuth());
+
+        using HttpResponseMessage response = await http.SendAsync(ChatRequest());
+
+        response.StatusCode.ShouldBe(HttpStatusCode.ServiceUnavailable);   // not our error to translate
+    }
+
+    [Fact]
     public async Task Success_and_ordinary_errors_pass_through_untouched()
     {
         var inner = FakeHttpMessageHandler.Json(HttpStatusCode.InternalServerError, """{"error":"boom"}""");

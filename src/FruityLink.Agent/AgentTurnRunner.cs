@@ -1,3 +1,4 @@
+using System.Text;
 using FruityLink.Core.Configuration;
 using FruityLink.Llm.Diagnostics;
 using Microsoft.SemanticKernel;
@@ -15,10 +16,12 @@ namespace FruityLink.Agent;
 internal sealed record TurnResult(string Thought, string Text, bool WasCapped);
 
 /// <summary>
-/// Runs ONE complete agent turn against a prepared kernel: append the user message, send a
-/// non-streaming chat completion with the shared execution settings (tools auto-invoked by SK),
-/// keep the history consistent (rollback on failure, reply dedup, think-marker stripping,
-/// tool-pairing repair on a capped turn), and split the reply into (thought, text).
+/// Runs ONE complete agent turn against a prepared kernel: append the user message, send a chat
+/// completion with the shared execution settings (tools auto-invoked by SK) — STREAMED by default
+/// when the caller supplies a delta sink, buffered otherwise or when
+/// <see cref="AccountSettings.StreamResponses"/> is off — keep the history consistent (rollback on
+/// failure, reply dedup, think-marker stripping, tool-pairing repair on a capped turn), and split
+/// the reply into (thought, text).
 ///
 /// <para>This is the single implementation of the turn pipeline previously copied — with drift —
 /// across <c>FlAgent</c>, <c>ChatBridgeService</c>, and <c>SubAgentService</c> (the sub-agent copy
@@ -31,9 +34,11 @@ internal sealed record TurnResult(string Thought, string Text, bool WasCapped);
 /// </summary>
 internal sealed class AgentTurnRunner
 {
-    /// <summary>Default auto-invoke round cap: bounds a runaway loop (flaky backends can re-call
-    /// tools forever); 12 rounds is ample for legitimate multi-step actions.</summary>
-    internal const int DefaultMaxRounds = 12;
+    /// <summary>Default auto-invoke round cap: bounds a RUNAWAY loop (flaky backends can re-call
+    /// tools forever), not honest work — real multi-step jobs (chop + arrange + route a session)
+    /// chain dozens of rounds, and hitting the old cap of 12 mid-job was a recurring complaint.
+    /// Overridable per install via <see cref="AccountSettings.MaxToolRoundsPerTurn"/>.</summary>
+    internal const int DefaultMaxRounds = 40;
 
     /// <summary>Extra HTTP requests allowed past the round cap before the per-turn budget aborts
     /// the send. A normal capped turn spends one request per round; the slack absorbs an overshoot
@@ -58,22 +63,34 @@ internal sealed class AgentTurnRunner
     /// <paramref name="history"/> updated in place. On failure the turn's half-applied assistant/tool
     /// edits are rolled back, but the user's message and the ENTIRE prior conversation are kept — so a
     /// transient backend blip (e.g. a 5xx after retries are exhausted) never costs the user their
-    /// context, and the next "try again" turn resumes with full history.
+    /// context, and the next "try again" turn resumes with full history. When a STREAMED turn dies
+    /// after real answer text already arrived, that partial text is additionally recorded as the
+    /// assistant turn (see <see cref="RunStreamedAttemptAsync"/>) so a follow-up "continue" has it
+    /// in context.
     /// </summary>
     /// <param name="kernel">Kernel with plugins + filters registered (see <see cref="AgentKernelBuilder"/>).</param>
     /// <param name="chat">The kernel's chat completion service.</param>
     /// <param name="history">Conversation the turn appends to. Owned by the caller.</param>
     /// <param name="userInput">The user's message for this turn.</param>
-    /// <param name="llm">Account settings for per-connection knobs (<see cref="AccountSettings.AllowParallelToolCalls"/>);
+    /// <param name="llm">Account settings for per-connection knobs
+    /// (<see cref="AccountSettings.AllowParallelToolCalls"/>, <see cref="AccountSettings.StreamResponses"/>);
     /// null falls back to the defaults.</param>
+    /// <param name="onDelta">Receives every surfaced piece of the turn exactly once, streaming or
+    /// not: incremental thought/text deltas while a streamed reply arrives, or the whole thought +
+    /// whole text after a buffered one. Null = no delta delivery (turn-level callers use the
+    /// returned <see cref="TurnResult"/>) and FORCES the buffered path — streaming with nobody
+    /// consuming the tokens buys latency risk for nothing. May be invoked from a background
+    /// (non-UI) thread; the caller marshals.</param>
     /// <param name="ct">Cancels the turn; the turn's partial tool edits are rolled back, but the
-    /// user's message and the prior conversation are kept (see the catch below).</param>
+    /// user's message, the prior conversation, and any substantial streamed partial text are kept
+    /// (see the attempt catches below).</param>
     public async Task<TurnResult> RunTurnAsync(
         Kernel kernel,
         IChatCompletionService chat,
         ChatHistory history,
         string userInput,
         AccountSettings? llm = null,
+        Action<AgentDelta>? onDelta = null,
         CancellationToken ct = default)
     {
         // Subset BEFORE the user message lands: the selector reads the history tail as "the
@@ -84,29 +101,81 @@ internal sealed class AgentTurnRunner
         int historyMark = history.Count;
         history.AddUserMessage(userInput);
 
-        // The cap filter is long-lived on the kernel; reset its per-turn signal so a previous
-        // turn's cap can't leak into this one.
+        // The cap filter is long-lived on the kernel; each attempt below resets its per-turn
+        // signal so a previous turn's (or attempt's) cap can't leak into this one.
         AutoInvokeIterationFilter? capFilter =
             kernel.AutoFunctionInvocationFilters.OfType<AutoInvokeIterationFilter>().FirstOrDefault();
-        capFilter?.BeginTurn();
 
         OpenAIPromptExecutionSettings settings =
             CreateExecutionSettings(subset, llm?.AllowParallelToolCalls ?? true);
 
-        // Budget the turn's HTTP round-trips as a backstop for the filter-blind runaway: rounds
+        // Streaming is the default (live tokens in the bubble) but only when the caller actually
+        // consumes deltas: sink-less turn callers (sub-agents, the in-FL bridge tab) keep the
+        // buffered path, where the wire-layer tool-call repair still protects them. The
+        // StreamResponses settings.json escape hatch forces buffered for backends whose streamed
+        // tool calls arrive corrupted.
+        bool stream = onDelta is not null && (llm?.StreamResponses ?? true);
+
+        if (stream)
+        {
+            var sink = new DeltaSink(onDelta!);
+            try
+            {
+                capFilter?.BeginTurn();
+                return await RunStreamedAttemptAsync(
+                        kernel, chat, history, historyMark, capFilter, settings, sink, ct)
+                    .ConfigureAwait(false);
+            }
+            catch (Exception ex) when (!ct.IsCancellationRequested
+                                       && !sink.AnyText
+                                       && LooksLikeStreamedToolCallCorruption(ex))
+            {
+                // The wire-layer repair handler CANNOT fix streamed bodies (it hard-skips
+                // text/event-stream), so a proxy that resends/corrupts streamed tool-call
+                // arguments fails here in a JSON-parse shape. Retry ONCE in buffered mode, where
+                // the repair works — but only while nothing visible has streamed out, or the
+                // retry's answer would duplicate text already in the user's bubble. The streamed
+                // attempt already rolled its edits back; drop any recorded sub-visible partial
+                // too, so the retry starts from a clean lone user message.
+                TruncateHistoryTo(history, historyMark + 1);
+            }
+        }
+
+        capFilter?.BeginTurn();
+        return await RunBufferedAttemptAsync(
+                kernel, chat, history, historyMark, capFilter, settings, onDelta, ct)
+            .ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// One buffered (non-streaming) send: the backend returns complete tool-call arguments in a
+    /// single JSON body, which is what the wire-layer repair handler can fix. Streaming makes some
+    /// OpenAI-compatible proxies resend the full arguments in each chunk, which SK concatenates
+    /// into invalid JSON (e.g. "{}{}") and rejects — hence this path stays the fallback for the
+    /// streamed attempt and the whole path for StreamResponses=false. A caller-supplied delta sink
+    /// still gets the surfaced pieces (whole thought, whole text) so delta delivery is ONE
+    /// contract regardless of mode.
+    /// </summary>
+    private static async Task<TurnResult> RunBufferedAttemptAsync(
+        Kernel kernel,
+        IChatCompletionService chat,
+        ChatHistory history,
+        int historyMark,
+        AutoInvokeIterationFilter? capFilter,
+        OpenAIPromptExecutionSettings settings,
+        Action<AgentDelta>? onDelta,
+        CancellationToken ct)
+    {
+        // Budget the attempt's HTTP round-trips as a backstop for the filter-blind runaway: rounds
         // whose tool calls ALL fail validation ("wasn't defined") bypass the cap filter entirely,
         // so without this the loop only stops at SK's internal 128-attempt limit — one
         // growing-history request per round. The scope is ambient (AsyncLocal): it covers SK's
-        // internal loop for THIS turn only, and a sub-agent turn spawned inside a tool call opens
-        // its own scope. Tripping it throws from the HTTP layer → the catch below rolls the whole
-        // turn back, so no orphaned tool_call ids survive.
+        // internal loop for THIS attempt only, and a sub-agent turn spawned inside a tool call
+        // opens its own scope. Tripping it throws from the HTTP layer → the catch below rolls the
+        // whole turn back, so no orphaned tool_call ids survive.
         using IDisposable requestBudget =
             LlmTurnBudget.Begin((capFilter?.MaxRounds ?? DefaultMaxRounds) + RequestBudgetSlack);
 
-        // Non-streaming on purpose: the backend returns complete tool-call arguments in a single
-        // JSON body. Streaming makes some OpenAI-compatible proxies resend the full arguments in
-        // each chunk, which SK concatenates into invalid JSON (e.g. "{}{}") and rejects. Tool
-        // calls and reasoning are still surfaced; only the final text arrives all at once.
         ChatMessageContent reply;
         try
         {
@@ -133,11 +202,143 @@ internal sealed class AgentTurnRunner
             throw;
         }
 
+        TurnResult result = FinishTurn(history, historyMark, capFilter, reply);
+
+        // Buffered mode with a sink (StreamResponses off, or the fallback retry): deliver the
+        // surfaced pieces through the same channel a streamed turn uses, all at once.
+        if (onDelta is not null)
+        {
+            if (result.Thought.Length > 0) onDelta(new AgentDelta(AgentDeltaKind.Thought, result.Thought));
+            if (result.Text.Length > 0) onDelta(new AgentDelta(AgentDeltaKind.Text, result.Text));
+        }
+
+        return result;
+    }
+
+    /// <summary>
+    /// One streamed send: tokens are pushed into <paramref name="sink"/> as they arrive (reasoning
+    /// split from answer prose incrementally by <see cref="ThinkTagStreamParser"/> — see its doc
+    /// for the deliberate live-delta divergences from the authoritative full parse), then the final
+    /// round is reassembled into the buffered reply shape and finished through the exact same
+    /// pipeline (dedup, think-stripping, pairing repair, cap detection).
+    ///
+    /// <para>SK's streaming auto-invoke yields chunks from EVERY internal round, not just the
+    /// final one, and appends a finished tool round (assistant tool_calls + tool results) to
+    /// history itself before the next round's chunks arrive. History growing between chunks is
+    /// therefore the round boundary: the per-round accumulators reset there so the reassembled
+    /// reply — like a buffered reply — carries the FINAL round only, while intermediate-round
+    /// prose/reasoning still streams to the sink live (with separators, via
+    /// <see cref="DeltaSink.RoundBreak"/>).</para>
+    ///
+    /// <para>Failure policy (the turn-level retry handler cannot retry a stream whose body already
+    /// started): roll back this turn's half-applied tool edits exactly like the buffered path,
+    /// but when real answer text already streamed out, RECORD that partial text as the assistant
+    /// turn before rethrowing — the bubble keeps the partial (deltas already delivered), and a
+    /// follow-up "continue" finds it in context instead of a hole. A partial that is empty or
+    /// whitespace-only (or pure reasoning) is not worth an assistant message and rolls back
+    /// exactly as before. Cancellation takes the same path: partial kept, tool edits dropped.</para>
+    /// </summary>
+    private static async Task<TurnResult> RunStreamedAttemptAsync(
+        Kernel kernel,
+        IChatCompletionService chat,
+        ChatHistory history,
+        int historyMark,
+        AutoInvokeIterationFilter? capFilter,
+        OpenAIPromptExecutionSettings settings,
+        DeltaSink sink,
+        CancellationToken ct)
+    {
+        // Same runaway backstop as the buffered attempt (see RunBufferedAttemptAsync): the scope
+        // is per-attempt so a fallback retry starts with a fresh budget instead of the streamed
+        // attempt's leftovers.
+        using IDisposable requestBudget =
+            LlmTurnBudget.Begin((capFilter?.MaxRounds ?? DefaultMaxRounds) + RequestBudgetSlack);
+
+        var content = new StringBuilder();                  // current round's raw content
+        var callBuilder = new FunctionCallContentBuilder(); // current round's tool-call updates
+        var parser = new ThinkTagStreamParser();            // current round's live thought/text split
+        AuthorRole? role = null;
+        int lastHistoryCount = history.Count;
+
+        try
+        {
+            await foreach (StreamingChatMessageContent chunk in chat
+                .GetStreamingChatMessageContentsAsync(history, settings, kernel, ct)
+                .ConfigureAwait(false))
+            {
+                // Round boundary: SK just appended the previous round (assistant tool_calls +
+                // tool results) to history. Flush the old parser's held-back tail (it wasn't a
+                // marker after all) and start clean accumulators for this round.
+                if (history.Count != lastHistoryCount)
+                {
+                    lastHistoryCount = history.Count;
+                    EmitParsed(sink, parser.Flush());
+                    sink.RoundBreak();
+                    content.Clear();
+                    callBuilder = new FunctionCallContentBuilder();
+                    parser = new ThinkTagStreamParser();
+                }
+
+                role ??= chunk.Role;
+                callBuilder.Append(chunk);
+                if (chunk.Content is { Length: > 0 } piece)
+                {
+                    content.Append(piece);
+                    EmitParsed(sink, parser.Push(piece));
+                }
+            }
+        }
+        catch
+        {
+            // Same rollback as the buffered path: drop this turn's half-applied assistant/tool
+            // edits (orphaned tool_call ids wedge strict backends), keep the user's message and
+            // the entire prior conversation.
+            TruncateHistoryTo(history, historyMark + 1);
+
+            // Partial-text retention: the tokens already reached the user's bubble, so keep the
+            // model's side of the story consistent — record the STRIPPED partial answer as the
+            // assistant turn when it's substantial. (The authoritative full parse handles a
+            // truncated <think> block: a partial that is all reasoning strips to empty and is
+            // rolled back exactly as before.)
+            string partialText = ThinkTagParser.Split(content.ToString()).Text;
+            if (!string.IsNullOrWhiteSpace(partialText))
+                history.AddAssistantMessage(partialText);
+            throw;
+        }
+
+        EmitParsed(sink, parser.Flush());
+
+        // Reassemble the final round into the buffered reply shape: raw content (think markers
+        // included — FinishTurn splits/strips authoritatively) plus the accumulated tool-call
+        // updates, so uninvoked-call detection and pairing repair see exactly what a buffered
+        // reply would carry.
+        var reply = new ChatMessageContent(role ?? AuthorRole.Assistant, content.ToString());
+        foreach (FunctionCallContent call in callBuilder.Build())
+            reply.Items.Add(call);
+
+        TurnResult result = FinishTurn(history, historyMark, capFilter, reply);
+
+        // The cap notice is surfaced-text only (FinishTurn appended it to result.Text); a
+        // streamed turn must ALSO push it through the sink or the live bubble never learns why
+        // the agent stopped.
+        if (result.WasCapped)
+            sink.Text(sink.AnyText ? "\n\n" + CapNotice : CapNotice);
+
+        return result;
+    }
+
+    /// <summary>
+    /// The shared post-reply pipeline both attempt flavors funnel through, so streamed and
+    /// buffered turns leave history in exactly the same shape.
+    /// </summary>
+    private static TurnResult FinishTurn(
+        ChatHistory history, int historyMark, AutoInvokeIterationFilter? capFilter, ChatMessageContent reply)
+    {
         // The backend's reasoning rides in the content channel as <think>…</think> (folded there
-        // by LlmToolCallRepairHandler, because SK's typed OpenAI deserialization drops the raw
-        // reasoning_content/reasoning fields). Split it back out: a Thought for the reasoning,
-        // a clean Text for the answer. Store the STRIPPED text in history so the marker never
-        // pollutes context or any later tool-call parsing.
+        // by LlmToolCallRepairHandler on buffered bodies, or emitted inline by the backend).
+        // Split it back out: a Thought for the reasoning, a clean Text for the answer. Store the
+        // STRIPPED text in history so the marker never pollutes context or any later tool-call
+        // parsing.
         (string thought, string text) = ThinkTagParser.Split(reply.Content ?? string.Empty);
 
         EnsureInHistory(history, reply, text);
@@ -164,6 +365,93 @@ internal sealed class AgentTurnRunner
         return new TurnResult(thought, text, capped);
     }
 
+    /// <summary>Pushes one incremental (thought, text) parse result into the sink.</summary>
+    private static void EmitParsed(DeltaSink sink, (string Thought, string Text) deltas)
+    {
+        sink.Thought(deltas.Thought);
+        sink.Text(deltas.Text);
+    }
+
+    /// <summary>
+    /// Heuristic for "the streamed body itself was unparseable" — the failure shape the buffered
+    /// fallback can actually fix (the wire repair only works on buffered JSON bodies). Matches a
+    /// JSON exception anywhere in the chain, or messages blaming invalid JSON / unparseable tool
+    /// or function calls (SK wraps these several ways). Transport drops (IOException etc.) do NOT
+    /// match: buffering wouldn't fix a dead connection, and hammering retries on top of the
+    /// turn-level retry handler helps nobody.
+    /// </summary>
+    private static bool LooksLikeStreamedToolCallCorruption(Exception ex)
+    {
+        for (Exception? e = ex; e is not null; e = e.InnerException)
+        {
+            if (e is System.Text.Json.JsonException) return true;
+
+            string message = e.Message;
+            if (message.Contains("invalid JSON", StringComparison.OrdinalIgnoreCase)) return true;
+            if (message.Contains("JSON", StringComparison.OrdinalIgnoreCase)
+                && (message.Contains("tool", StringComparison.OrdinalIgnoreCase)
+                    || message.Contains("function", StringComparison.OrdinalIgnoreCase)))
+            {
+                return true;
+            }
+
+            // Backend-worded variant (no "JSON" in the text): an upstream that rejects the
+            // request over corrupted tool-call arguments — e.g. Ollama cloud's
+            // 400 "invalid tool call arguments" after streamed args got concatenated.
+            // The buffered retry starts the turn fresh (history was rolled back), where the
+            // wire-layer repair applies.
+            if (message.Contains("tool call", StringComparison.OrdinalIgnoreCase)
+                && (message.Contains("invalid", StringComparison.OrdinalIgnoreCase)
+                    || message.Contains("argument", StringComparison.OrdinalIgnoreCase)))
+            {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /// <summary>
+    /// Delta sink for one turn: forwards thought/text deltas to the caller's callback, remembers
+    /// whether any VISIBLE answer text went out (partial-retention + fallback eligibility), and
+    /// inserts separators at tool-round boundaries so one round's prose never glues onto the
+    /// next round's in the live bubble.
+    /// </summary>
+    private sealed class DeltaSink(Action<AgentDelta> onDelta)
+    {
+        private bool _anyThought;
+        private bool _textBreakPending;
+        private bool _thoughtBreakPending;
+
+        /// <summary>True once any visible answer text was emitted. Gates the buffered fallback
+        /// (retrying after visible text would duplicate it in the bubble) and documents that a
+        /// failed stream left a partial the UI must keep.</summary>
+        public bool AnyText { get; private set; }
+
+        public void Text(string delta)
+        {
+            if (delta.Length == 0) return;
+            if (_textBreakPending) { delta = "\n\n" + delta; _textBreakPending = false; }
+            AnyText = true;
+            onDelta(new AgentDelta(AgentDeltaKind.Text, delta));
+        }
+
+        public void Thought(string delta)
+        {
+            if (delta.Length == 0) return;
+            if (_thoughtBreakPending) { delta = "\n" + delta; _thoughtBreakPending = false; }
+            _anyThought = true;
+            onDelta(new AgentDelta(AgentDeltaKind.Thought, delta));
+        }
+
+        /// <summary>Marks a tool-round boundary; the separator is only prepended if the NEXT round
+        /// actually emits on that side, so a text-less tool round never costs blank lines.</summary>
+        public void RoundBreak()
+        {
+            if (AnyText) _textBreakPending = true;
+            if (_anyThought) _thoughtBreakPending = true;
+        }
+    }
+
     /// <summary>
     /// The ONE execution-settings factory shared by every agent (main, in-FL tab, sub-agents) —
     /// previously three drifting copies.
@@ -178,9 +466,10 @@ internal sealed class AgentTurnRunner
         return new OpenAIPromptExecutionSettings
         {
             // Headroom so a reasoning turn can't spend its whole budget on <think> and then get cut
-            // off mid tool-call JSON (truncated arguments are unrepairable). The iteration filter —
-            // not MaxTokens — is what bounds a runaway loop.
-            MaxTokens = 8192,
+            // off mid tool-call JSON (truncated arguments are unrepairable). Sized for long-thinking
+            // models (deepseek-class reasoning chains run past 8k); the iteration filter — not
+            // MaxTokens — is what bounds a runaway loop.
+            MaxTokens = 16384,
 
             // Low temperature for stable, deterministic tool-call argument JSON: fewer
             // self-correction/repair loops, so fewer round-trips. Quality knob, not a latency one.

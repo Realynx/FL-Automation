@@ -35,12 +35,14 @@ internal sealed class AgentKernelBuilder(
     /// </summary>
     /// <param name="plugins">Tool plugins to register, with their model-visible names.</param>
     /// <param name="toolFilter">Shared invocation filter that surfaces tool calls in the UI.</param>
-    /// <param name="maxRounds">Auto-invoke round cap per turn (see <see cref="AutoInvokeIterationFilter"/>).</param>
+    /// <param name="maxRounds">Explicit auto-invoke round cap per turn, or null to use the
+    /// persisted <see cref="AccountSettings.MaxToolRoundsPerTurn"/> (see
+    /// <see cref="AutoInvokeIterationFilter"/>).</param>
     /// <param name="ct">Cancels the settings load.</param>
     public async Task<AgentKernel> BuildAsync(
         IReadOnlyList<(string Name, object Instance)> plugins,
         ToolCallFilter toolFilter,
-        int maxRounds = AgentTurnRunner.DefaultMaxRounds,
+        int? maxRounds = null,
         CancellationToken ct = default)
     {
         AppSettings app = await settingsStore.LoadAsync(ct).ConfigureAwait(false);
@@ -48,10 +50,12 @@ internal sealed class AgentKernelBuilder(
 
         Kernel kernel = kernelFactory.CreateKernel(account);
         kernel.FunctionInvocationFilters.Add(toolFilter);
-        // Bound a runaway auto-invoke loop (flaky backends can re-call tools forever); the default
-        // 12 rounds is ample for legitimate multi-step actions. One filter per kernel — the turn
-        // runner resets/reads its per-turn cap signal.
-        kernel.AutoFunctionInvocationFilters.Add(new AutoInvokeIterationFilter(maxRounds));
+        // Bound a RUNAWAY auto-invoke loop (flaky backends can re-call tools forever) without
+        // cutting off honest multi-step jobs: the cap comes from settings.json
+        // (MaxToolRoundsPerTurn, default 40), clamped to a sane range. One filter per kernel —
+        // the turn runner resets/reads its per-turn cap signal.
+        int rounds = Math.Clamp(maxRounds ?? account.MaxToolRoundsPerTurn, 1, 200);
+        kernel.AutoFunctionInvocationFilters.Add(new AutoInvokeIterationFilter(rounds));
         foreach ((string name, object instance) in plugins)
             kernel.Plugins.AddFromObject(instance, name);
 

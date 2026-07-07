@@ -15,6 +15,7 @@ public sealed class JsonProjectVersionControl : IProjectVersionControl
 {
     private readonly StoragePaths _paths;
     private readonly INativeFlControl _fl;
+    private readonly IInverseOpRegistry? _registry;
     private readonly SemaphoreSlim _gate = new(1, 1);
 
     // Reads are lock-free: mutations always REPLACE these references (never mutate in place), and a
@@ -25,13 +26,16 @@ public sealed class JsonProjectVersionControl : IProjectVersionControl
     private string _sessionId = string.Empty;
 
     /// <summary>Creates a project version-control store rooted at <paramref name="paths"/>, backing up and
-    /// restoring through <paramref name="fl"/> (the host's single FL bridge).</summary>
-    public JsonProjectVersionControl(StoragePaths paths, INativeFlControl fl)
+    /// restoring through <paramref name="fl"/> (the host's single FL bridge). <paramref name="registry"/>
+    /// enables granular inverse-journal undo/redo; when null, every commit falls back to its <c>.flp</c>
+    /// (the pre-journal behavior).</summary>
+    public JsonProjectVersionControl(StoragePaths paths, INativeFlControl fl, IInverseOpRegistry? registry = null)
     {
         ArgumentNullException.ThrowIfNull(paths);
         ArgumentNullException.ThrowIfNull(fl);
         _paths = paths;
         _fl = fl;
+        _registry = registry;
     }
 
     /// <inheritdoc />
@@ -89,6 +93,7 @@ public sealed class JsonProjectVersionControl : IProjectVersionControl
         try
         {
             _sessionId = sessionId;
+            PurgeOtherSessions(sessionId);   // undo history is runtime-scoped — drop stale prior-run sessions
             ProjectVersionIndex idx = await ReadIndexAsync(sessionId, ct).ConfigureAwait(false);
             _commits = idx.Commits ?? new List<ProjectCommit>();
             _headId = idx.HeadId;
@@ -96,8 +101,36 @@ public sealed class JsonProjectVersionControl : IProjectVersionControl
         }
         finally { _gate.Release(); }
 
+        // A fresh session's first commit is its ROOT (ParentId = null), so the FIRST AI edit would have
+        // nothing to undo TO and Undo stays disabled. Snapshot the session-start state as the root now, so
+        // the first edit gets a parent to revert to. Best-effort — needs the bridge; only when empty.
+        if (_commits.Count == 0 && await _fl.IsAvailableAsync(ct).ConfigureAwait(false))
+        {
+            try { await CommitAsync(label: "Session start", trigger: CommitTrigger.Initial, ct: ct).ConfigureAwait(false); }
+            catch { /* baseline is best-effort; only the very first edit would then lack an undo target */ }
+        }
+
         await DetectRecoveryAsync(ct).ConfigureAwait(false);   // best-effort, off the lock
         Raise(ProjectVersionChangeKind.SessionOpened, Head);
+    }
+
+    /// <summary>Undo history is scoped to the CURRENT FL runtime. On a new run we delete every OTHER
+    /// session's project-version data: a prior run's inverse-ops assume that run's project state, so undoing
+    /// across runs applies stale ops onto a different project (crash) — and once FL closes those changes are
+    /// gone or already saved into the .flp, so keeping them is pointless. Best-effort; never blocks open.</summary>
+    private void PurgeOtherSessions(string currentSessionId)
+    {
+        try
+        {
+            string? root = Path.GetDirectoryName(_paths.ProjectVersionDir(currentSessionId));
+            if (root is null || !Directory.Exists(root)) return;
+            foreach (string dir in Directory.EnumerateDirectories(root))
+            {
+                if (string.Equals(Path.GetFileName(dir), currentSessionId, StringComparison.OrdinalIgnoreCase)) continue;
+                try { Directory.Delete(dir, recursive: true); } catch { /* locked/in-use → leave it */ }
+            }
+        }
+        catch { /* best-effort — never let cleanup break session open */ }
     }
 
     /// <inheritdoc />
@@ -106,6 +139,7 @@ public sealed class JsonProjectVersionControl : IProjectVersionControl
         string? chatNodeId = null,
         IReadOnlyList<string>? operations = null,
         CommitTrigger trigger = CommitTrigger.Manual,
+        IReadOnlyList<ChangeRecord>? changes = null,
         CancellationToken ct = default)
     {
         if (string.IsNullOrEmpty(_sessionId)) return null;
@@ -122,6 +156,10 @@ public sealed class JsonProjectVersionControl : IProjectVersionControl
         string flp = _paths.ProjectFlpBackup(_sessionId, id);
 
         await _fl.SaveCopyAsync(flp, ct).ConfigureAwait(false);   // ONE native call — authoritative backup
+
+        // Inverse journal (granular undo/redo). Written ONCE here, read only when THIS commit is
+        // undone/redone — never held resident. Absent/invertible:false ⇒ the commit uses the .flp.
+        await WriteOpsJournalAsync(id, changes, ct).ConfigureAwait(false);
 
         string? original = await TryReadProjectPathAsync(ct).ConfigureAwait(false);
 
@@ -150,28 +188,46 @@ public sealed class JsonProjectVersionControl : IProjectVersionControl
     }
 
     /// <inheritdoc />
-    public Task<ProjectCommit?> UndoAsync(CancellationToken ct = default)
+    public async Task<ProjectCommit?> UndoAsync(CancellationToken ct = default)
     {
         ProjectCommit? head = Head;
-        if (head?.ParentId is null) return Task.FromResult<ProjectCommit?>(null);
+        if (head?.ParentId is null) return null;
         ProjectCommit? parent = _commits.FirstOrDefault(c => c.Id == head.ParentId);
-        return parent is null
-            ? Task.FromResult<ProjectCommit?>(null)
-            : RestoreCoreAsync(parent, ProjectVersionChangeKind.Undone, ct);
+        if (parent is null) return null;
+        if (!await _fl.IsAvailableAsync(ct).ConfigureAwait(false)) return null;
+
+        // Granular path: replay HEAD's ops in REVERSE, applying each op's OLD value to land on the parent.
+        // Falls back to the parent's .flp when the journal is missing/invertible:false or a replay step
+        // fails (RestoreCore then fully overwrites live state — FL is never left half-inverted).
+        if (await TryReplayJournalAsync(head, undo: true, ct).ConfigureAwait(false))
+        {
+            await MoveHeadAsync(parent.Id, ct).ConfigureAwait(false);
+            Raise(ProjectVersionChangeKind.Undone, parent);
+            return parent;
+        }
+        return await RestoreCoreAsync(parent, ProjectVersionChangeKind.Undone, ct).ConfigureAwait(false);
     }
 
     /// <inheritdoc />
-    public Task<ProjectCommit?> RedoAsync(CancellationToken ct = default)
+    public async Task<ProjectCommit?> RedoAsync(CancellationToken ct = default)
     {
         ProjectCommit? head = Head;
-        if (head is null) return Task.FromResult<ProjectCommit?>(null);
+        if (head is null) return null;
         ProjectCommit? child = _commits
             .Where(c => c.ParentId == head.Id)
             .OrderByDescending(c => c.CreatedAt)
             .FirstOrDefault();
-        return child is null
-            ? Task.FromResult<ProjectCommit?>(null)
-            : RestoreCoreAsync(child, ProjectVersionChangeKind.Redone, ct);
+        if (child is null) return null;
+        if (!await _fl.IsAvailableAsync(ct).ConfigureAwait(false)) return null;
+
+        // Granular path: replay the CHILD's ops FORWARD, applying each op's NEW value. Same .flp fallback.
+        if (await TryReplayJournalAsync(child, undo: false, ct).ConfigureAwait(false))
+        {
+            await MoveHeadAsync(child.Id, ct).ConfigureAwait(false);
+            Raise(ProjectVersionChangeKind.Redone, child);
+            return child;
+        }
+        return await RestoreCoreAsync(child, ProjectVersionChangeKind.Redone, ct).ConfigureAwait(false);
     }
 
     /// <inheritdoc />
@@ -245,6 +301,82 @@ public sealed class JsonProjectVersionControl : IProjectVersionControl
             await _fl.SaveCopyAsync(path, ct).ConfigureAwait(false);
         }
         catch { /* the safety backup is a net, not a guarantee — never block a restore on it */ }
+    }
+
+    // ── inverse journal (granular undo/redo) ────────────────────────────────────────────────────────
+
+    /// <summary>Write <c>{commitId}.ops.json</c> when there are records to record. <c>invertible</c> is true
+    /// only when a registry is wired and EVERY record's op is registered — otherwise the file marks itself
+    /// non-invertible so undo/redo falls back to the <c>.flp</c>. Best-effort: the journal is an
+    /// optimization, so a write failure just leaves the commit on the <c>.flp</c> path.</summary>
+    private async Task WriteOpsJournalAsync(string commitId, IReadOnlyList<ChangeRecord>? changes, CancellationToken ct)
+    {
+        if (changes is not { Count: > 0 }) return;   // nothing granular this turn ⇒ .flp-only (as before)
+        bool invertible = _registry is not null && changes.All(_registry.CanInvert);
+        var journal = new CommitJournal(1, commitId, DateTimeOffset.UtcNow, invertible, changes);
+        try
+        {
+            string json = JsonSerializer.Serialize(journal, JsonDefaults.Options);
+            await AtomicFile.WriteAllTextAsync(_paths.ProjectOpsFile(_sessionId, commitId), json, ct).ConfigureAwait(false);
+        }
+        catch (Exception ex) when (ex is IOException or JsonException) { /* .flp fallback stays available */ }
+    }
+
+    /// <summary>Load a commit's <c>{commitId}.ops.json</c>, or null when absent/unreadable.</summary>
+    private async Task<CommitJournal?> ReadOpsJournalAsync(string commitId, CancellationToken ct)
+    {
+        string path = _paths.ProjectOpsFile(_sessionId, commitId);
+        if (!File.Exists(path)) return null;
+        try
+        {
+            await using FileStream stream = File.OpenRead(path);
+            return await JsonSerializer
+                .DeserializeAsync<CommitJournal>(stream, JsonDefaults.Options, ct)
+                .ConfigureAwait(false);
+        }
+        catch (Exception ex) when (ex is JsonException or IOException) { return null; }
+    }
+
+    /// <summary>Replay <paramref name="commit"/>'s journal: undo applies each op's OLD value in REVERSE
+    /// order; redo applies each op's NEW value FORWARD. Returns true only when the WHOLE journal replayed
+    /// cleanly; a missing/invertible:false journal, an absent registry, or ANY apply error returns false so
+    /// the caller uses the authoritative <c>.flp</c> (which fully overwrites live state, so a partially
+    /// applied replay is wiped — FL is never left half-inverted).</summary>
+    private async Task<bool> TryReplayJournalAsync(ProjectCommit commit, bool undo, CancellationToken ct)
+    {
+        if (_registry is null) return false;
+        CommitJournal? journal = await ReadOpsJournalAsync(commit.Id, ct).ConfigureAwait(false);
+        if (journal is null || !journal.Invertible || journal.Ops.Count == 0) return false;
+
+        // Bulk ops are one record per element, so ordered replay is element-exact.
+        IEnumerable<ChangeRecord> ordered = undo
+            ? journal.Ops.OrderByDescending(o => o.Seq)
+            : journal.Ops.OrderBy(o => o.Seq);
+        try
+        {
+            foreach (ChangeRecord rec in ordered)
+            {
+                if (!_registry.TryGet(rec.Op, out IInverseOp inv)) return false;   // guarded by Invertible
+                IReadOnlyDictionary<string, object?>? value = undo ? rec.Old : rec.New;
+                await inv.ApplyAsync(_fl, rec.Target, value, ct).ConfigureAwait(false);
+            }
+            return true;
+        }
+        catch { return false; }
+    }
+
+    /// <summary>Advance HEAD to <paramref name="newHeadId"/> and persist the index (no .flp touch). Used by
+    /// the granular undo/redo path, which restores state via inverse ops rather than reopening a project.</summary>
+    private async Task MoveHeadAsync(string newHeadId, CancellationToken ct)
+    {
+        await _gate.WaitAsync(ct).ConfigureAwait(false);
+        try
+        {
+            _headId = newHeadId;
+            _recovery = null;
+            await SaveIndexAsync(ct).ConfigureAwait(false);
+        }
+        finally { _gate.Release(); }
     }
 
     // ── crash recovery detection ──────────────────────────────────────────────────────────────────

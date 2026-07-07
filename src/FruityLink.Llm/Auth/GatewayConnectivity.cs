@@ -6,10 +6,18 @@ using System.Text.Json;
 namespace FruityLink.Llm.Auth;
 
 /// <summary>
-/// "Test connection" for the Settings card: calls the gateway's <c>GET /v1/models</c> with the
-/// signed-in account's Bearer token and returns the model ids available to the account's plan.
-/// Replaces the old multi-provider reachability probe. Throws <see cref="AccountAuthException"/>
-/// with a user-readable message on any failure (not signed in, auth rejected, network down).
+/// One entry of the gateway's <c>GET /v1/models</c> list: the pseudonymous id chat requests send
+/// as <c>model</c>, plus the friendly label the Settings picker shows (falls back to the id when
+/// the gateway sends no <c>display_name</c>).
+/// </summary>
+public sealed record GatewayModel(string Id, string DisplayName);
+
+/// <summary>
+/// The Settings card's window onto the gateway's <c>GET /v1/models</c>: called with the signed-in
+/// account's Bearer token, it returns the models available to the account's plan (both for the
+/// model picker and the "Test connection" probe). Replaces the old multi-provider reachability
+/// probe. Throws <see cref="AccountAuthException"/> with a user-readable message on any failure
+/// (not signed in, auth rejected, network down).
 /// </summary>
 public sealed class GatewayConnectivity
 {
@@ -27,8 +35,10 @@ public sealed class GatewayConnectivity
         _auth = auth;
     }
 
-    /// <summary>Lists the model ids the account may use, probing <c>{gatewayBaseUrl}/v1/models</c>.</summary>
-    public async Task<IReadOnlyList<string>> ListModelsAsync(string gatewayBaseUrl, CancellationToken ct = default)
+    /// <summary>Lists the models the account may use (id + display label, default model first, as
+    /// served by the gateway), probing <c>{gatewayBaseUrl}/v1/models</c>. An empty list is a valid
+    /// answer (plan not configured yet) — the caller decides how to present it.</summary>
+    public async Task<IReadOnlyList<GatewayModel>> ListModelsAsync(string gatewayBaseUrl, CancellationToken ct = default)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(gatewayBaseUrl);
 
@@ -66,21 +76,37 @@ public sealed class GatewayConnectivity
                     break;
             }
 
-            // OpenAI-style model list: {"object":"list","data":[{"id":"..."}, …]}
+            // OpenAI-style model list, extended with our friendly label:
+            // {"object":"list","data":[{"id":"<pseudonym>","object":"model","display_name":"…"}, …]}
+            // Parsed by hand (JsonDocument) — System.Net.Http.Json is banned in plugin code (ALC
+            // type-split MissingMethodException; see AccountAuthService.cs).
             try
             {
                 await using Stream stream = await response.Content.ReadAsStreamAsync(ct).ConfigureAwait(false);
                 using JsonDocument doc = await JsonDocument.ParseAsync(stream, cancellationToken: ct).ConfigureAwait(false);
-                var ids = new List<string>();
+                var models = new List<GatewayModel>();
                 if (doc.RootElement.TryGetProperty("data", out JsonElement data) && data.ValueKind == JsonValueKind.Array)
                 {
                     foreach (JsonElement item in data.EnumerateArray())
                     {
-                        if (item.TryGetProperty("id", out JsonElement id) && id.ValueKind == JsonValueKind.String)
-                            ids.Add(id.GetString()!);
+                        if (item.ValueKind != JsonValueKind.Object
+                            || !item.TryGetProperty("id", out JsonElement id)
+                            || id.ValueKind != JsonValueKind.String
+                            || string.IsNullOrWhiteSpace(id.GetString()))
+                        {
+                            continue;   // tolerate malformed entries rather than failing the whole list
+                        }
+
+                        string modelId = id.GetString()!;
+                        string label = item.TryGetProperty("display_name", out JsonElement name)
+                                       && name.ValueKind == JsonValueKind.String
+                                       && !string.IsNullOrWhiteSpace(name.GetString())
+                            ? name.GetString()!
+                            : modelId;   // no display_name → show the id itself
+                        models.Add(new GatewayModel(modelId, label));
                     }
                 }
-                return ids;
+                return models;
             }
             catch (JsonException)
             {

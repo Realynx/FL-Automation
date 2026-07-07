@@ -93,11 +93,16 @@
                                         Command="{Binding Account.SignInCommand}" />
                             </StackPanel>
 
-                            <TextBlock Classes="settingDesc"
-                                       Text="No account yet? Create one at fl-automate.com." />
+                            <StackPanel Orientation="Horizontal" Spacing="5">
+                                <TextBlock Classes="settingDesc" VerticalAlignment="Center"
+                                           Text="No account yet?" />
+                                <Button Classes="link"
+                                        Content="Create one at fl-automate.com ↗"
+                                        Command="{Binding Account.OpenAccountPageCommand}" />
+                            </StackPanel>
                         </StackPanel>
 
-                        <!-- ── Signed IN face: identity + model + advanced ── -->
+                        <!-- ── Signed IN face: identity + model picker ── -->
                         <StackPanel Spacing="10" IsVisible="{Binding Account.IsLoggedIn}">
                             <Grid ColumnDefinitions="*,Auto">
                                 <TextBlock Grid.Column="0" Classes="settingLabel"
@@ -109,36 +114,27 @@
                                         Command="{Binding Account.SignOutCommand}" />
                             </Grid>
 
-                            <!-- Model -->
+                            <!-- Jump to the marketing site to upgrade/downgrade/manage billing. -->
+                            <Button Classes="link"
+                                    Content="Manage subscription at fl-automate.com ↗"
+                                    Command="{Binding Account.OpenAccountPageCommand}" />
+
+                            <!-- Model: the account's available models, fetched from the gateway.
+                                 First entry is always "Auto (plan default)". -->
                             <StackPanel Spacing="4">
                                 <TextBlock Classes="meta" Text="Model" />
-                                <TextBox Classes="field"
-                                         Watermark="default"
-                                         Text="{Binding Account.Model, Mode=TwoWay}"
-                                         IsEnabled="{Binding Account.IsNotBusy}" />
+                                <ComboBox Classes="field"
+                                          ItemsSource="{Binding Account.ModelOptions}"
+                                          SelectedItem="{Binding Account.SelectedModelOption, Mode=TwoWay}"
+                                          IsEnabled="{Binding Account.IsNotBusy}">
+                                    <ComboBox.ItemTemplate>
+                                        <DataTemplate x:DataType="vm:ModelOption">
+                                            <TextBlock Text="{Binding Label}" />
+                                        </DataTemplate>
+                                    </ComboBox.ItemTemplate>
+                                </ComboBox>
                                 <TextBlock Classes="settingDesc"
-                                           Text="'default' uses your plan's model." />
-                            </StackPanel>
-
-                            <!-- Advanced (collapsed): API + gateway URLs -->
-                            <CheckBox Classes="toggle"
-                                      Content="{Binding Account.AdvancedToggleText}"
-                                      IsChecked="{Binding Account.ShowAdvanced, Mode=TwoWay}" />
-                            <StackPanel Spacing="10" IsVisible="{Binding Account.ShowAdvanced}">
-                                <StackPanel Spacing="4">
-                                    <TextBlock Classes="meta" Text="API URL" />
-                                    <TextBox Classes="field"
-                                             Watermark="https://fl-automate.com/api"
-                                             Text="{Binding Account.ApiBaseUrl, Mode=TwoWay}"
-                                             IsEnabled="{Binding Account.IsNotBusy}" />
-                                </StackPanel>
-                                <StackPanel Spacing="4">
-                                    <TextBlock Classes="meta" Text="Gateway URL" />
-                                    <TextBox Classes="field"
-                                             Watermark="https://ai.fl-automate.com"
-                                             Text="{Binding Account.GatewayBaseUrl, Mode=TwoWay}"
-                                             IsEnabled="{Binding Account.IsNotBusy}" />
-                                </StackPanel>
+                                           Text="Auto uses your plan's default model." />
                             </StackPanel>
 
                             <!-- Actions -->

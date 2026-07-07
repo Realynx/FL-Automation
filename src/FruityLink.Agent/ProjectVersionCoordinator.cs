@@ -19,18 +19,28 @@ public sealed class ProjectVersionCoordinator : IDisposable
     private readonly IProjectVersionControl _vc;
     private readonly FlAgent _agent;
     private readonly IOperationAuditSink? _audit;
+    private readonly IChangeJournal? _journal;
+    private readonly IReadOnlySet<string>? _granularTools;
     private readonly HashSet<string> _mutatingThisTurn = new(StringComparer.OrdinalIgnoreCase);
     private readonly object _lock = new();
     private bool _disposed;
 
     /// <summary>Creates a coordinator committing to <paramref name="vc"/> at <paramref name="agent"/>'s turn
     /// boundaries. <paramref name="audit"/> is optional; when present its drained op descriptions label the
-    /// commit, otherwise the label falls back to an op count.</summary>
-    public ProjectVersionCoordinator(IProjectVersionControl vc, FlAgent agent, IOperationAuditSink? audit = null)
+    /// commit, otherwise the label falls back to an op count. <paramref name="journal"/> +
+    /// <paramref name="granularTools"/> enable granular inverse undo/redo: the journal's records are attached
+    /// to the commit only when EVERY mutating tool this turn is one that fully journals (in
+    /// <paramref name="granularTools"/>) and no capture was tainted; otherwise the commit stays
+    /// <c>.flp</c>-only. Omit both to keep the pre-journal behavior.</summary>
+    public ProjectVersionCoordinator(
+        IProjectVersionControl vc, FlAgent agent, IOperationAuditSink? audit = null,
+        IChangeJournal? journal = null, IReadOnlySet<string>? granularTools = null)
     {
         _vc = vc ?? throw new ArgumentNullException(nameof(vc));
         _agent = agent ?? throw new ArgumentNullException(nameof(agent));
         _audit = audit;
+        _journal = journal;
+        _granularTools = granularTools;
         _agent.ToolInvoked += OnTool;
     }
 
@@ -45,18 +55,34 @@ public sealed class ProjectVersionCoordinator : IDisposable
     /// state; a no-op (and cheap) otherwise. Never throws — a commit failure must not break the chat turn.</summary>
     public async Task OnTurnCompletedAsync(string? chatNodeId = null, CancellationToken ct = default)
     {
-        int mutatingCount;
+        string[] mutatedTools;
         lock (_lock)
         {
-            mutatingCount = _mutatingThisTurn.Count;
+            mutatedTools = _mutatingThisTurn.ToArray();
             _mutatingThisTurn.Clear();
         }
-        if (mutatingCount == 0) return;   // nothing persistent changed this turn
+
+        // ALWAYS drain the journal at the turn boundary — even on a non-mutating turn — so a stray capture
+        // (e.g. a UI-side value change) can never leak into a later turn's commit.
+        bool tainted = _journal?.IsTainted ?? false;
+        IReadOnlyList<Core.Domain.ChangeRecord> records = _journal?.Drain() ?? Array.Empty<Core.Domain.ChangeRecord>();
+
+        if (mutatedTools.Length == 0) return;   // nothing persistent changed this turn
+
+        // The turn is granularly invertible only when EVERY mutating tool it ran fully journals, no capture
+        // was tainted, and we actually recorded ops. Any not-yet-invertible tool (add_note, add_channel,
+        // delete_arrangement, …) taints the commit to .flp-only, so a turn is never left half-inverted.
+        bool granular =
+            _granularTools is not null
+            && !tainted
+            && records.Count > 0
+            && Array.TrueForAll(mutatedTools, _granularTools.Contains);
+        IReadOnlyList<Core.Domain.ChangeRecord>? changes = granular ? records : null;
 
         IReadOnlyList<string> ops = _audit?.Drain().Select(o => o.Description).ToArray() ?? Array.Empty<string>();
         string label = ops.Count > 0
             ? string.Join("; ", ops.Take(3))
-            : $"AI edit ({mutatingCount} {(mutatingCount == 1 ? "op" : "ops")})";
+            : $"AI edit ({mutatedTools.Length} {(mutatedTools.Length == 1 ? "op" : "ops")})";
 
         // Bound the whole commit so a wedged native call can never pin this worker indefinitely. The commit
         // already runs off the UI thread (the presenter fires this and-forget), and CommitAsync now backs up
@@ -66,7 +92,7 @@ public sealed class ProjectVersionCoordinator : IDisposable
         // timeout is swallowed; a backup problem must never surface into (or break) the chat turn.
         using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
         timeoutCts.CancelAfter(TimeSpan.FromSeconds(30));
-        try { await _vc.CommitAsync(label, chatNodeId, ops, CommitTrigger.Auto, timeoutCts.Token).ConfigureAwait(false); }
+        try { await _vc.CommitAsync(label, chatNodeId, ops, CommitTrigger.Auto, changes, timeoutCts.Token).ConfigureAwait(false); }
         catch { /* backup failure/timeout is never surfaced into the chat turn */ }
     }
 

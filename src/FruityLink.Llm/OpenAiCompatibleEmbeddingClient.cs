@@ -1,6 +1,6 @@
 using System.Net.Http;
 using System.Net.Http.Headers;
-using System.Net.Http.Json;
+using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using FruityLink.Core.Abstractions;
@@ -66,9 +66,13 @@ public sealed class OpenAiCompatibleEmbeddingClient : IEmbeddingClient
 
         // Build a per-request message so the Authorization header is never written to the shared
         // HttpClient's DefaultRequestHeaders (which would race across callers and leak stale keys).
+        // Deliberately NOT System.Net.Http.Json (JsonContent/ReadFromJsonAsync): in the FL plugin
+        // ALC the local System.Text.Json (10.x) and the host framework's System.Net.Http.Json (9.x)
+        // have split type identities → MissingMethodException. Serialize by hand instead.
         using var httpRequest = new HttpRequestMessage(HttpMethod.Post, _embeddingsUrl)
         {
-            Content = JsonContent.Create(request, options: SerializerOptions),
+            Content = new StringContent(
+                JsonSerializer.Serialize(request, SerializerOptions), Encoding.UTF8, "application/json"),
         };
         if (_apiKey is not null)
         {
@@ -88,9 +92,8 @@ public sealed class OpenAiCompatibleEmbeddingClient : IEmbeddingClient
                 $"({response.ReasonPhrase}). Body: {snippet}");
         }
 
-        EmbeddingResponse? parsed = await response.Content
-            .ReadFromJsonAsync<EmbeddingResponse>(SerializerOptions, ct)
-            .ConfigureAwait(false);
+        string payload = await response.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
+        EmbeddingResponse? parsed = JsonSerializer.Deserialize<EmbeddingResponse>(payload, SerializerOptions);
 
         if (parsed?.Data is null)
         {
