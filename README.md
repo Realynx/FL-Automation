@@ -1,65 +1,50 @@
-# FruityLink SDK
+<div align="center">
 
-The open-source plugin system and programmatic FL Studio control library that powers
-[FL Automate](https://fl-automate.com).
+<img src="assets/logo.svg" width="104" alt="FL Automate" />
 
-FruityLink lets you write **C# plugins that run inside FL Studio** and **drive FL Studio
-programmatically** — set the tempo, author piano-roll notes, arrange playlist clips, tweak mixer and
-plugin parameters, add menu items and toolbar buttons, and (with the Avalonia or WPF hosting
-packages) embed your own UI inside FL's window chrome.
+<h1>FruityLink SDK</h1>
 
-> The FL Automate AI assistant itself is a **separate, closed-source plugin built on this SDK** — it is
-> not part of this repository. What you get here is the same host, control surface, and plugin contract
-> the assistant runs on, so anything it does, your own plugin can do too.
+<p><strong>Write C# plugins that run inside FL Studio.</strong><br/>
+The open-source plugin system and FL Studio control surface behind
+<a href="https://fl-automate.com">FL Automate</a>.</p>
 
-## Features
+<p>
+<img src="https://img.shields.io/badge/license-MIT-8b5cf6?style=flat-square" alt="MIT license" />
+<img src="https://img.shields.io/badge/.NET-9.0-7c3aed?style=flat-square" alt=".NET 9" />
+<img src="https://img.shields.io/badge/FL%20Studio-2025%20%2F%202026-d946ef?style=flat-square" alt="FL Studio 2025/2026" />
+</p>
 
-- **A stable, tiny plugin contract** (`FruityLink.Plugins.Abstractions`) — implement one interface,
-  `IFlPlugin`, and you have a plugin.
-- **A safe, typed FL control surface** (`INativeFlControl`) covering channels, patterns, piano-roll
-  notes, the mixer, the playlist/arrangements, transport, markers, project lifecycle, plugin
-  parameters, and automation.
-- **Native menu + toolbar integration** — contribute commands and toggles to FL's own dropdowns and
-  main toolbar.
-- **UI embedding** — host any Win32 `HWND`, an Avalonia UI, or a WPF window inside a real FL editor
-  host form (the Avalonia/WPF hosting packages carry the rendering workarounds embedded UI needs).
-- **Hot reload** — rebuild a plugin dll and the host reloads it live, preserving enabled state.
-- **Isolated loading** — each plugin runs in its own collectible `AssemblyLoadContext` from a shadow
-  copy, so a plugin can be unloaded and its original dll stays writable for rebuilds.
+<p>
+<a href="https://fl-automate.com">Website</a> ·
+<a href="https://fl-automate.com/#pricing">Pricing</a> ·
+<a href="docs/getting-started.md">Getting started</a> ·
+<a href="#documentation">Docs</a>
+</p>
 
-## Architecture
+<p>🌱 <strong>1.5% of FL Automate AI usage goes to carbon credits</strong> —
+<a href="https://fl-automate.com/#pricing">fl-automate.com/#pricing</a></p>
 
-FruityLink runs *inside* FL Studio's process. The install chain gets managed code loaded, and a small
-native bridge (`FlBridge.dll`) executes FL engine calls on FL's own main thread:
+</div>
 
-```
-FL Studio (FL64.exe)
-  └─ version.dll                      transparent proxy (forwards the real version.dll exports)
-       └─ FlClrHost.dll               native CoreCLR host (hostfxr) — starts the .NET runtime in-process
-            └─ FruityLink.Host        HostEntry.Bootstrap — managed entry point
-                 ├─ FlBridge.dll      in-process native bridge; runs FL engine calls on FL's main thread
-                 │    (dev tooling can also reach it over the named pipe \\.\pipe\FruityLinkBridge)
-                 ├─ FruityLink.FlStudio    INativeFlControl implementation over the bridge
-                 └─ FruityLink.Plugins.Host
-                      └─ your plugin   discovered in <host-dir>\plugins, loaded in its own ALC
-```
+---
 
-Every plugin is handed an `IPluginContext` on enable. That context is the **trust boundary**: it exposes
-only the typed `INativeFlControl` surface plus menu/toolbar registrars — never the bridge's raw
-memory/call primitives.
+FruityLink lets a plain C# class library run inside FL Studio and drive it programmatically —
+tempo, piano-roll notes, patterns, playlist clips, mixer, plugin parameters, native menus and
+toolbar buttons, even your own UI embedded in FL's window chrome.
+
+The FL Automate AI assistant is a separate, closed-source plugin **built on this SDK**. Everything
+it can do in FL Studio, your plugin can do too.
 
 ## Quickstart
 
-A plugin is a class library that references `FruityLink.Plugins.Abstractions` and implements `IFlPlugin`:
+Reference `FruityLink.Plugins.Abstractions`, implement one interface:
 
 ```csharp
-using FruityLink.Plugins.Abstractions;
-
 public sealed class MyPlugin : IFlPlugin
 {
     public string Id => "my-plugin";
     public string Name => "My Plugin";
-    public string Description => "Logs the current tempo from a Tools-menu command.";
+    public string Description => "Logs the current tempo.";
     public string Version => "1.0.0";
 
     private IDisposable? _cmd;
@@ -80,69 +65,43 @@ public sealed class MyPlugin : IFlPlugin
 }
 ```
 
-Build it, then drop the output into the host's plugins directory:
+Drop the build output into `<host-dir>\plugins\MyPlugin\` and enable it from **Tools ▸ FL Plugins**.
+Rebuild and it hot-reloads. Full example: [`samples/HelloFl`](samples/HelloFl).
 
-```
-<host-dir>\plugins\MyPlugin\MyPlugin.dll
-```
+## What you get
 
-Start FL Studio (with the FL Automate / FruityLink host installed), open the **Tools ▸ FL Plugins**
-submenu, and enable your plugin. See [docs/getting-started.md](docs/getting-started.md) for the full
-walkthrough. A complete, buildable example lives in [`samples/HelloFl`](samples/HelloFl).
-
-## Repository layout
-
-| Path | What it is |
-| --- | --- |
-| `src/FruityLink.Core` | FL-control abstractions (`INativeFlControl`, `IFlSymbolResolution`) + `Music/*` helpers. |
-| `src/FruityLink.FlStudio` | `INativeFlControl` implementation talking to the native bridge. |
-| `src/FruityLink.Plugins.Abstractions` | The stable plugin contract (`IFlPlugin`, `IPluginContext`, menu/toolbar registrars). |
-| `src/FruityLink.Plugins.Host` | Plugin discovery, isolated loading, enable/disable persistence, hot reload. |
-| `src/FruityLink.Host` | The in-process managed entry point (`HostEntry.Bootstrap`). |
-| `src/FruityLink.Ui.Avalonia.Hosting` | Generic Avalonia-in-FL hosting (`EmbeddedAvaloniaHost`, embedded view wrapper). |
-| `src/FruityLink.Ui.Wpf.Hosting` | WPF-in-FL hosting helpers (`WpfUiThread`, `EmbeddedWpfView`). |
-| `samples/HelloFl` | Minimal buildable sample plugin. |
-| `native/bridge` | The native `FlBridge.dll` (C++/CMake). |
-| `docs/` | Documentation (index below). |
-
-## Building from source
-
-Managed projects (SDK + sample), with the .NET 9 SDK:
-
-```sh
-dotnet build sdk/FruityLink.Sdk.slnx
-# or just the sample:
-dotnet build sdk/samples/HelloFl/HelloFl.csproj
-```
-
-The native bridge, with CMake + MSVC (must be x64 to match FL Studio):
-
-```sh
-cmake -S sdk/native/bridge -B sdk/native/bridge/build -A x64
-cmake --build sdk/native/bridge/build --config Release
-# -> sdk/native/bridge/build/Release/FlBridge.dll
-```
+- **`INativeFlControl`** — a typed, safe control surface: channels, patterns, notes, mixer,
+  playlist, transport, markers, projects, arrangements, plugin params, automation.
+- **Native menu + toolbar integration** — commands and toggles in FL's own UI.
+- **UI embedding** — host Avalonia, WPF, or any `HWND` inside a real FL editor form.
+- **Hot reload + isolation** — each plugin loads in its own collectible `AssemblyLoadContext`
+  from a shadow copy.
+- **Fail-safe by design** — FL functions are resolved by signature scan and refused rather than
+  guessed; plugins never see raw memory primitives.
 
 ## Documentation
 
-- [Getting started](docs/getting-started.md) — write, build, deploy, and debug your first plugin.
-- [Plugin lifecycle](docs/plugin-lifecycle.md) — discovery, isolation, persistence, pre-warm, hot reload.
+- [Getting started](docs/getting-started.md) — first plugin, deploy, debug.
+- [Plugin lifecycle](docs/plugin-lifecycle.md) — discovery, isolation, pre-warm, hot reload.
 - [FL control API](docs/fl-control-api.md) — the `INativeFlControl` surface and FL's value conventions.
-- [Menus and toolbar](docs/menus-and-toolbar.md) — contributing commands, toggles, and buttons.
-- [Window embedding](docs/window-embedding.md) — hosting your own window inside an FL editor form,
-  including the WPF helpers.
-- [Avalonia UI](docs/avalonia-ui.md) — hosting Avalonia UI inside FL, and the gotchas that matter.
-- [Native bridge](docs/native-bridge.md) — the `FlBridge.dll` protocol, build, and version policy.
+- [Menus and toolbar](docs/menus-and-toolbar.md) — contributing to FL's native UI.
+- [Window embedding](docs/window-embedding.md) — your window inside FL, incl. the WPF helpers.
+- [Avalonia UI](docs/avalonia-ui.md) — Avalonia inside FL, and the gotchas that matter.
+- [Native bridge](docs/native-bridge.md) — architecture, protocol, build, FL version policy.
 
-## Safety and compatibility
+## Building
 
-FruityLink controls FL Studio through reverse-engineered engine entry points. The native bridge resolves
-those addresses at runtime by byte-signature scanning and **fails safe** — an address it cannot uniquely
-resolve is refused rather than guessed, because a wrong address would be an uncatchable crash inside FL.
-Symbol resolution is currently validated against the FL Studio 2025 / 2026 line. Tools that depend on a
-symbol which did not resolve on the running FL build are hidden rather than fired. See
-[docs/native-bridge.md](docs/native-bridge.md).
+```sh
+dotnet build FruityLink.Sdk.slnx                                  # managed SDK + sample
+cmake -S native/bridge -B native/bridge/build -A x64              # native bridge (MSVC, x64)
+cmake --build native/bridge/build --config Release
+```
 
 ## License
 
-MIT — see [LICENSE](LICENSE).
+[MIT](LICENSE) © FL Automate
+
+<div align="center"><sub>
+Made for producers who script. <a href="https://fl-automate.com/#pricing">FL Automate pricing</a> —
+🌱 1.5% of AI usage funds carbon credits.
+</sub></div>
