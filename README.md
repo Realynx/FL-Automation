@@ -99,7 +99,7 @@ cmake --build native/bridge/build --config Release
 
 ## License
 
-[MIT](LICENSE) © FL Automate
+[MIT](LICENSE) © Realynx
 
 <div align="center"><sub>
 Made for producers who script. <a href="https://fl-automate.com/#pricing">FL Automate pricing</a> —
