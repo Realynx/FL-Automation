@@ -6,6 +6,7 @@
     <Project Path="src/FruityLink.Plugins.Abstractions/FruityLink.Plugins.Abstractions.csproj" />
     <Project Path="src/FruityLink.Plugins.Host/FruityLink.Plugins.Host.csproj" />
     <Project Path="src/FruityLink.Ui.Avalonia.Hosting/FruityLink.Ui.Avalonia.Hosting.csproj" />
+    <Project Path="src/FruityLink.Ui.Wpf.Hosting/FruityLink.Ui.Wpf.Hosting.csproj" />
   </Folder>
   <Folder Name="/samples/">
     <Project Path="samples/HelloFl/HelloFl.csproj" />

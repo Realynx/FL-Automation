@@ -5,8 +5,8 @@ The open-source plugin system and programmatic FL Studio control library that po
 
 FruityLink lets you write **C# plugins that run inside FL Studio** and **drive FL Studio
 programmatically** — set the tempo, author piano-roll notes, arrange playlist clips, tweak mixer and
-plugin parameters, add menu items and toolbar buttons, and (with the Avalonia hosting package) embed
-your own UI inside FL's window chrome.
+plugin parameters, add menu items and toolbar buttons, and (with the Avalonia or WPF hosting
+packages) embed your own UI inside FL's window chrome.
 
 > The FL Automate AI assistant itself is a **separate, closed-source plugin built on this SDK** — it is
 > not part of this repository. What you get here is the same host, control surface, and plugin contract
@@ -21,7 +21,8 @@ your own UI inside FL's window chrome.
   parameters, and automation.
 - **Native menu + toolbar integration** — contribute commands and toggles to FL's own dropdowns and
   main toolbar.
-- **UI embedding** — host any Win32 `HWND`, or an Avalonia UI, inside a real FL editor host form.
+- **UI embedding** — host any Win32 `HWND`, an Avalonia UI, or a WPF window inside a real FL editor
+  host form (the Avalonia/WPF hosting packages carry the rendering workarounds embedded UI needs).
 - **Hot reload** — rebuild a plugin dll and the host reloads it live, preserving enabled state.
 - **Isolated loading** — each plugin runs in its own collectible `AssemblyLoadContext` from a shadow
   copy, so a plugin can be unloaded and its original dll stays writable for rebuilds.
@@ -99,6 +100,7 @@ walkthrough. A complete, buildable example lives in [`samples/HelloFl`](samples/
 | `src/FruityLink.Plugins.Host` | Plugin discovery, isolated loading, enable/disable persistence, hot reload. |
 | `src/FruityLink.Host` | The in-process managed entry point (`HostEntry.Bootstrap`). |
 | `src/FruityLink.Ui.Avalonia.Hosting` | Generic Avalonia-in-FL hosting (`EmbeddedAvaloniaHost`, embedded view wrapper). |
+| `src/FruityLink.Ui.Wpf.Hosting` | WPF-in-FL hosting helpers (`WpfUiThread`, `EmbeddedWpfView`). |
 | `samples/HelloFl` | Minimal buildable sample plugin. |
 | `native/bridge` | The native `FlBridge.dll` (C++/CMake). |
 | `docs/` | Documentation (index below). |
@@ -127,7 +129,8 @@ cmake --build sdk/native/bridge/build --config Release
 - [Plugin lifecycle](docs/plugin-lifecycle.md) — discovery, isolation, persistence, pre-warm, hot reload.
 - [FL control API](docs/fl-control-api.md) — the `INativeFlControl` surface and FL's value conventions.
 - [Menus and toolbar](docs/menus-and-toolbar.md) — contributing commands, toggles, and buttons.
-- [Window embedding](docs/window-embedding.md) — hosting your own window inside an FL editor form.
+- [Window embedding](docs/window-embedding.md) — hosting your own window inside an FL editor form,
+  including the WPF helpers.
 - [Avalonia UI](docs/avalonia-ui.md) — hosting Avalonia UI inside FL, and the gotchas that matter.
 - [Native bridge](docs/native-bridge.md) — the `FlBridge.dll` protocol, build, and version policy.
 
@@ -142,4 +145,4 @@ symbol which did not resolve on the running FL build are hidden rather than fire
 
 ## License
 
-MIT — see [LICENSE](LICENSE). (License holder pending owner confirmation.)
+MIT — see [LICENSE](LICENSE).

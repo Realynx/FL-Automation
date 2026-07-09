@@ -6,7 +6,9 @@ editor host form, next to FL's VST/plugin editors, rather than floating as a det
 any Win32 `HWND`.
 
 If you host **Avalonia** UI, use [FruityLink.Ui.Avalonia.Hosting](avalonia-ui.md) instead of driving
-the raw HWND embed yourself.
+the raw HWND embed yourself. If you host **WPF** UI, use `FruityLink.Ui.Wpf.Hosting`
+([below](#wpf-windows)) — a raw WPF window *will* embed, and will then hit three known Win32/WPF bugs
+that package exists to fix.
 
 The surface (see the interface's XML docs for the fine print):
 
@@ -66,6 +68,57 @@ until something invalidates it. The fix is **software rendering** for the embedd
 repaint after embed/re-show. The Avalonia hosting package does this for you; if you embed your own HWND,
 render it in software while it is parented. This is covered in detail for Avalonia in
 [avalonia-ui.md](avalonia-ui.md#gotchas).
+
+## WPF windows
+
+`FruityLink.Ui.Wpf.Hosting` is the WPF counterpart of the Avalonia hosting package:
+
+- **`WpfUiThread`** — provides the WPF `Dispatcher` to host your window on: it reuses the host
+  process's WPF UI thread when one exists (inside FL Studio it does — the FruityLink host is a WPF
+  app), else spins up a private STA dispatcher thread.
+- **`EmbeddedWpfView`** — wraps any `Window` and applies the live-verified workarounds a WPF window
+  needs to survive as a `WS_CHILD` of FL's non-WPF host form:
+  1. **Software rendering with an opaque backdrop.** WPF's DWM/hardware composition hits the airspace
+     bug inside a foreign parent (blank until input); and without an opaque backdrop, empty child areas
+     render transparent, letting FL's own content bleed through.
+  2. **A `WM_WINDOWPOSCHANGING` position pin.** Once it's a child, WPF keeps re-applying
+     `Window.Left/Top` and moves the window off the host (the classic WPF-window-as-child coordinate
+     bug); the pin forces it to fill the host's content area, inset below FL's titlebar.
+  3. **Re-present after resize/re-show.** In software mode inside a foreign parent WPF does not
+     re-present on its own after the host is resized, maximized, docked, or re-shown — the view stays
+     blank until an input event. The wrapper forces a synchronous repaint (and, on real resizes, posts
+     a synthetic mouse-move that kicks WPF's full render+present cycle — posted, so it never moves the
+     OS cursor or clicks).
+
+The whole flow, on the window's UI thread:
+
+```csharp
+var ui = new WpfUiThread();
+ui.Start();
+ui.Dispatcher.Invoke(() =>
+{
+    var window = new MyPluginWindow();
+    var view   = new EmbeddedWpfView(window);          // backdrop defaults to the window's Background
+
+    view.PrepareForEmbedding();                        // borderless, off-screen, no taskbar/activation
+    window.Show();                                     // force a WPF layout/render pass before reparenting
+    bool embedded = context.Windows.TryEmbed(view.EnsureNativeHandle(), show: true);
+    if (embedded)
+    {
+        view.PinToHostContent(context.Windows.LastInsetX, context.Windows.LastInsetY);
+        view.ForceRerender();                          // synchronous first paint (else blank until a click)
+    }
+    else
+    {
+        view.RestoreExternalChrome();                  // external top-level fallback (always works)
+        window.Show();
+        window.Activate();
+    }
+});
+```
+
+Call `view.ForceRerender()` after every re-show (`context.Windows.SetVisible(true)`), for the same
+reason as workaround 3.
 
 ## Status hint bar
 
