@@ -1,0 +1,24 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net9.0-windows</TargetFramework>
+    <RootNamespace>FruityLink.FlStudio</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\FruityLink.Core\FruityLink.Core.csproj" />
+    <!-- Plugin contract: Windowing\FlWindowHost implements IFlWindowHost (the FL window-embed +
+         hint-bar side-channel exposed to plugins via IPluginContext.Windows). Abstractions -> Core
+         only, so no cycle. -->
+    <ProjectReference Include="..\FruityLink.Plugins.Abstractions\FruityLink.Plugins.Abstractions.csproj" />
+  </ItemGroup>
+
+  <!-- Capability lockdown (re/17 #50): the raw command/memory methods on FlInjectBridge
+       (RawAsync/CallAsync/PeekAsync/PokeAsync/PokeAbsAsync) are internal so third-party plugins,
+       which only ever receive the typed INativeFlControl, cannot reach raw poke/call by casting to the
+       concrete type. The in-proc host that legitimately needs raw access sees them via this grant. -->
+  <ItemGroup>
+    <InternalsVisibleTo Include="FruityLink.Host" />
+  </ItemGroup>
+
+</Project>

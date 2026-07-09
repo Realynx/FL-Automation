@@ -1,0 +1,40 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- =========================================================================
+       FruityLink.Ui.Avalonia.Hosting — SDK: generic Avalonia-in-FL hosting.
+
+       The reusable mechanics for running an Avalonia UI IN-PROCESS inside a
+       NON-Avalonia host (FL Studio) and reparenting its window into an FL native
+       host form:
+         • EmbeddedAvaloniaHost — the process-singleton STA Avalonia thread
+           (SetupWithoutStarting + permanent MainLoop, software rendering onto the
+           redirection surface — the reliable presenter for a WS_CHILD of a foreign
+           parent). The application itself is supplied by the product as an
+           AppBuilder factory on the first EnsureStarted call.
+         • EmbeddedAvaloniaView — wraps ANY Avalonia Window with the embed
+           mechanics (PrepareForEmbedding / Handle / ForceRender / ShowExternal /
+           hide-on-close).
+
+       No ProjectReferences on purpose: this layer is UI-toolkit glue only — it
+       neither knows about FL control surfaces nor about the plugin contract.
+       Central Package Management is OFF (like the product Avalonia projects);
+       Avalonia is pinned inline at 11.3.18 to match FruityLink.Ui.Avalonia.
+       Only the packages the moved code needs: Avalonia (AppBuilder, Window,
+       Dispatcher) + Avalonia.Desktop (Win32PlatformOptions / rendering modes).
+       ========================================================================= -->
+  <PropertyGroup>
+    <OutputType>Library</OutputType>
+    <TargetFramework>net9.0</TargetFramework>
+    <RootNamespace>FruityLink.Ui.Avalonia.Hosting</RootNamespace>
+    <AssemblyName>FruityLink.Ui.Avalonia.Hosting</AssemblyName>
+    <ManagePackageVersionsCentrally>false</ManagePackageVersionsCentrally>
+    <BuiltInComInteropSupport>true</BuiltInComInteropSupport>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Pinned inline to match FruityLink.Ui.Avalonia (Directory.Packages.props stays untouched). -->
+    <PackageReference Include="Avalonia" Version="11.3.18" />
+    <PackageReference Include="Avalonia.Desktop" Version="11.3.18" />
+  </ItemGroup>
+
+</Project>

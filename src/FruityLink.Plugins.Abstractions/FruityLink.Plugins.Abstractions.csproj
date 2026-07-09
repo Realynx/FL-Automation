@@ -1,0 +1,16 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- The stable plugin contract every FruityLink plugin + the host build against.
+       Deliberately tiny + dependency-light so it never churns. Opted out of central
+       package management so it builds standalone (only a ProjectReference to Core). -->
+  <PropertyGroup>
+    <TargetFramework>net9.0</TargetFramework>
+    <RootNamespace>FruityLink.Plugins.Abstractions</RootNamespace>
+    <ManagePackageVersionsCentrally>false</ManagePackageVersionsCentrally>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\FruityLink.Core\FruityLink.Core.csproj" />
+  </ItemGroup>
+
+</Project>

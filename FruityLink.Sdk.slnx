@@ -1,0 +1,13 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/FruityLink.Core/FruityLink.Core.csproj" />
+    <Project Path="src/FruityLink.FlStudio/FruityLink.FlStudio.csproj" />
+    <Project Path="src/FruityLink.Host/FruityLink.Host.csproj" />
+    <Project Path="src/FruityLink.Plugins.Abstractions/FruityLink.Plugins.Abstractions.csproj" />
+    <Project Path="src/FruityLink.Plugins.Host/FruityLink.Plugins.Host.csproj" />
+    <Project Path="src/FruityLink.Ui.Avalonia.Hosting/FruityLink.Ui.Avalonia.Hosting.csproj" />
+  </Folder>
+  <Folder Name="/samples/">
+    <Project Path="samples/HelloFl/HelloFl.csproj" />
+  </Folder>
+</Solution>

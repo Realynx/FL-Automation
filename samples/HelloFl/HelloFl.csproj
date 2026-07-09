@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- Minimal FruityLink plugin. A plugin is just a class library that references the
+       Plugins.Abstractions contract and implements IFlPlugin; drop the built dll (or its
+       whole output folder) into <host-dir>\plugins and the host discovers it.
+       Opted out of central package management so it builds standalone. -->
+  <PropertyGroup>
+    <TargetFramework>net9.0-windows</TargetFramework>
+    <RootNamespace>HelloFl</RootNamespace>
+    <ManagePackageVersionsCentrally>false</ManagePackageVersionsCentrally>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\FruityLink.Plugins.Abstractions\FruityLink.Plugins.Abstractions.csproj" />
+  </ItemGroup>
+
+</Project>

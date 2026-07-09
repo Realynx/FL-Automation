@@ -1,0 +1,17 @@
+<Project>
+
+  <PropertyGroup>
+    <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>
+    <CentralPackageTransitivePinningEnabled>true</CentralPackageTransitivePinningEnabled>
+  </PropertyGroup>
+
+  <!-- The SDK projects themselves are dependency-free (BCL only) and opt out of central
+       package management so they build standalone. These pins exist for test projects. -->
+  <ItemGroup Label="Test">
+    <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="18.7.0" />
+    <PackageVersion Include="xunit" Version="2.9.3" />
+    <PackageVersion Include="xunit.runner.visualstudio" Version="3.1.5" />
+    <PackageVersion Include="Shouldly" Version="4.3.0" />
+  </ItemGroup>
+
+</Project>

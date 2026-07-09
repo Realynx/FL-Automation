@@ -1,0 +1,9 @@
+# .NET
+bin/
+obj/
+artifacts/
+.vs/
+*.user
+
+# CMake output (native/bridge/build)
+build/
