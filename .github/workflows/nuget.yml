@@ -10,13 +10,23 @@ name: Publish to NuGet
 # (e.g. tag v0.1.0 with VERSION 0.1.0) — releases with other tags (installer
 # releases) are skipped, not failed. Or run it manually from the Actions tab
 # to publish whatever the VERSION file currently says.
-# Requires the NUGET_API_KEY repository secret (nuget.org API key scoped to
-# push the FruityLink.* packages).
+#
+# Auth: nuget.org TRUSTED PUBLISHING (OIDC) — no long-lived API key exists
+# anywhere. The NuGet/login step exchanges this run's GitHub identity token
+# for a short-lived nuget.org key, authorized by a Trusted Publishing policy
+# on nuget.org (profile -> Trusted Publishing) that names this repo and this
+# workflow file (nuget.yml). The NUGET_USER repository VARIABLE (not secret)
+# must hold the nuget.org profile name that owns the policy.
 
 on:
   release:
     types: [published]
   workflow_dispatch:
+
+permissions:
+  # id-token lets the run mint the OIDC token that Trusted Publishing verifies.
+  id-token: write
+  contents: read
 
 jobs:
   publish:
@@ -58,6 +68,13 @@ jobs:
           dotnet pack src/FruityLink.Ui.Avalonia.Hosting/FruityLink.Ui.Avalonia.Hosting.csproj -c Release -o packages
           dotnet pack src/FruityLink.Ui.Wpf.Hosting/FruityLink.Ui.Wpf.Hosting.csproj -c Release -o packages
 
+      - name: NuGet login (Trusted Publishing)
+        if: steps.gate.outputs.publish == 'true'
+        id: login
+        uses: NuGet/login@v1
+        with:
+          user: ${{ vars.NUGET_USER }}
+
       - name: Push to nuget.org
         if: steps.gate.outputs.publish == 'true'
-        run: dotnet nuget push "packages\*.nupkg" --api-key "${{ secrets.NUGET_API_KEY }}" --source https://api.nuget.org/v3/index.json --skip-duplicate
+        run: dotnet nuget push "packages\*.nupkg" --api-key "${{ steps.login.outputs.NUGET_API_KEY }}" --source https://api.nuget.org/v3/index.json --skip-duplicate
