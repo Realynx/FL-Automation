@@ -4,7 +4,9 @@
     <TargetFramework>net9.0-windows</TargetFramework>
     <UseWPF>true</UseWPF>
     <RootNamespace>FruityLink.Ui.Wpf.Hosting</RootNamespace>
-    <Description>WPF helpers for embedding plugin UI inside FL Studio window hosts (companion to IFlWindowHost).</Description>
+    <IsPackable>true</IsPackable>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <Description>WPF helpers for embedding plugin UI inside FL Studio window hosts from a FruityLink plugin (companion to IFlWindowHost).</Description>
   </PropertyGroup>
 
 </Project>

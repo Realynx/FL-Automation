@@ -1,0 +1,63 @@
+name: Publish to NuGet
+
+# Publishes the developer-facing FruityLink SDK packages to nuget.org:
+#   FruityLink.Plugins.Abstractions  (the plugin contract — what plugin devs reference)
+#   FruityLink.Core                  (its transitive dependency)
+#   FruityLink.Ui.Avalonia.Hosting   (embed Avalonia UI inside FL Studio)
+#   FruityLink.Ui.Wpf.Hosting        (embed WPF UI inside FL Studio)
+#
+# Trigger: publishing a GitHub release whose tag matches the SDK VERSION file
+# (e.g. tag v0.1.0 with VERSION 0.1.0) — releases with other tags (installer
+# releases) are skipped, not failed. Or run it manually from the Actions tab
+# to publish whatever the VERSION file currently says.
+# Requires the NUGET_API_KEY repository secret (nuget.org API key scoped to
+# push the FruityLink.* packages).
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+
+jobs:
+  publish:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 9.0.x
+
+      # The VERSION file is the single version source (Directory.Build.props
+      # stamps it on every assembly and package). Only a release whose tag
+      # matches it publishes packages; other releases on this repo (the
+      # FruityLink installer zips) skip quietly. Manual dispatch always
+      # publishes the current VERSION.
+      - name: Check release tag against VERSION
+        id: gate
+        shell: bash
+        run: |
+          if [ "${{ github.event_name }}" != "release" ]; then
+            echo "publish=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          FILE_VERSION="$(tr -d ' \r\n' < VERSION)"
+          TAG="${{ github.event.release.tag_name }}"
+          if [ "v$FILE_VERSION" = "$TAG" ]; then
+            echo "publish=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "publish=false" >> "$GITHUB_OUTPUT"
+            echo "Release tag $TAG != SDK VERSION v$FILE_VERSION — skipping NuGet publish (likely an installer release)."
+          fi
+
+      - name: Pack
+        if: steps.gate.outputs.publish == 'true'
+        run: |
+          dotnet pack src/FruityLink.Core/FruityLink.Core.csproj -c Release -o packages
+          dotnet pack src/FruityLink.Plugins.Abstractions/FruityLink.Plugins.Abstractions.csproj -c Release -o packages
+          dotnet pack src/FruityLink.Ui.Avalonia.Hosting/FruityLink.Ui.Avalonia.Hosting.csproj -c Release -o packages
+          dotnet pack src/FruityLink.Ui.Wpf.Hosting/FruityLink.Ui.Wpf.Hosting.csproj -c Release -o packages
+
+      - name: Push to nuget.org
+        if: steps.gate.outputs.publish == 'true'
+        run: dotnet nuget push "packages\*.nupkg" --api-key "${{ secrets.NUGET_API_KEY }}" --source https://api.nuget.org/v3/index.json --skip-duplicate

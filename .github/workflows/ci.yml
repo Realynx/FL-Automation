@@ -1,0 +1,26 @@
+name: CI
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 9.0.x
+
+      - name: Build SDK solution
+        run: dotnet build FruityLink.Sdk.slnx -c Release
+
+      - name: Pack (dry run — catches packaging regressions before a release)
+        run: |
+          dotnet pack src/FruityLink.Core/FruityLink.Core.csproj -c Release --no-build -o packages
+          dotnet pack src/FruityLink.Plugins.Abstractions/FruityLink.Plugins.Abstractions.csproj -c Release --no-build -o packages
+          dotnet pack src/FruityLink.Ui.Avalonia.Hosting/FruityLink.Ui.Avalonia.Hosting.csproj -c Release --no-build -o packages
+          dotnet pack src/FruityLink.Ui.Wpf.Hosting/FruityLink.Ui.Wpf.Hosting.csproj -c Release --no-build -o packages

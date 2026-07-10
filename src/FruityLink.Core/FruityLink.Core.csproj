@@ -3,6 +3,9 @@
   <PropertyGroup>
     <TargetFramework>net9.0</TargetFramework>
     <RootNamespace>FruityLink.Core</RootNamespace>
+    <IsPackable>true</IsPackable>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <Description>Core primitives of the FruityLink SDK — the typed FL Studio control surface (INativeFlControl) and shared abstractions the FruityLink plugin contract builds on. Referenced transitively via FruityLink.Plugins.Abstractions.</Description>
   </PropertyGroup>
 
 </Project>

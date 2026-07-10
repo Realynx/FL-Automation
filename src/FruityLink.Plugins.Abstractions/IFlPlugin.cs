@@ -11,7 +11,7 @@ public interface IFlPlugin
     /// <summary>Stable unique id (e.g. "fl-agent"); used for persistence + enable/disable.</summary>
     string Id { get; }
 
-    /// <summary>Display name shown in the Plugins dropdown (e.g. "FL Agent").</summary>
+    /// <summary>Display name shown in the Plugins dropdown (e.g. "FL Automate").</summary>
     string Name { get; }
 
     /// <summary>One-line description shown in the plugin manager.</summary>

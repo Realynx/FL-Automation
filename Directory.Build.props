@@ -19,4 +19,27 @@
     <NoWarn>$(NoWarn);CA1416</NoWarn>
   </PropertyGroup>
 
+  <!-- NuGet metadata shared by the packable SDK projects. Packing is OPT-IN:
+       developer-facing libraries set IsPackable=true (+ a Description) in their
+       own csproj; host/runtime projects ship via the installer, never NuGet.
+       The CI publish workflow (.github/workflows/nuget.yml) packs exactly the
+       opted-in set on every GitHub release. -->
+  <PropertyGroup>
+    <IsPackable>false</IsPackable>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <PackageProjectUrl>https://github.com/Realynx/FL-Automation</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/Realynx/FL-Automation</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
+    <PackageTags>fl-studio;fruitylink;plugin;daw;music;fl-automate</PackageTags>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <IncludeSymbols>true</IncludeSymbols>
+    <SymbolPackageFormat>snupkg</SymbolPackageFormat>
+  </PropertyGroup>
+
+  <!-- Item conditions are evaluated after ALL properties, so this sees each
+       project's final IsPackable value. -->
+  <ItemGroup Condition="'$(IsPackable)' == 'true'">
+    <None Include="$(MSBuildThisFileDirectory)README.md" Pack="true" PackagePath="\" />
+  </ItemGroup>
+
 </Project>

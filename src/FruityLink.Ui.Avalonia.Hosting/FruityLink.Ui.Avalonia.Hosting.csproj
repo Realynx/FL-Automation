@@ -29,6 +29,9 @@
     <AssemblyName>FruityLink.Ui.Avalonia.Hosting</AssemblyName>
     <ManagePackageVersionsCentrally>false</ManagePackageVersionsCentrally>
     <BuiltInComInteropSupport>true</BuiltInComInteropSupport>
+    <IsPackable>true</IsPackable>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <Description>Run an Avalonia UI in-process inside FL Studio from a FruityLink plugin — EmbeddedAvaloniaHost (singleton STA Avalonia thread in a non-Avalonia host) and EmbeddedAvaloniaView (reparent any Avalonia Window into an FL native host form).</Description>
   </PropertyGroup>
 
   <ItemGroup>
