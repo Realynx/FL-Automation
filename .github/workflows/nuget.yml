@@ -31,6 +31,9 @@ permissions:
 jobs:
   publish:
     runs-on: windows-latest
+    # Must match the environment named on the nuget.org Trusted Publishing
+    # policy — the OIDC token carries it and nuget.org rejects a mismatch.
+    environment: production
     steps:
       - uses: actions/checkout@v4
 
