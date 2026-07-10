@@ -10,6 +10,7 @@ The open-source plugin system and FL Studio control surface behind
 
 <p>
 <a href="https://www.nuget.org/packages/FruityLink.Plugins.Abstractions"><img src="https://img.shields.io/nuget/v/FruityLink.Plugins.Abstractions?style=flat-square&color=22d3ee&label=NuGet" alt="NuGet" /></a>
+<a href="https://discord.fl-automate.com"><img src="https://img.shields.io/badge/Discord-join%20us-5865F2?style=flat-square&logo=discord&logoColor=white" alt="Discord" /></a>
 <img src="https://img.shields.io/badge/license-MIT-8b5cf6?style=flat-square" alt="MIT license" />
 <img src="https://img.shields.io/badge/.NET-9.0-7c3aed?style=flat-square" alt=".NET 9" />
 <img src="https://img.shields.io/badge/FL%20Studio-2025%20%2F%202026-d946ef?style=flat-square" alt="FL Studio 2025/2026" />
@@ -18,6 +19,7 @@ The open-source plugin system and FL Studio control surface behind
 <p>
 <a href="https://fl-automate.com">Website</a> ·
 <a href="https://fl-automate.com/#pricing">Pricing</a> ·
+<a href="https://discord.fl-automate.com">Discord</a> ·
 <a href="docs/getting-started.md">Getting started</a> ·
 <a href="#documentation">Docs</a>
 </p>
