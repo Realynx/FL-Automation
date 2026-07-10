@@ -9,6 +9,7 @@ The open-source plugin system and FL Studio control surface behind
 <a href="https://fl-automate.com">FL Automate</a>.</p>
 
 <p>
+<a href="https://www.nuget.org/packages/FruityLink.Plugins.Abstractions"><img src="https://img.shields.io/nuget/v/FruityLink.Plugins.Abstractions?style=flat-square&color=22d3ee&label=NuGet" alt="NuGet" /></a>
 <img src="https://img.shields.io/badge/license-MIT-8b5cf6?style=flat-square" alt="MIT license" />
 <img src="https://img.shields.io/badge/.NET-9.0-7c3aed?style=flat-square" alt=".NET 9" />
 <img src="https://img.shields.io/badge/FL%20Studio-2025%20%2F%202026-d946ef?style=flat-square" alt="FL Studio 2025/2026" />
@@ -37,7 +38,17 @@ it can do in FL Studio, your plugin can do too.
 
 ## Quickstart
 
-Reference `FruityLink.Plugins.Abstractions`, implement one interface:
+The SDK is [on NuGet](https://www.nuget.org/packages/FruityLink.Plugins.Abstractions) — start a
+plugin from any C# class library with one command:
+
+```bash
+dotnet add package FruityLink.Plugins.Abstractions
+```
+
+That's the whole plugin contract (`FruityLink.Core` comes along transitively). Embedding your own
+UI inside FL Studio? Also grab `FruityLink.Ui.Avalonia.Hosting` or `FruityLink.Ui.Wpf.Hosting`.
+
+Implement one interface:
 
 ```csharp
 public sealed class MyPlugin : IFlPlugin
