@@ -9,6 +9,8 @@ namespace FruityLink.Persistence;
 /// File-backed <see cref="IChatStore"/> storing one <c>chats/{id}.json</c> per session.
 /// Writes are atomic; <see cref="ExportAsync"/> renders Markdown transcripts or indented JSON.
 /// </summary>
+/// <remarks>Parked roadmap code (chat save/branching UI): tested but not yet wired into the
+/// composition root, so nothing in the product instantiates it today.</remarks>
 public sealed class JsonChatStore : IChatStore
 {
     private readonly StoragePaths _paths;
@@ -53,8 +55,7 @@ public sealed class JsonChatStore : IChatStore
     {
         ArgumentNullException.ThrowIfNull(session);
         ArgumentException.ThrowIfNullOrEmpty(session.Id);
-        string json = JsonSerializer.Serialize(session, JsonDefaults.Options);
-        await AtomicFile.WriteAllTextAsync(_paths.ChatFile(session.Id), json, ct).ConfigureAwait(false);
+        await JsonFile.WriteAsync(_paths.ChatFile(session.Id), session, ct).ConfigureAwait(false);
     }
 
     /// <inheritdoc />
@@ -84,20 +85,8 @@ public sealed class JsonChatStore : IChatStore
         };
     }
 
-    private static async Task<ChatSession?> ReadFileAsync(string path, CancellationToken ct)
-    {
-        try
-        {
-            await using FileStream stream = File.OpenRead(path);
-            return await JsonSerializer.DeserializeAsync<ChatSession>(stream, JsonDefaults.Options, ct)
-                .ConfigureAwait(false);
-        }
-        catch (JsonException)
-        {
-            // Skip corrupt/unparseable files rather than failing the whole listing.
-            return null;
-        }
-    }
+    private static Task<ChatSession?> ReadFileAsync(string path, CancellationToken ct) =>
+        JsonFile.TryReadAsync<ChatSession>(path, ct);
 
     private static string RenderMarkdown(ChatSession session)
     {

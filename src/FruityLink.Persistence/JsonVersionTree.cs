@@ -1,5 +1,4 @@
 using System.Collections.Concurrent;
-using System.Text.Json;
 using FruityLink.Core.Abstractions;
 using FruityLink.Core.Domain;
 
@@ -10,6 +9,8 @@ namespace FruityLink.Persistence;
 /// <c>List&lt;VersionNode&gt;</c> in <c>versions/{sessionId}.json</c>. A per-session lock
 /// serializes read-modify-write so concurrent checkpoint creation stays consistent.
 /// </summary>
+/// <remarks>Parked roadmap code: tested but not yet wired into the composition root — shipped
+/// project versioning uses <see cref="JsonProjectVersionControl"/> (the ProjectCommit DAG) instead.</remarks>
 public sealed class JsonVersionTree : IVersionTree
 {
     private readonly StoragePaths _paths;
@@ -86,31 +87,9 @@ public sealed class JsonVersionTree : IVersionTree
     private SemaphoreSlim LockFor(string sessionId) =>
         _locks.GetOrAdd(sessionId, static _ => new SemaphoreSlim(1, 1));
 
-    private async Task<List<VersionNode>> ReadNodesAsync(string sessionId, CancellationToken ct)
-    {
-        string path = _paths.VersionFile(sessionId);
-        if (!File.Exists(path))
-        {
-            return [];
-        }
+    private async Task<List<VersionNode>> ReadNodesAsync(string sessionId, CancellationToken ct) =>
+        await JsonFile.TryReadAsync<List<VersionNode>>(_paths.VersionFile(sessionId), ct).ConfigureAwait(false) ?? [];
 
-        try
-        {
-            await using FileStream stream = File.OpenRead(path);
-            List<VersionNode>? nodes = await JsonSerializer
-                .DeserializeAsync<List<VersionNode>>(stream, JsonDefaults.Options, ct)
-                .ConfigureAwait(false);
-            return nodes ?? [];
-        }
-        catch (JsonException)
-        {
-            return [];
-        }
-    }
-
-    private async Task WriteNodesAsync(string sessionId, List<VersionNode> nodes, CancellationToken ct)
-    {
-        string json = JsonSerializer.Serialize(nodes, JsonDefaults.Options);
-        await AtomicFile.WriteAllTextAsync(_paths.VersionFile(sessionId), json, ct).ConfigureAwait(false);
-    }
+    private async Task WriteNodesAsync(string sessionId, List<VersionNode> nodes, CancellationToken ct) =>
+        await JsonFile.WriteAsync(_paths.VersionFile(sessionId), nodes, ct).ConfigureAwait(false);
 }

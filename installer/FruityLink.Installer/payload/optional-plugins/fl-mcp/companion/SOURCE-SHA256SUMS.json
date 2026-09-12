@@ -1,0 +1,242 @@
+[
+  {
+    "File": "LICENSE",
+    "Hash": "FFCCA38841ADB694B6F380647E15F17C446A4D1656FED51A1E2041D064C94CC8"
+  },
+  {
+    "File": "README.md",
+    "Hash": "64F04127F439016BBCD567B1A0F942BDE011BAAF88AB78747F7E2CD4BDBF335F"
+  },
+  {
+    "File": "THIRD-PARTY-NOTICES.md",
+    "Hash": "2E1CFE32D4DE5373A634A84AB7936C9E3ACF2BA8DB62080FE4FC46B974D83442"
+  },
+  {
+    "File": "docs\\blender-mcp-design.md",
+    "Hash": "3BC85D722A84CC5948148EC3283E8B01E7B6FEAAAB9689025B4759CF3B7663D5"
+  },
+  {
+    "File": "docs\\live-verification.md",
+    "Hash": "574323098FEB6A67EBE1D05A426912DB7A7FAD372F700E8D3DE62026F3D64CEC"
+  },
+  {
+    "File": "examples\\author.py",
+    "Hash": "3620593F9FA8A8AF1D2AE9F1EEC01FC269D6D1A28587387546237A0D7D65B95E"
+  },
+  {
+    "File": "examples\\mcp-settings.json",
+    "Hash": "BDFB38EA215DFA86D1305D5BB9C6E2E03D13F79FAB49AEACE0430E3979D388EA"
+  },
+  {
+    "File": "licenses\\fruitylink-python-LICENSE.txt",
+    "Hash": "693CC83ABFA6A39628CD455463443FA07A6C96B1FE7BF1AAD2D0728B0D8B54B1"
+  },
+  {
+    "File": "licenses\\fruitylink-sdk-LICENSE.txt",
+    "Hash": "693CC83ABFA6A39628CD455463443FA07A6C96B1FE7BF1AAD2D0728B0D8B54B1"
+  },
+  {
+    "File": "licenses\\Microsoft-DotNet-MIT.txt",
+    "Hash": "CFC21F5E8BD655AE997EEC916138B707B1D290B83272C02A95C9F821B8C87310"
+  },
+  {
+    "File": "licenses\\Microsoft-DotNet-NOTICES.txt",
+    "Hash": "6D15E10A101C6BFFF2AB4429ED061BF76C456FC4B23AD6B03E0D0F8377148A21"
+  },
+  {
+    "File": "licenses\\ModelContextProtocol-Apache-2.0.txt",
+    "Hash": "7C6A686D2B34B86AD8C726E0AC4D76903B525F251D73E617F8DB3879FA8F11FC"
+  },
+  {
+    "File": "licenses\\ModelContextProtocol-NOTICES.txt",
+    "Hash": "B9C35F6AB075077D5C2B644FDC58EB5696B8B70F539947F9E1E57331599FC5CE"
+  },
+  {
+    "File": "plugin\\fl-mcp\\FlMcp.Plugin.deps.json",
+    "Hash": "9E7628B223ACC4591C996699BC0EB030FC2B145B6C6CA9EBEEBCF1EF66CD047A"
+  },
+  {
+    "File": "plugin\\fl-mcp\\FlMcp.Plugin.dll",
+    "Hash": "CCFEE6D01A1F101AC252B6EF3E20264C32FCDF89A5E11091FA694B66556BE754"
+  },
+  {
+    "File": "plugin\\fl-mcp\\FlMcp.Protocol.dll",
+    "Hash": "A95760AAA2D2F64B96AD18A617642749DB5560775A19244A799A3BEA964CD1BC"
+  },
+  {
+    "File": "plugin\\fl-mcp\\FruityLink.Scripting.dll",
+    "Hash": "36BBD3D2F4BA964A78AE35133FF2E7B8DCD8D1BDFE1B9DBC950708E19D6F5228"
+  },
+  {
+    "File": "python\\fruitylink_python-0.2.0-py3-none-any.whl",
+    "Hash": "3FAA9909BCD12FCC1DE28A2F253181751CAA50010E067B0FB031A4F7B923827C"
+  },
+  {
+    "File": "python\\README.md",
+    "Hash": "33E493DFE74C76D3CAE85E4D1C5E35CEAD52AEADD27C75A0FE28021E2926B4E9"
+  },
+  {
+    "File": "server\\FlMcp.Protocol.dll",
+    "Hash": "A95760AAA2D2F64B96AD18A617642749DB5560775A19244A799A3BEA964CD1BC"
+  },
+  {
+    "File": "server\\FlMcp.Protocol.pdb",
+    "Hash": "C553989840A207430F68257F7AE622AC4412A26AA4CF73782FCD7789F2DC4BAF"
+  },
+  {
+    "File": "server\\FlMcp.Server.deps.json",
+    "Hash": "49D02508B9E1B3D78FED09890613B813E0D371C21852D48878291DD38E5B20E6"
+  },
+  {
+    "File": "server\\FlMcp.Server.dll",
+    "Hash": "99567D9A84E09C55769B07D82CA5F1FC72B79AE0A12574F985330DCC6A7D154A"
+  },
+  {
+    "File": "server\\FlMcp.Server.exe",
+    "Hash": "9E8663143F473671444D4380012D7220CED801C9BF0F1EF7E9BD4E0FCF723770"
+  },
+  {
+    "File": "server\\FlMcp.Server.pdb",
+    "Hash": "B0F5EEC5A7FD9375368631E5692DA711630FA933DEFB708C7EBAFA86EF358686"
+  },
+  {
+    "File": "server\\FlMcp.Server.runtimeconfig.json",
+    "Hash": "3E965CD7CFD553C2FF4E842D8D8019AAAE2DA0A21D92FF85A87573DD8D1B95C6"
+  },
+  {
+    "File": "server\\Microsoft.Extensions.AI.Abstractions.dll",
+    "Hash": "BCC8F693103EB00505179F154B1B3A996B85D067E112FACD724FD9D695F17A5E"
+  },
+  {
+    "File": "server\\Microsoft.Extensions.Caching.Abstractions.dll",
+    "Hash": "D82421A7036109556106414748A63425CA2AAFA3E6B76669D41B74D625C66E7E"
+  },
+  {
+    "File": "server\\Microsoft.Extensions.Configuration.Abstractions.dll",
+    "Hash": "685493E38ADB7E5D06BFCD93AA160FB8CE23AAE80DADD1FF489E8CD4CFC6CAFE"
+  },
+  {
+    "File": "server\\Microsoft.Extensions.Configuration.Binder.dll",
+    "Hash": "0637A0AB2B5A77B000C0D96C46573DAE8C04FA86AE1374B5A1F00855A712D6F9"
+  },
+  {
+    "File": "server\\Microsoft.Extensions.Configuration.CommandLine.dll",
+    "Hash": "BE4734C29E9EBFFFFDF9E4C742AB783D891774C1BCA2EA84859140DEA5C1AA6D"
+  },
+  {
+    "File": "server\\Microsoft.Extensions.Configuration.dll",
+    "Hash": "94C3981084F713A51AD3D266145154D2468F59C4CD3E2BDE82941BF84E97FB55"
+  },
+  {
+    "File": "server\\Microsoft.Extensions.Configuration.EnvironmentVariables.dll",
+    "Hash": "9971A5A6D7B0DC66F22FEFA8F785BB8EC54100D8C44569FED2E70F8AB02298DD"
+  },
+  {
+    "File": "server\\Microsoft.Extensions.Configuration.FileExtensions.dll",
+    "Hash": "53B08D23F5D10F747181EFA67A8F7C6B0CCF8D066BA4762AAECB8FD400575362"
+  },
+  {
+    "File": "server\\Microsoft.Extensions.Configuration.Json.dll",
+    "Hash": "4871EE840A3B7829E46496BBEB853576392AF6F4433A6E7B9FEAC284E4EEC83C"
+  },
+  {
+    "File": "server\\Microsoft.Extensions.Configuration.UserSecrets.dll",
+    "Hash": "945E7B53328D607DF56D72D1BDB3723068596DA8A1774987AF595179EF210A48"
+  },
+  {
+    "File": "server\\Microsoft.Extensions.DependencyInjection.Abstractions.dll",
+    "Hash": "592C33E4BC20E041D6125B79A4311293540F30332495429241C3D7C7286C8E16"
+  },
+  {
+    "File": "server\\Microsoft.Extensions.DependencyInjection.dll",
+    "Hash": "D646A5CCA5E8116AE46B43715297083FA8A38DB636EAB60E66EEEF350D74CD5D"
+  },
+  {
+    "File": "server\\Microsoft.Extensions.Diagnostics.Abstractions.dll",
+    "Hash": "7A60EFF59E2360136FB2696227C643FF6E3CDE298FA010E3202151AC79BF55DE"
+  },
+  {
+    "File": "server\\Microsoft.Extensions.Diagnostics.dll",
+    "Hash": "254AC42DFFE70293034B42042CA6365D5FDF53315BE333CA73D0A8441B8DF9BF"
+  },
+  {
+    "File": "server\\Microsoft.Extensions.FileProviders.Abstractions.dll",
+    "Hash": "670E6CCB7984ADE31318AF5DB4FBA19903174721D8E9F1FD3D5E64403AC05D87"
+  },
+  {
+    "File": "server\\Microsoft.Extensions.FileProviders.Physical.dll",
+    "Hash": "2334A0E21426801FED5152E55A7312A2DBFC94BE06DBDD2AF446B34A22C5ECFA"
+  },
+  {
+    "File": "server\\Microsoft.Extensions.FileSystemGlobbing.dll",
+    "Hash": "5EFC5E88D19CA4CDB7F3347483591A5CD025D617843EDF2B4EDF5701102BB6BF"
+  },
+  {
+    "File": "server\\Microsoft.Extensions.Hosting.Abstractions.dll",
+    "Hash": "55D316F9A8DA2B2E91C50C75A92C44114EB23E4B796090008CFA4524FA082866"
+  },
+  {
+    "File": "server\\Microsoft.Extensions.Hosting.dll",
+    "Hash": "96869386B25D49570167883BD6CD1FE700E88D9ED4F9AF9045940089108B6BAA"
+  },
+  {
+    "File": "server\\Microsoft.Extensions.Logging.Abstractions.dll",
+    "Hash": "46826FD3B68BD23028B274FF73ECC161088B53E41B4A7436E759DE4D78143A43"
+  },
+  {
+    "File": "server\\Microsoft.Extensions.Logging.Configuration.dll",
+    "Hash": "52CBB4793651E6DB0F5E9B1300661A8E0A8F76C15C9123E42C39AFF35D571E24"
+  },
+  {
+    "File": "server\\Microsoft.Extensions.Logging.Console.dll",
+    "Hash": "61756C721ED0381D01BCC1A94206E23BA75A98227A61815F9981BC81B6FA59F0"
+  },
+  {
+    "File": "server\\Microsoft.Extensions.Logging.Debug.dll",
+    "Hash": "CAEDA046B51B73F9ED50118F9EB1DDE36B7A18886C47F957A9C4F03279541FFA"
+  },
+  {
+    "File": "server\\Microsoft.Extensions.Logging.dll",
+    "Hash": "2C034725ABD90AFE30A1426E6477CB0693BC79170E1DFDB3CEF7146E296A1F71"
+  },
+  {
+    "File": "server\\Microsoft.Extensions.Logging.EventLog.dll",
+    "Hash": "84FD900AD17539F9DB296B75A863F9F6695A49D953483DEBB61FCE24D55DDCD1"
+  },
+  {
+    "File": "server\\Microsoft.Extensions.Logging.EventSource.dll",
+    "Hash": "0AF2181DB64BEB95F63DBE7071AA084671FC20028350EEBBB1A1A6C4D7351E37"
+  },
+  {
+    "File": "server\\Microsoft.Extensions.Options.ConfigurationExtensions.dll",
+    "Hash": "F5078A206F8D54D03E15B32CBAE7BFB2D95348719B1F3CF4A9BEA32CED1C8B7B"
+  },
+  {
+    "File": "server\\Microsoft.Extensions.Options.dll",
+    "Hash": "E6E4183C67C8B265D852E40E6B873640371C4EB19F6268D4C4734C1AEBA17DFB"
+  },
+  {
+    "File": "server\\Microsoft.Extensions.Primitives.dll",
+    "Hash": "149F0BB5FBBF39836F38F61EA24EEE49D78BC62C63BDB3C462381BDFFB1D3603"
+  },
+  {
+    "File": "server\\ModelContextProtocol.Core.dll",
+    "Hash": "B1752096EA9D2F38BA88E467F04AEA43FB300D9A54D881C165F62B69028EE3AB"
+  },
+  {
+    "File": "server\\ModelContextProtocol.dll",
+    "Hash": "8CD6F626C8D6A0A5FF3E154789D3FCDE2B1D66A595C0EF0198E092C2C30FE93A"
+  },
+  {
+    "File": "server\\System.Diagnostics.EventLog.dll",
+    "Hash": "06594F65AD71B2FE0D6BD98C1FBD46BDF0D4EBF2E426639A4267F5C29D48A75D"
+  },
+  {
+    "File": "server\\runtimes\\win\\lib\\net10.0\\System.Diagnostics.EventLog.dll",
+    "Hash": "3238054ECA635F6B0B5BE1DEE8F8B59C703C4244F07EAE8B8A2A94BE7F1A47E5"
+  },
+  {
+    "File": "server\\runtimes\\win\\lib\\net10.0\\System.Diagnostics.EventLog.Messages.dll",
+    "Hash": "B7B798826D1BBCA2C8B05114874DEADFC5B420778C8CC1CED1EA53F76B2B16E1"
+  }
+]

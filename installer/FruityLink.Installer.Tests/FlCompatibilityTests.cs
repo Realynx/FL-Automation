@@ -127,9 +127,10 @@ public sealed class FlCompatibilityTests : System.IDisposable
     }
 
     [Fact]
-    public void Check_MissingCompatibilityList_FailsClosed()
+    public void Check_MissingCompatibilityList_FailsClosed_WhenEnforced()
     {
-        var result = FlIntegrity.Check(_flDir, listPath: Path.Combine(_flDir, "no-such-list.json"));
+        var result = FlIntegrity.Check(
+            _flDir, listPath: Path.Combine(_flDir, "no-such-list.json"), enforce: true);
 
         result.Ok.ShouldBeFalse();
         result.BlockReason.ShouldNotBeNull();
@@ -137,15 +138,47 @@ public sealed class FlCompatibilityTests : System.IDisposable
     }
 
     [Fact]
-    public void Check_UnreadableList_FailsClosed()
+    public void Check_UnreadableList_FailsClosed_WhenEnforced()
     {
         var listPath = Path.Combine(_flDir, "corrupt.json");
         File.WriteAllText(listPath, "{ not json !!");
 
-        var result = FlIntegrity.Check(_flDir, listPath);
+        var result = FlIntegrity.Check(_flDir, listPath, enforce: true);
 
         result.Ok.ShouldBeFalse();
         result.BlockReason.ShouldNotBeNull();
         result.BlockReason.ShouldContain("unreadable");
+    }
+
+    // --- gate DISABLED (launch mode): every would-be block becomes a non-blocking bypass, but the
+    //     reason still rides along so the installer log can record what would have been refused. ---
+
+    [Fact]
+    public void Check_GateDisabled_MissingList_BypassesInsteadOfBlocking()
+    {
+        var result = FlIntegrity.Check(
+            _flDir, listPath: Path.Combine(_flDir, "no-such-list.json"), enforce: false);
+
+        result.Ok.ShouldBeTrue();                 // install proceeds
+        result.GateBypassed.ShouldBeTrue();
+        result.BlockReason.ShouldNotBeNull();     // ...but we know what it would have blocked
+        result.BlockReason.ShouldContain("compatibility list not found");
+    }
+
+    [Fact]
+    public void Check_GateDisabled_SameRefusalIsAlsoBypassed_WhenVersionUnreadable()
+    {
+        // Present a valid (empty) list so the check gets past the list load and reaches the FL-version
+        // read, which the fake FL64.exe can't satisfy — enforced would Block there, disabled Bypasses.
+        var listPath = Path.Combine(_flDir, FlCompatibilityList.FileName);
+        File.WriteAllText(listPath, new FlCompatibilityList().ToJson());
+
+        var enforced = FlIntegrity.Check(_flDir, listPath, enforce: true);
+        enforced.Ok.ShouldBeFalse();
+
+        var disabled = FlIntegrity.Check(_flDir, listPath, enforce: false);
+        disabled.Ok.ShouldBeTrue();               // install proceeds despite the same condition
+        disabled.GateBypassed.ShouldBeTrue();
+        disabled.BlockReason.ShouldBe(enforced.BlockReason);   // identical reason, just non-blocking
     }
 }

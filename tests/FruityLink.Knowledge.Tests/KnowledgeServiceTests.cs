@@ -4,31 +4,11 @@ using Xunit;
 
 namespace FruityLink.Knowledge.Tests;
 
-public sealed class KnowledgeServiceTests : IDisposable
+public sealed class KnowledgeServiceTests : KnowledgeDbTestBase
 {
-    private readonly string _dbPath;
-    private readonly string _workDir;
-
     public KnowledgeServiceTests()
+        : base("fruitylink-knowledge-tests", "knowledge.db")
     {
-        _workDir = Path.Combine(Path.GetTempPath(), "fruitylink-knowledge-tests", Guid.NewGuid().ToString("N"));
-        Directory.CreateDirectory(_workDir);
-        _dbPath = Path.Combine(_workDir, "knowledge.db");
-    }
-
-    private KnowledgeService CreateService(HttpClient? httpClient = null)
-    {
-        var embeddings = new FakeEmbeddingClient();
-        var store = new SqliteVectorStore(_dbPath);
-        var extractor = new SourceTextExtractor();
-        return new KnowledgeService(embeddings, store, extractor, httpClient ?? new HttpClient());
-    }
-
-    private string WriteTextFile(string name, string content)
-    {
-        string path = Path.Combine(_workDir, name);
-        File.WriteAllText(path, content);
-        return path;
     }
 
     [Fact]
@@ -147,7 +127,7 @@ public sealed class KnowledgeServiceTests : IDisposable
 
         var handler = new FakeHttpMessageHandler(html);
         using var httpClient = new HttpClient(handler);
-        KnowledgeService service = CreateService(httpClient);
+        KnowledgeService service = CreateService(httpClient: httpClient);
 
         KnowledgeSource source = await service.AddWebSourceAsync("https://example.com/sidechain");
 
@@ -253,19 +233,5 @@ public sealed class KnowledgeServiceTests : IDisposable
         var sources = await service.ListSourcesAsync();
         sources.ShouldContain(s => s.Title == "after.txt");
         sources.ShouldNotContain(s => s.Title == "corrupt.pdf");
-    }
-
-    public void Dispose()
-    {
-        Microsoft.Data.Sqlite.SqliteConnection.ClearAllPools();
-        try
-        {
-            if (Directory.Exists(_workDir))
-                Directory.Delete(_workDir, recursive: true);
-        }
-        catch (IOException)
-        {
-            // Best-effort cleanup of the temp directory.
-        }
     }
 }

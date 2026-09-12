@@ -16,7 +16,13 @@
 #   bash install-all.sh --only site          # redeploy just the site
 #   bash install-all.sh --only db,admin      # e.g. DB access rules + the console
 #   bash install-all.sh --skip-build         # reuse the newest existing zips
+#   bash install-all.sh --no-bump            # publish WITHOUT auto-incrementing VERSION
 #   bash install-all.sh --config other.env
+#
+# Versioning: a site publish AUTO-INCREMENTS the repo-root VERSION file (the
+# single product version: assembly stamps + installer artifact name), and the
+# gateway step advertises the uploaded installer's version via
+# /v1/client-version so older plugins show the in-chat update banner.
 #
 # Idempotent — safe to re-run for updates. Remote .env files and databases are
 # never overwritten; only code, deps, and schema are refreshed. Run from Git
@@ -32,6 +38,7 @@ ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 
 CONFIG="$SCRIPT_DIR/servers.env"
 SKIP_BUILD=0
+NO_BUMP=0
 ONLY="db,site,gateway,admin"
 
 usage() {
@@ -42,6 +49,7 @@ while [ $# -gt 0 ]; do
   case "$1" in
     --config)     CONFIG="$2"; shift 2 ;;
     --skip-build) SKIP_BUILD=1; shift ;;
+    --no-bump)    NO_BUMP=1; shift ;;
     --only)       ONLY="$2"; shift 2 ;;
     -h|--help)    usage; exit 0 ;;
     *) echo "✖ Unknown argument: $1"; usage; exit 1 ;;
@@ -83,15 +91,15 @@ for _plan in FREE BETA PRO STUDIO LABEL; do
     fi
   done
 done
-# Named backend blocks have arbitrary names, and the guardrail / chat-log
-# families are open-ended — pull the var names off the config file itself,
-# then read the (already-sourced) values via indirect expansion.
+# Named backend blocks have arbitrary names, and the guardrail / chat-log /
+# client-update families are open-ended — pull the var names off the config
+# file itself, then read the (already-sourced) values via indirect expansion.
 while IFS= read -r _var; do
   _val="${!_var:-}"
   if [ -n "$_val" ]; then
     GATEWAY_PLAN_VARS="${GATEWAY_PLAN_VARS}${_var}=${_val}"$'\n'
   fi
-done < <(grep -oE '^GATEWAY_(BACKEND|GUARDRAIL|CHAT_LOG|MODEL_COSTS|COST_FALLBACK)[A-Z0-9_]*' "$CONFIG" | sort -u)
+done < <(grep -oE '^GATEWAY_(BACKEND|GUARDRAIL|CHAT_LOG|MODEL_COSTS|COST_FALLBACK|CLIENT)[A-Z0-9_]*' "$CONFIG" | sort -u)
 # Legacy upstream fallback: upsert on re-runs too (names map GATEWAY_UPSTREAM_*
 # -> UPSTREAM_* in the gateway's .env).
 for _field in PROVIDER BASE_URL API_KEY; do
@@ -196,6 +204,29 @@ done
 # ---------------------------------------------------------------------------
 if [ "$SKIP_BUILD" = 0 ]; then
   if want site; then
+    # ------------------------------------------------------------------
+    # Auto-increment the PRODUCT version (repo-root VERSION file) so every
+    # publish ships a build older clients can DETECT as newer: the file
+    # stamps all assemblies (Directory.Build.props), names the installer
+    # artifact (package.ps1), and — once the artifact actually uploads — is
+    # advertised through the gateway's /v1/client-version (see below).
+    # Bumped BEFORE the payload restage so natives + plugin + installer all
+    # build under the same new version. --no-bump re-publishes the current one.
+    # ------------------------------------------------------------------
+    VERSION_FILE="$ROOT/VERSION"
+    PRODUCT_VERSION="$(tr -d ' \r\n' < "$VERSION_FILE")"
+    if [ "$NO_BUMP" = 0 ]; then
+      if [[ "$PRODUCT_VERSION" =~ ^([0-9]+)\.([0-9]+)\.([0-9]+)$ ]]; then
+        PRODUCT_VERSION="${BASH_REMATCH[1]}.${BASH_REMATCH[2]}.$(( BASH_REMATCH[3] + 1 ))"
+        printf '%s\n' "$PRODUCT_VERSION" > "$VERSION_FILE"
+        step "Product version bumped -> $PRODUCT_VERSION (VERSION file; --no-bump re-publishes the same version)"
+      else
+        echo "!! WARNING: VERSION file content '$PRODUCT_VERSION' is not <major>.<minor>.<patch> — not bumping."
+      fi
+    else
+      step "Product version kept at $PRODUCT_VERSION (--no-bump)"
+    fi
+
     step "Building marketing site bundle"
     (cd "$ROOT/marketing" && npm run build:zip)
 
@@ -249,6 +280,32 @@ INSTALLER_ZIP="$(newest_zip "$ROOT/installer/artifacts"/fl-automate-installer-v*
 if want site && [ -z "$SITE_ZIP" ]; then echo "✖ No site zip in marketing/artifacts — run without --skip-build."; exit 1; fi
 if want gateway && [ -z "$GW_ZIP" ]; then echo "✖ No gateway zip in ai-gateway/artifacts — run without --skip-build."; exit 1; fi
 if want admin && [ -z "$ADMIN_ZIP" ]; then echo "✖ No console zip in admin-console/artifacts — run without --skip-build."; exit 1; fi
+
+# ---------------------------------------------------------------------------
+# Auto-advertise the published client version. When THIS run uploads an
+# installer (site step) AND configures the gateway, the gateway's
+# GATEWAY_CLIENT_LATEST_VERSION is set from the ARTIFACT NAME being uploaded —
+# not the VERSION file — so the advertised version can never run ahead of a
+# failed packaging (packaging is best-effort; a bump with no artifact
+# advertises nothing). An explicit GATEWAY_CLIENT_LATEST_VERSION in servers.env
+# always wins (manual override / rollback). Older plugins compare this against
+# their stamped assembly version and show the in-chat update banner.
+# ---------------------------------------------------------------------------
+if [ -n "$INSTALLER_ZIP" ] && want site; then
+  _iz="$(basename "$INSTALLER_ZIP")"
+  PUBLISHED_CLIENT_VERSION="${_iz#fl-automate-installer-v}"
+  PUBLISHED_CLIENT_VERSION="${PUBLISHED_CLIENT_VERSION%.zip}"
+  if grep -q '^GATEWAY_CLIENT_LATEST_VERSION=' "$CONFIG"; then
+    echo "  (GATEWAY_CLIENT_LATEST_VERSION set explicitly in servers.env — keeping the manual value)"
+  elif want gateway; then
+    GATEWAY_PLAN_VARS="${GATEWAY_PLAN_VARS}GATEWAY_CLIENT_LATEST_VERSION=${PUBLISHED_CLIENT_VERSION}"$'\n'
+    step "Gateway will advertise client version $PUBLISHED_CLIENT_VERSION (from $(basename "$INSTALLER_ZIP"))"
+  else
+    echo "!! NOTE: installer v$PUBLISHED_CLIENT_VERSION is being published but the gateway is NOT in this run —"
+    echo "   clients keep seeing the old advertised version until a gateway deploy (--only gateway)."
+  fi
+  unset _iz
+fi
 
 # ---------------------------------------------------------------------------
 # Server A — PostgreSQL: install, roles/databases, private-network access.
@@ -378,7 +435,7 @@ if [ ! -f .env ]; then
       echo "BETA_ACCESS_KEY=$SITE_BETA_ACCESS_KEY" | \$SUDO tee -a .env >/dev/null
     fi
   fi
-  echo "wrote fresh .env (Helcim/Graph left empty -> purchasing disabled = beta mode)"
+  echo "wrote fresh .env (Stripe/Graph left empty -> purchasing disabled = beta mode)"
 else
   echo "existing .env kept as-is"
   # ...but never leave it without a database URL (prisma would abort).
@@ -641,8 +698,8 @@ cat <<SUMMARY
 OTHER ONE-TIME STEPS
   * Admin tooling lives ONLY on the VPN-only Ops Console (Server D):
       https://$ADMIN_PRIVATE_IP/ — log in with the seed account from servers.env.
-  * Currently BETA mode (HELCIM_API_TOKEN empty -> purchasing disabled).
-    To start selling: fill in Helcim + email (GRAPH_*) in
+  * Currently BETA mode (STRIPE_SECRET_KEY empty -> purchasing disabled).
+    To start selling: fill in Stripe + email (GRAPH_*) in
     /opt/fl-automate/.env on Server B, then restart the fl-automate service.
 SUMMARY
 if [ "$HEALTH_OK" = 0 ]; then

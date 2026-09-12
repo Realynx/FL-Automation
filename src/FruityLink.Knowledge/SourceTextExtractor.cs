@@ -110,56 +110,10 @@ internal sealed class SourceTextExtractor : ISourceTextExtractor
     }
 
     /// <summary>
-    /// Produces clean, index-safe text: drops NUL bytes, control characters, lone/orphan UTF-16
-    /// surrogates and Unicode non-characters — all of which can corrupt the SQLite store or break
-    /// JSON serialization when the chunk is sent to the embedding API — then collapses every run of
-    /// whitespace into a single space and trims the result.
+    /// Produces clean, index-safe text via <see cref="TextNormalization.SanitizeAndCollapseWhitespace"/>:
+    /// drops NUL bytes, control characters, lone/orphan UTF-16 surrogates and Unicode
+    /// non-characters, then collapses whitespace runs to single spaces and trims the result.
     /// </summary>
     private static string CollapseWhitespace(string text)
-    {
-        if (string.IsNullOrEmpty(text))
-            return string.Empty;
-
-        var sb = new System.Text.StringBuilder(text.Length);
-        bool inWhitespace = false;
-        for (int i = 0; i < text.Length; i++)
-        {
-            char c = text[i];
-
-            // Whitespace, NUL and any control char (incl. tab/newline) collapse to a single space.
-            if (c == '\0' || char.IsWhiteSpace(c) || char.IsControl(c))
-            {
-                inWhitespace = true;
-                continue;
-            }
-
-            // Keep valid surrogate pairs (e.g. emoji); drop lone/orphan surrogates that would make
-            // the string invalid UTF-16 and throw during JSON serialization.
-            if (char.IsHighSurrogate(c))
-            {
-                if (i + 1 < text.Length && char.IsLowSurrogate(text[i + 1]))
-                {
-                    if (inWhitespace && sb.Length > 0) sb.Append(' ');
-                    inWhitespace = false;
-                    sb.Append(c);
-                    sb.Append(text[i + 1]);
-                    i++;
-                    continue;
-                }
-                continue; // lone high surrogate
-            }
-            if (char.IsLowSurrogate(c))
-                continue; // lone low surrogate
-
-            // Drop the replacement char (garbage from bad decoding) and Unicode non-characters.
-            if (c == '\uFFFD' || c == '\uFFFE' || c == '\uFFFF' || (c >= '\uFDD0' && c <= '\uFDEF'))
-                continue;
-
-            if (inWhitespace && sb.Length > 0) sb.Append(' ');
-            inWhitespace = false;
-            sb.Append(c);
-        }
-
-        return sb.ToString().Trim();
-    }
+        => TextNormalization.SanitizeAndCollapseWhitespace(text);
 }

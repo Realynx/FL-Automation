@@ -1,12 +1,10 @@
 using System;
 using System.Collections.Generic;
-using System.Runtime.InteropServices;
 using System.Text;
 using System.Threading;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
-using System.Windows.Interop;
 using System.Windows.Media;
 using System.Windows.Threading;
 using FruityLink.Agent;
@@ -33,7 +31,7 @@ namespace FruityLink.Plugins.FlAgent.Ui;
 ///    toggleable via the "Thoughts" checkbox, so the user can verify thoughts flow under the
 ///    low-context/caveman protocol. Tool-call display is kept alongside it.
 /// </summary>
-internal sealed class FlAgentChatWindow : Window
+internal sealed partial class FlAgentChatWindow : Window
 {
     private static readonly Brush WindowBg = Frozen(0x1E, 0x1E, 0x22);
     /// <summary>Opaque backdrop for the software HwndTarget (matches <see cref="WindowBg"/>) so empty child
@@ -84,8 +82,7 @@ internal sealed class FlAgentChatWindow : Window
     private bool _sending;
     private CancellationTokenSource? _turnCts;
 
-    /// <summary>What was already typed when dictation began, so live partials append to it.</summary>
-    private string _dictationPrefix = string.Empty;
+    private readonly DictationController? _dictationCtl;
     private string? _lastDictationStatus;
 
     public FlAgentChatWindow(
@@ -137,6 +134,16 @@ internal sealed class FlAgentChatWindow : Window
         _agent.ToolInvoked += OnToolInvoked;
         if (_dictation is not null)
         {
+            _dictationCtl = new DictationController(
+                _dictation,
+                isBusy: () => _busy,
+                setStatus: s => MarshalToUi(() => SetDictationStatus(s)),
+                // Applied synchronously on the UI thread (the finalize continuation resumes there), so
+                // SendAsync sees the full utterance in the box as soon as its awaited finalize returns.
+                applyFinalText: t => { _input.Text = t; return Task.CompletedTask; },
+                applyPartialText: t => _input.Text = t,
+                readComposer: () => _input.Text,
+                marshalToUi: MarshalToUi);
             _dictation.StateChanged += OnDictationStateChanged;
             _dictation.PartialTranscribed += OnPartialTranscribed;
         }
@@ -145,165 +152,8 @@ internal sealed class FlAgentChatWindow : Window
         UpdateMicEnabled();
     }
 
-    // ---- window-host embed support (task #22, Phase 1) ----
-
-    /// <summary>Ensure the Win32 HWND exists (without requiring a prior Show) and return it — the handle
-    /// we hand to the native bridge to reparent this window into an FL host form.</summary>
-    public IntPtr EnsureNativeHandle() => new WindowInteropHelper(this).EnsureHandle();
-
-    /// <summary>
-    /// Make the window child-embed-friendly BEFORE it is shown: drop OS chrome + taskbar presence, don't
-    /// steal activation, and park it off-screen so the brief pre-embed <see cref="Window.Show"/> (which
-    /// forces a WPF layout/render pass) never flashes on the desktop. The native side also strips the
-    /// top-level styles during the reparent; setting them here keeps WPF's own state consistent.
-    /// </summary>
-    public void PrepareForEmbedding()
-    {
-        WindowStyle = WindowStyle.None;
-        ResizeMode = ResizeMode.NoResize;
-        ShowInTaskbar = false;
-        ShowActivated = false;
-        WindowStartupLocation = WindowStartupLocation.Manual;
-        Left = -32000;
-        Top = -32000;
-
-        // Force SOFTWARE rendering BEFORE the first Show()/reparent. As a WS_CHILD of FL's non-WPF parent,
-        // hardware/DWM composition hits the airspace bug (blank until an input event). Setting it in
-        // PinToHostContent (AFTER the reparent) is too late for the first paint → blank on load.
-        try
-        {
-            IntPtr h = new WindowInteropHelper(this).EnsureHandle();
-            _pinSrc ??= HwndSource.FromHwnd(h);
-            if (_pinSrc?.CompositionTarget is HwndTarget ht)
-            {
-                ht.RenderMode = RenderMode.SoftwareOnly;
-                // Composite onto an OPAQUE backdrop. Without this, areas of the child not covered by a control
-                // stay transparent in software mode inside the foreign FL parent — so FL content behind (e.g.
-                // the animated mascot it shows in the MAXIMIZED script-dialog) bleeds through the empty chat
-                // area. An opaque backdrop matching the window bg makes the whole child cover the FL form.
-                ht.BackgroundColor = OpaqueBackdrop;
-            }
-        }
-        catch { /* best-effort; PinToHostContent also sets it */ }
-    }
-
-    /// <summary>Undo <see cref="PrepareForEmbedding"/> for the external fallback: normal chrome, on-screen,
-    /// roughly centred. Safe to call whether or not embedding was attempted.</summary>
-    public void RestoreExternalChrome()
-    {
-        WindowStyle = WindowStyle.SingleBorderWindow;
-        ResizeMode = ResizeMode.CanResize;
-        ShowInTaskbar = true;
-        Left = Math.Max(0, (SystemParameters.PrimaryScreenWidth - Width) / 2);
-        Top = Math.Max(0, (SystemParameters.PrimaryScreenHeight - Height) / 2);
-    }
-
-    // --- Embed positioning: pin our HWND to fill the FL host's content control ---
-    // Once we're a WS_CHILD, WPF keeps re-applying Window.Left/Top and lands us OFF the parent (the classic
-    // WPF-window-as-child coord bug). We intercept WM_WINDOWPOSCHANGING at the Win32 level (WPF can't override
-    // it) and force x=0,y=0 filling the parent's client, so the chat always sits exactly over the FL content
-    // control regardless of what WPF wants.
-    private HwndSource? _pinSrc;
-    private int _insetX, _insetY;   // FL content inset: border (left/right/bottom) + titlebar (top)
-    public void PinToHostContent(int insetX, int insetY)
-    {
-        _insetX = insetX; _insetY = insetY;
-        try
-        {
-            IntPtr h = new WindowInteropHelper(this).EnsureHandle();
-            _pinSrc ??= HwndSource.FromHwnd(h);
-            _pinSrc?.AddHook(PinHook);
-            // As a WS_CHILD of a NON-WPF (FL) parent, WPF's default DWM/hardware composition hits the classic
-            // "airspace" bug: the child's redirection surface isn't presented reliably — it goes blank on
-            // re-show and only repaints the strip under a moving cursor. Forcing SOFTWARE rendering makes WPF
-            // paint straight through WM_PAINT/GDI, which composites correctly inside a foreign parent. This is
-            // the real fix for the blank/lazy-render bug (the earlier size-nudge only masked it). Perf is a
-            // non-issue for a small text chat.
-            if (_pinSrc?.CompositionTarget is HwndTarget ht) { ht.RenderMode = RenderMode.SoftwareOnly; ht.BackgroundColor = OpaqueBackdrop; }
-            SnapToContent(h);
-        }
-        catch { /* best-effort */ }
-    }
-    private void SnapToContent(IntPtr h)
-    {
-        IntPtr parent = GetParent(h);
-        if (parent == IntPtr.Zero || !GetClientRect(parent, out RECT rc)) return;
-        int w = (rc.right - rc.left) - 2 * _insetX, hh = (rc.bottom - rc.top) - _insetY - _insetX;
-        if (w < 1) w = 1; if (hh < 1) hh = 1;
-        SetWindowPos(h, IntPtr.Zero, _insetX, _insetY, w, hh, 0x0014 /*NOZORDER|NOACTIVATE*/);
-    }
-    private IntPtr PinHook(IntPtr hwnd, int msg, IntPtr wParam, IntPtr lParam, ref bool handled)
-    {
-        const int WM_WINDOWPOSCHANGING = 0x0046;
-        if (msg == WM_WINDOWPOSCHANGING)
-        {
-            IntPtr parent = GetParent(hwnd);
-            if (parent != IntPtr.Zero && GetClientRect(parent, out RECT rc))
-            {
-                int w = (rc.right - rc.left) - 2 * _insetX, hh = (rc.bottom - rc.top) - _insetY - _insetX;
-                if (w < 1) w = 1; if (hh < 1) hh = 1;
-                var wp = Marshal.PtrToStructure<WINDOWPOS>(lParam);
-                wp.x = _insetX; wp.y = _insetY; wp.cx = w; wp.cy = hh;   // stay below the FL titlebar
-                wp.flags &= ~0x0003u;   // clear SWP_NOSIZE(0x1)|SWP_NOMOVE(0x2) so our x/y/cx/cy apply
-                Marshal.StructureToPtr(wp, lParam, false);
-            }
-        }
-        const int WM_WINDOWPOSCHANGED = 0x0047;
-        if (msg == WM_WINDOWPOSCHANGED)
-        {
-            // The FL host was minimized / maximized / docked, so the host subclass just resized+repositioned
-            // this child. In SOFTWARE-render mode inside a foreign (FL) parent, WPF does NOT re-present on its
-            // own after such a change — the airspace bug leaves the child transparent/blank (FL's form shows
-            // through) until an input event.
-            ForceRerender();
-            const uint SWP_NOSIZE = 0x0001, WM_MOUSEMOVE = 0x0200;
-            var wp = Marshal.PtrToStructure<WINDOWPOS>(lParam);
-            if ((wp.flags & SWP_NOSIZE) == 0)
-                // A SIZE change (maximize / restore / dock). ForceRerender alone presents the OLD frame
-                // (present-before-rerender), so the newly-exposed area stays blank until real input. A
-                // synthetic mouse-move — POSTED, so it does NOT move the OS cursor and never clicks — kicks
-                // WPF's full render+present cycle at the new size. Verified live: this is the reliable
-                // re-present after a resize inside the FL parent. Only fires on actual resizes (not moves/
-                // scroll/typing). Coords (10,10) sit over the transcript → harmless (no button state).
-                PostMessage(hwnd, WM_MOUSEMOVE, IntPtr.Zero, (IntPtr)((10 << 16) | 10));
-        }
-        return IntPtr.Zero;
-    }
-    /// <summary>
-    /// Force the embedded WPF child to actually re-present after the FL host form was hidden→re-shown. With
-    /// software rendering (see <see cref="PinToHostContent"/>) WPF paints via WM_PAINT, so we invalidate the
-    /// visual tree AND immediately drive a synchronous native repaint of the whole client — otherwise the
-    /// child can stay blank until the next input event. Self-dispatches to the UI thread.
-    /// </summary>
-    public void ForceRerender()
-    {
-        try
-        {
-            Dispatcher.BeginInvoke(new Action(() =>
-            {
-                try
-                {
-                    InvalidateVisual();
-                    UpdateLayout();
-                    IntPtr h = new WindowInteropHelper(this).Handle;
-                    if (h != IntPtr.Zero)
-                        RedrawWindow(h, IntPtr.Zero, IntPtr.Zero,
-                            RDW_INVALIDATE | RDW_ERASE | RDW_UPDATENOW | RDW_ALLCHILDREN);
-                }
-                catch { }
-            }), DispatcherPriority.Render);
-        }
-        catch { }
-    }
-
-    private const uint RDW_INVALIDATE = 0x0001, RDW_ERASE = 0x0004, RDW_ALLCHILDREN = 0x0080, RDW_UPDATENOW = 0x0100;
-    [StructLayout(LayoutKind.Sequential)] private struct WINDOWPOS { public IntPtr hwnd, hwndInsertAfter; public int x, y, cx, cy; public uint flags; }
-    [StructLayout(LayoutKind.Sequential)] private struct RECT { public int left, top, right, bottom; }
-    [DllImport("user32.dll")] private static extern IntPtr GetParent(IntPtr h);
-    [DllImport("user32.dll")] private static extern bool GetClientRect(IntPtr h, out RECT r);
-    [DllImport("user32.dll", SetLastError = true)] private static extern bool SetWindowPos(IntPtr h, IntPtr after, int x, int y, int cx, int cy, uint f);
-    [DllImport("user32.dll")] private static extern bool RedrawWindow(IntPtr h, IntPtr lprc, IntPtr hrgn, uint flags);
-    [DllImport("user32.dll")] private static extern bool PostMessage(IntPtr h, uint msg, IntPtr wParam, IntPtr lParam);
+    // The window-host embed / pinning machinery (PrepareForEmbedding, PinToHostContent, ForceRerender,
+    // the airspace-bug workarounds and their P/Invokes) lives in FlAgentChatWindow.Embed.cs.
 
     /// <summary>The thin row above the composer: the debug toggles plus transient status text.</summary>
     private Border BuildStatusBar(out CheckBox thoughtsToggle, out CheckBox toolCallsToggle, out TextBlock status, out TextBlock dictationStatus)
@@ -481,8 +331,8 @@ internal sealed class FlAgentChatWindow : Window
         {
             // If the mic is live, take one authoritative final pass so we send the full utterance
             // (not just the last live partial that happens to be in the box).
-            if (_dictation is not null && _dictation.State == DictationState.Recording)
-                await FinalizeDictationAsync();
+            if (_dictationCtl is not null && _dictation is not null && _dictation.State == DictationState.Recording)
+                await _dictationCtl.FinalizeAsync();
 
             string text = _input.Text.Trim();
             if (text.Length == 0) return;
@@ -506,8 +356,8 @@ internal sealed class FlAgentChatWindow : Window
 
                 if (_currentAnswer is not null && _currentAnswer.Text.Length == 0)
                     _currentAnswer.Text = _toolsBuf.Length > 0 || _thoughtsBuf.Length > 0
-                        ? "Done."
-                        : "(The model returned no text. If it never calls tools, try a tool-capable model.)";
+                        ? ChatTurnText.DoneFallback
+                        : ChatTurnText.NoTextFallback;
             }
             catch (OperationCanceledException)
             {
@@ -516,16 +366,14 @@ internal sealed class FlAgentChatWindow : Window
             }
             catch (Exception ex)
             {
-                string detail = ex.Message;
-                if (ex.InnerException is not null && ex.InnerException.Message != ex.Message)
-                    detail += " — " + ex.InnerException.Message;
+                string detail = ChatTurnText.BuildDetail(ex);
                 if (_currentAnswer is not null)
                 {
                     // Mirror AvaloniaChatPresenter: when the stream died AFTER partial answer text
                     // arrived, keep it and append the marker instead of clobbering it with the error.
                     if (_currentAnswer.Text.Length > 0)
                     {
-                        _currentAnswer.Text += AvaloniaChatPresenter.PartialKeptNotice;
+                        _currentAnswer.Text += ChatTurnText.PartialKeptNotice;
                     }
                     else
                     {
@@ -555,72 +403,25 @@ internal sealed class FlAgentChatWindow : Window
         if (_currentAnswer is null) return;
         if (_currentAnswer.Text.Length == 0)
         {
-            _currentAnswer.Text = "(cancelled)";
+            _currentAnswer.Text = ChatTurnText.Cancelled;
             _currentAnswer.Foreground = MutedFg;
         }
         else
         {
-            _currentAnswer.Text += "\n\n(cancelled)";
+            _currentAnswer.Text += "\n\n" + ChatTurnText.Cancelled;
         }
     }
 
-    // ---- speech-to-text (Whisper) — mirrors the prior app's flow ----
+    // ---- speech-to-text (Whisper) — the flow itself lives in the shared DictationController ----
 
     /// <summary>Mic button: start recording, or stop + take the final transcription into the box.</summary>
     private async Task ToggleMicAsync()
     {
-        if (_dictation is null || _busy) return;
-
-        if (_dictation.State == DictationState.Recording)
-        {
-            await FinalizeDictationAsync();
-            return;
-        }
-
-        if (_dictation.State != DictationState.Idle) return;
-
-        if (!_dictation.IsModelReady)
-        {
-            SetDictationStatus("Downloading speech model (~150 MB, one time)…");
-            var progress = new Progress<double>(p => SetDictationStatus($"Downloading speech model… {p * 100:0}%"));
-            try { await _dictation.EnsureModelAsync(progress); }
-            catch (Exception ex) { SetDictationStatus("Model download failed: " + ex.Message); return; }
-            SetDictationStatus(null);
-        }
-
-        // Remember what's already typed so live partials append to (not clobber) it.
-        _dictationPrefix = (_input.Text ?? string.Empty).TrimEnd();
-        try { _dictation.StartRecording(); }
-        catch (Exception ex) { SetDictationStatus("Microphone unavailable: " + ex.Message); }
+        if (_dictationCtl is null) return;
+        await _dictationCtl.ToggleAsync();
     }
 
-    /// <summary>Stops capture and writes the authoritative final transcript into the input box.</summary>
-    private async Task FinalizeDictationAsync()
-    {
-        if (_dictation is null) return;
-        string prefix = _dictationPrefix;
-        string text;
-        try { text = await _dictation.StopAndTranscribeAsync(); }
-        catch (Exception ex) { SetDictationStatus("Transcription failed: " + ex.Message); return; }
-        _input.Text = Combine(prefix, text);
-    }
-
-    private static string Combine(string prefix, string text)
-    {
-        if (string.IsNullOrEmpty(prefix)) return text;
-        return string.IsNullOrEmpty(text) ? prefix : prefix + " " + text;
-    }
-
-    private void OnPartialTranscribed(string text)
-    {
-        void Apply()
-        {
-            // Ignore late partials that arrive after recording has stopped.
-            if (_dictation is not null && _dictation.State == DictationState.Recording)
-                _input.Text = Combine(_dictationPrefix, text);
-        }
-        MarshalToUi(Apply);
-    }
+    private void OnPartialTranscribed(string text) => _dictationCtl?.HandlePartialTranscribed(text);
 
     private void OnDictationStateChanged(object? sender, EventArgs e)
     {

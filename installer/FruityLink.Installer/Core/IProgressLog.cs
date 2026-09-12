@@ -1,5 +1,3 @@
-using System;
-
 namespace FruityLink.Installer.Core;
 
 /// <summary>Severity / category of a progress line. The GUI and console color these.</summary>
@@ -28,14 +26,6 @@ public static class ProgressLogExtensions
     public static void Warn(this IProgressLog log, string message) => log.Log(LogLevel.Warn, message);
     public static void Error(this IProgressLog log, string message) => log.Log(LogLevel.Error, message);
     public static void Success(this IProgressLog log, string message) => log.Log(LogLevel.Success, message);
-}
-
-/// <summary>Adapts an <see cref="Action{T1,T2}"/> to <see cref="IProgressLog"/>.</summary>
-public sealed class DelegateLog : IProgressLog
-{
-    private readonly Action<LogLevel, string> _sink;
-    public DelegateLog(Action<LogLevel, string> sink) => _sink = sink;
-    public void Log(LogLevel level, string message) => _sink(level, message);
 }
 
 /// <summary>Fans one log out to several sinks (e.g. console + file, or window + file).</summary>

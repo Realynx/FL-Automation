@@ -34,9 +34,9 @@
     <!-- Opt out of the repo's central package management; pin anything we add inline. -->
     <ManagePackageVersionsCentrally>false</ManagePackageVersionsCentrally>
 
-    <Version>0.1.0</Version>
-    <AssemblyVersion>0.1.0.0</AssemblyVersion>
-    <FileVersion>0.1.0.0</FileVersion>
+    <!-- No <Version> here on purpose: the product version comes from the repo-root VERSION
+         file via Directory.Build.props (single source of truth; auto-incremented on publish
+         by deploy/install-all.sh). package.ps1 reads the same file for the artifact name. -->
     <Product>FL Automate Installer</Product>
     <Description>Installs / uninstalls FruityLink (transparent proxy version.dll) into FL Studio.</Description>
   </PropertyGroup>
@@ -88,11 +88,11 @@
        for those, or for a from-scratch wipe of stale/renamed payload files). -->
   <PropertyGroup>
     <RepoRoot>$(MSBuildProjectDirectory)\..\..</RepoRoot>
-    <HasSourceTree Condition="Exists('$(RepoRoot)\src\FruityLink.Host\FruityLink.Host.csproj')">true</HasSourceTree>
+    <HasSourceTree Condition="Exists('$(RepoRoot)\sdk\src\FruityLink.Host\FruityLink.Host.csproj')">true</HasSourceTree>
   </PropertyGroup>
 
   <ItemGroup Condition="'$(HasSourceTree)' == 'true'">
-    <ProjectReference Include="$(RepoRoot)\src\FruityLink.Host\FruityLink.Host.csproj">
+    <ProjectReference Include="$(RepoRoot)\sdk\src\FruityLink.Host\FruityLink.Host.csproj">
       <ReferenceOutputAssembly>false</ReferenceOutputAssembly>
       <Private>false</Private>
     </ProjectReference>
@@ -119,7 +119,7 @@
 
     <!-- 2) Host closure (same file list bootstrap\build-and-stage.ps1 stages). -->
     <ItemGroup>
-      <HostOut Include="$(RepoRoot)\src\FruityLink.Host\bin\$(Configuration)\net9.0-windows\" />
+      <HostOut Include="$(RepoRoot)\sdk\src\FruityLink.Host\bin\$(Configuration)\net9.0-windows\" />
       <HostPayload Include="@(HostOut->'%(Identity)FruityLink.Host.dll')" />
       <HostPayload Include="@(HostOut->'%(Identity)FruityLink.Host.runtimeconfig.json')" />
       <HostPayload Include="@(HostOut->'%(Identity)FruityLink.Host.deps.json')" />
@@ -144,9 +144,9 @@
     <Copy SourceFiles="$(RepoRoot)\bootstrap\build\CLRHost\Release\FlClrHost.dll"
           DestinationFolder="$(MSBuildProjectDirectory)\payload\FruityLink"
           Condition="Exists('$(RepoRoot)\bootstrap\build\CLRHost\Release\FlClrHost.dll')" SkipUnchangedFiles="true" />
-    <Copy SourceFiles="$(RepoRoot)\tools\bridge\build\Release\FlBridge.dll"
+    <Copy SourceFiles="$(RepoRoot)\sdk\native\bridge\build\Release\FlBridge.dll"
           DestinationFolder="$(MSBuildProjectDirectory)\payload\FruityLink"
-          Condition="Exists('$(RepoRoot)\tools\bridge\build\Release\FlBridge.dll')" SkipUnchangedFiles="true" />
+          Condition="Exists('$(RepoRoot)\sdk\native\bridge\build\Release\FlBridge.dll')" SkipUnchangedFiles="true" />
 
     <!-- 4) Mirror the refreshed payload into the output dir — that .\payload next to the EXE is
          what InstallerInfo.ResolvePayloadRoot actually reads. The None-item copy above ran BEFORE

@@ -18,6 +18,12 @@ public sealed class WhisperDictationService : IDictationService, IDisposable
     private const string ModelUrl =
         "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-base.en.bin";
 
+    /// <summary>Skip live-preview passes on less than ~0.6 s of audio (16 kHz * 16-bit mono).</summary>
+    private const int MinLivePreviewBytes = 19200;
+
+    /// <summary>Ignore final clips shorter than ~0.4 s (16000 Hz * 2 bytes * 0.4 s).</summary>
+    private const int MinFinalClipBytes = 12800;
+
     private readonly string _modelPath;
     private readonly object _gate = new();
 
@@ -113,7 +119,7 @@ public sealed class WhisperDictationService : IDictationService, IDisposable
                 lock (_gate)
                     snapshot = _buffer?.ToArray() ?? Array.Empty<byte>();
 
-                if (snapshot.Length < 19200) continue; // ~0.6s @ 16 kHz / 16-bit
+                if (snapshot.Length < MinLivePreviewBytes) continue;
 
                 string text = await TranscribeAsync(snapshot, ct).ConfigureAwait(false);
                 if (!ct.IsCancellationRequested && !string.IsNullOrWhiteSpace(text))
@@ -157,17 +163,11 @@ public sealed class WhisperDictationService : IDictationService, IDisposable
         byte[] pcm;
         lock (_gate)
         {
-            waveIn.DataAvailable -= OnDataAvailable;
-            waveIn.RecordingStopped -= OnRecordingStopped;
+            pcm = TeardownCaptureLocked(waveIn, buffer, harvestPcm: true)!;
             waveIn.Dispose();
-            _waveIn = null;
-            pcm = buffer.ToArray();
-            buffer.Dispose();
-            _buffer = null;
         }
 
-        // Ignore clips shorter than ~0.4s (16000 Hz * 2 bytes * 0.4s).
-        if (pcm.Length < 12800 || !IsModelReady)
+        if (pcm.Length < MinFinalClipBytes || !IsModelReady)
         {
             SetState(DictationState.Idle);
             return string.Empty;
@@ -200,19 +200,35 @@ public sealed class WhisperDictationService : IDictationService, IDisposable
         {
             if (_waveIn is not null)
             {
-                _waveIn.DataAvailable -= OnDataAvailable;
-                _waveIn.RecordingStopped -= OnRecordingStopped;
                 toStop = _waveIn;
-                _waveIn = null;
-                _buffer?.Dispose();
-                _buffer = null;
+                TeardownCaptureLocked(toStop, _buffer, harvestPcm: false);
             }
         }
 
+        // Disposal stays OUTSIDE the lock: Dispose can block on the capture thread, which may be
+        // sitting in OnDataAvailable waiting for _gate.
         try { toStop?.Dispose(); } catch { /* ignore */ }
 
         if (State != DictationState.Idle)
             SetState(DictationState.Idle);
+    }
+
+    /// <summary>
+    /// Shared capture teardown — MUST be called while holding <see cref="_gate"/>: unhooks the
+    /// WaveIn events, clears <see cref="_waveIn"/>, and disposes + clears <see cref="_buffer"/>.
+    /// Returns the buffered PCM bytes when <paramref name="harvestPcm"/> (else null). The caller
+    /// owns disposing <paramref name="waveIn"/> (StopAndTranscribeAsync does so inside the lock,
+    /// Cancel outside — keep it that way).
+    /// </summary>
+    private byte[]? TeardownCaptureLocked(WaveInEvent waveIn, MemoryStream? buffer, bool harvestPcm)
+    {
+        waveIn.DataAvailable -= OnDataAvailable;
+        waveIn.RecordingStopped -= OnRecordingStopped;
+        _waveIn = null;
+        byte[]? pcm = harvestPcm ? buffer?.ToArray() : null;
+        buffer?.Dispose();
+        _buffer = null;
+        return pcm;
     }
 
     private void OnDataAvailable(object? sender, WaveInEventArgs e)

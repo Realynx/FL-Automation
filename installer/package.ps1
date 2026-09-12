@@ -11,8 +11,10 @@
 #
 #   installer\artifacts\fl-automate-installer-v<version>.zip
 #
-# <version> comes from the csproj <Version>. deploy\install-all.sh runs this
-# during the site step and uploads the newest artifact to Server B, where the
+# <version> comes from the repo-root VERSION file — the single product-version
+# source shared with Directory.Build.props (assembly stamping) and
+# deploy\install-all.sh, which AUTO-INCREMENTS it on every publish, runs this
+# during the site step, and uploads the newest artifact to Server B, where the
 # marketing API serves it as /opt/fl-automate/downloads/fl-automate-installer.zip.
 #
 # Idempotent: re-running wipes the publish staging dir and replaces the zip for
@@ -20,7 +22,10 @@
 # =============================================================================
 [CmdletBinding()]
 param(
-    [string]$Configuration = 'Release'
+    [string]$Configuration = 'Release',
+    [string]$McpDistributionPath,
+    [string]$McpSourceRoot,
+    [string]$McpPythonWheel
 )
 
 $ErrorActionPreference = 'Stop'
@@ -34,15 +39,24 @@ if (-not (Test-Path $ProjectFile)) {
     throw "Project not found: $ProjectFile"
 }
 
-# --- Version from the csproj <Version> ---------------------------------------
-$csproj  = Get-Content $ProjectFile -Raw
-$m = [regex]::Match($csproj, '<Version>\s*([^<\s]+)\s*</Version>')
-if (-not $m.Success) { throw "No <Version> found in $ProjectFile" }
-$Version = $m.Groups[1].Value
+# --- Version from the repo-root VERSION file ----------------------------------
+# (Single source of truth: Directory.Build.props stamps the same value on every
+# assembly, so the installed plugin's version always matches the artifact name.)
+$VersionFile = Join-Path (Split-Path $PSScriptRoot -Parent) 'VERSION'
+if (-not (Test-Path $VersionFile)) { throw "No VERSION file at $VersionFile" }
+$Version = (Get-Content $VersionFile -Raw).Trim()
+if ($Version -notmatch '^\d+\.\d+\.\d+$') { throw "VERSION file content '$Version' is not <major>.<minor>.<patch>" }
 Write-Host "==> Packaging FL Automate installer v$Version ($Configuration, win-x64, self-contained single-file)"
 
 # --- Publish (clean staging dir first — idempotent) ---------------------------
-if (Test-Path $PublishDir) { Remove-Item $PublishDir -Recurse -Force }
+$ArtifactDir = [IO.Path]::GetFullPath($ArtifactDir)
+$PublishDir = [IO.Path]::GetFullPath($PublishDir)
+if (-not $PublishDir.StartsWith($ArtifactDir + [IO.Path]::DirectorySeparatorChar, [StringComparison]::OrdinalIgnoreCase)) { throw 'Publish staging directory escapes installer artifacts.' }
+& {
+    param($helper, $root, $target)
+    . $helper
+    Remove-McpStage $root $target
+} (Join-Path $PSScriptRoot 'stage-mcp.ps1') $ArtifactDir $PublishDir
 New-Item -ItemType Directory -Force $ArtifactDir | Out-Null
 
 # Step 1: plain build — runs the csproj's StagePayloadFromSource target, which
@@ -51,6 +65,18 @@ New-Item -ItemType Directory -Force $ArtifactDir | Out-Null
 Write-Host '==> dotnet build (refreshes payload\ from source)'
 & dotnet build $ProjectFile -c $Configuration
 if ($LASTEXITCODE -ne 0) { throw "dotnet build failed (exit $LASTEXITCODE)" }
+
+# FL MCP is an offline optional component in both editions. Source builds use
+# the sibling Fl-MCP checkout and this SDK; a verified prebuilt distribution can
+# be supplied explicitly. Stage after the host refresh so SDK versions match.
+Write-Host '==> Stage and verify bundled FL MCP plugin + companion'
+& (Join-Path $PSScriptRoot 'stage-mcp.ps1') `
+    -DistributionPath $McpDistributionPath `
+    -McpSourceRoot $McpSourceRoot `
+    -PythonWheel $McpPythonWheel `
+    -SdkRoot (Join-Path (Split-Path $PSScriptRoot -Parent) 'sdk') `
+    -PayloadRoot (Join-Path $ProjectDir 'payload')
+if (-not $?) { throw 'FL MCP staging failed.' }
 
 # Step 2: the actual publish. HasSourceTree=false skips the staging target and
 # its ProjectReferences on purpose: the single-file/RID global properties would
@@ -81,44 +107,89 @@ if (-not (Test-Path (Join-Path $PayloadDst 'version.dll'))) {
     Write-Host '  payload\ missing from publish output — copying from project source'
     $PayloadSrc = Join-Path $ProjectDir 'payload'
     if (-not (Test-Path $PayloadSrc)) { throw "No payload source at $PayloadSrc" }
-    Copy-Item $PayloadSrc $PublishDir -Recurse -Force
-    Get-ChildItem $PayloadDst -Recurse -Filter *.pdb | Remove-Item -Force
+    Copy-Item -LiteralPath $PayloadSrc -Destination $PublishDir -Recurse -Force
+    Get-ChildItem -LiteralPath $PayloadDst -Recurse -Filter *.pdb -File | ForEach-Object { Remove-Item -LiteralPath $_.FullName -Force }
 }
 if (-not (Test-Path (Join-Path $PayloadDst 'version.dll'))) {
     throw "payload\version.dll still missing after copy — refusing to package a broken installer"
 }
 
 # Debug symbols are dead weight in a shipped installer.
-Get-ChildItem $PublishDir -Recurse -Filter *.pdb | Remove-Item -Force
+Get-ChildItem -LiteralPath $PublishDir -Recurse -Filter *.pdb -File | ForEach-Object { Remove-Item -LiteralPath $_.FullName -Force }
 
-# --- Zip -----------------------------------------------------------------------
+# Validate the final optional component again after publish and symbol removal.
+& {
+    param($helper, $bundle)
+    . $helper
+    Assert-McpChecksums $bundle
+    Assert-McpChecksums (Join-Path $bundle 'companion')
+} (Join-Path $PSScriptRoot 'stage-mcp.ps1') (Join-Path $PayloadDst 'optional-plugins/fl-mcp')
+
+# --- Zip: ONE publish, TWO editions ---------------------------------------------
 # Entry-by-entry with normalized forward-slash names: .NET Framework's
 # ZipFile.CreateFromDirectory (PS 5.1) writes backslash entry names, PS7's
 # doesn't — this keeps the artifact byte-layout identical under both editions.
 # No root folder inside the zip: exe + payload/ at the top level.
-$ZipPath = Join-Path $ArtifactDir "fl-automate-installer-v$Version.zip"
-if (Test-Path $ZipPath) { Remove-Item $ZipPath -Force }
+#
+#   * PACKAGED  fl-automate-installer-v<ver>.zip
+#       The sold product: full payload including the FL Automate plugin
+#       (payload/FruityLink/plugins/fl-agent/). Uploaded to the marketing site.
+#   * COMMUNITY fruitylink-installer-v<ver>.zip
+#       The FruityLink plugin system and bundled optional FL MCP — SAME exe,
+#       fl-agent payload stripped. FL MCP keeps its PolyForm Noncommercial license.
+#       The installer detects the edition at runtime from
+#       payload presence (InstallerInfo.IsPackagedEdition). Published as a
+#       GitHub release artifact on the open-source repo.
 Add-Type -AssemblyName System.IO.Compression
 Add-Type -AssemblyName System.IO.Compression.FileSystem
-$archive = [System.IO.Compression.ZipFile]::Open($ZipPath, 'Create')
-try {
-    $trim = (Get-Item $PublishDir).FullName.Length + 1
-    Get-ChildItem $PublishDir -Recurse -File | ForEach-Object {
-        $rel = $_.FullName.Substring($trim).Replace('\', '/')
-        [System.IO.Compression.ZipFileExtensions]::CreateEntryFromFile(
-            $archive, $_.FullName, $rel,
-            [System.IO.Compression.CompressionLevel]::Optimal) | Out-Null
-    }
-} finally { $archive.Dispose() }
 
-# --- Report --------------------------------------------------------------------
-$SizeMB = [math]::Round((Get-Item $ZipPath).Length / 1MB, 1)
-$zip = [System.IO.Compression.ZipFile]::OpenRead($ZipPath)
-try {
-    $top = $zip.Entries.FullName |
-        ForEach-Object { ($_ -split '/')[0] } |
-        Sort-Object -Unique
-    Write-Host "==> Top-level zip entries: $($top -join ', ')"
-    Write-Host "==> Zip entry count: $($zip.Entries.Count)"
-} finally { $zip.Dispose() }
-Write-Host "==> Artifact: $ZipPath ($SizeMB MB)"
+function New-InstallerZip {
+    param(
+        [string]$ZipPath,
+        [string[]]$ExcludePrefixes = @()
+    )
+    $ZipPath = [IO.Path]::GetFullPath($ZipPath)
+    if (-not $ZipPath.StartsWith($ArtifactDir + [IO.Path]::DirectorySeparatorChar, [StringComparison]::OrdinalIgnoreCase)) { throw 'ZIP destination escapes installer artifacts.' }
+    if (Test-Path -LiteralPath $ZipPath) { Remove-Item -LiteralPath $ZipPath -Force }
+    $archive = [System.IO.Compression.ZipFile]::Open($ZipPath, 'Create')
+    try {
+        $trim = (Get-Item $PublishDir).FullName.Length + 1
+        Get-ChildItem -LiteralPath $PublishDir -Recurse -File | ForEach-Object {
+            $rel = $_.FullName.Substring($trim).Replace('\', '/')
+            foreach ($prefix in $ExcludePrefixes) {
+                if ($rel.StartsWith($prefix)) { return }
+            }
+            [System.IO.Compression.ZipFileExtensions]::CreateEntryFromFile(
+                $archive, $_.FullName, $rel,
+                [System.IO.Compression.CompressionLevel]::Optimal) | Out-Null
+        }
+    } finally { $archive.Dispose() }
+
+    $SizeMB = [math]::Round((Get-Item $ZipPath).Length / 1MB, 1)
+    $zip = [System.IO.Compression.ZipFile]::OpenRead($ZipPath)
+    try {
+        foreach ($required in @('payload/optional-plugins/fl-mcp/plugin/FlMcp.Plugin.dll',
+            'payload/optional-plugins/fl-mcp/companion/server/FlMcp.Server.dll',
+            'payload/optional-plugins/fl-mcp/companion/python/fruitylink_python-0.2.0-py3-none-any.whl',
+            'payload/optional-plugins/fl-mcp/companion/register-codex.ps1',
+            'payload/optional-plugins/fl-mcp/companion/LICENSE')) {
+            if ($null -eq $zip.GetEntry($required)) { throw "Installer ZIP is missing bundled FL MCP file: $required" }
+        }
+        foreach ($prefix in $ExcludePrefixes) {
+            if (@($zip.Entries | Where-Object { $_.FullName.StartsWith($prefix) }).Count -gt 0) { throw "Installer ZIP retained excluded payload: $prefix" }
+        }
+        $top = $zip.Entries.FullName |
+            ForEach-Object { ($_ -split '/')[0] } |
+            Sort-Object -Unique
+        Write-Host "==> Top-level zip entries: $($top -join ', ')"
+        Write-Host "==> Zip entry count: $($zip.Entries.Count)"
+    } finally { $zip.Dispose() }
+    Write-Host "==> Artifact: $ZipPath ($SizeMB MB)"
+}
+
+Write-Host '==> Packaged edition (sold plugin included)'
+New-InstallerZip -ZipPath (Join-Path $ArtifactDir "fl-automate-installer-v$Version.zip")
+
+Write-Host '==> Community edition (FruityLink + optional FL MCP; FL Agent excluded)'
+New-InstallerZip -ZipPath (Join-Path $ArtifactDir "fruitylink-installer-v$Version.zip") `
+    -ExcludePrefixes @('payload/FruityLink/plugins/fl-agent/')

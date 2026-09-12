@@ -169,10 +169,10 @@ resolution. So in-process the guard cannot rely on "don't expose the verb"; it m
 
 Two tiers:
 
-- **Trusted core** (our code: bridge, C# SDK internals, MCP server host). May use raw primitives
+- **Trusted core** (our code: bridge, C# SDK internals, in-proc CLR host). May use raw primitives
   internally to implement safe high-level ops.
 - **Untrusted third-party plugins.** Receive **only** the high-level, safe music-control SDK
-  (`INativeFlControl` + the MCP tools) — never raw memory/call primitives.
+  (`INativeFlControl`) — never raw memory/call primitives.
 
 **Rules:**
 
@@ -319,9 +319,9 @@ The chokepoint. In `handleCmd`, the `poke/pokeabs` and `call/callabs/callfabs` b
   goal: **no plugin assembly can bind to a method that takes an address or raw command string.**
 - **`InProcBridge`** (`.../Inject/InProcBridge.cs`) P/Invokes `FlBridge_Command` directly — this
   is the in-process raw door. Mark `internal`; never hand it to plugins.
-- **MCP server** (`src/FruityLink.Mcp`, per `business-model-plugin-system`): re-expose **only**
-  the safe `INativeFlControl`/`NativeControlPlugin` tools. Do **not** add an MCP tool that takes a
-  memory address or raw command — that would re-open T8 to any MCP client.
+- ~~MCP server~~ — removed 2026-07-09 (`src/FruityLink.Mcp` deleted). Any future out-of-proc tool
+  surface must follow the same rule: re-expose **only** the safe `INativeFlControl` operations,
+  never a tool that takes a memory address or raw command — that would re-open T8.
 
 ### 4.3 CLR host / plugin loader (the in-process, higher-risk surface)
 
@@ -420,8 +420,8 @@ Run the integrity checks of §3.3 against the §5 baseline **before loading anyt
 
 On a corroborated positive (§6.1), our software **does nothing**:
 
-- The proxy / CLR host **does not load** the plugin system, the bridge, the CLR app, or the MCP
-  server. Nothing of ours initializes.
+- The proxy / CLR host **does not load** the plugin system, the bridge, or the CLR app.
+  Nothing of ours initializes.
 - It **unwinds cleanly**: any partial init is rolled back; no thread is left running; no hook is
   installed; no window subclass; the bridge's named pipe is never created; `FlBridge_Command` is
   never wired in-process.

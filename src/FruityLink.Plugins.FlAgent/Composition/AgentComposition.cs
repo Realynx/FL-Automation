@@ -16,6 +16,7 @@ using FruityLink.Persistence;
 using FruityLink.Plugins.Abstractions;
 using FruityLink.Speech;
 using FruityLink.Ui.Avalonia.Services;
+using CoreAppSettings = FruityLink.Core.Configuration.AppSettings;
 
 namespace FruityLink.Plugins.FlAgent.Composition;
 
@@ -63,6 +64,13 @@ internal static class AgentComposition
     private static readonly Lazy<Task<bool>> SessionRestore =
         new(() => Task.Run(() => SharedAuth.TryRestoreAsync()));
 
+    // ── Opt-in remote debug traces ────────────────────────────────────────────────────────────
+    // ONE uploader on the shared auth/settings; the privacy gate (AccountSettings.ShareDebugData,
+    // default OFF) lives inside the client and is re-read per turn, so the Settings toggle applies
+    // immediately without recomposition.
+    private static readonly Lazy<DebugTraceClient> SharedDebugTraces =
+        new(() => new DebugTraceClient(SharedAuthHttp, SharedAuth, SharedSettings));
+
     /// <summary>
     /// Returns a ready <see cref="FruityLink.Agent.FlAgent"/>: the host's shared one when available,
     /// otherwise a freshly composed minimal one bound to <paramref name="context"/>.Fl.
@@ -72,6 +80,12 @@ internal static class AgentComposition
         // Bring the persisted session back to life (background; the first turn awaits nothing —
         // the gateway auth handler resolves the token per-request once the restore lands).
         _ = SessionRestore.Value;
+
+        // Offer every finished turn's transcript record to the opt-in debug uploader — for BOTH the
+        // host-provided and self-composed agent (the transcript scope is ambient either way). The
+        // uploader itself drops everything unless "Share debug data" is enabled, so wiring the sink
+        // unconditionally leaks nothing. Fire-and-forget: a slow/failed upload never blocks a turn.
+        SessionTranscript.UploadSink ??= json => _ = SharedDebugTraces.Value.TrySendTurnAsync(json);
 
         // 1) Prefer the host's already-configured singleton (shares its FL bridge + conversation).
         if (context.Services?.GetService(typeof(FruityLink.Agent.FlAgent)) is FruityLink.Agent.FlAgent hosted)
@@ -85,7 +99,10 @@ internal static class AgentComposition
 
         var settingsStore = SharedSettings;
         var diagnostics = new LlmDiagnostics(Path.Combine(SharedPaths.BaseDirectory, "logs"));
-        var kernelFactory = new ChatKernelFactory(diagnostics, SharedAuth);
+        // The fallback hook persists the healed model choice so a plan change (which strands the
+        // saved model and 400s every turn) self-repairs instead of bricking the chat until the
+        // user re-picks a model by hand.
+        var kernelFactory = new ChatKernelFactory(diagnostics, SharedAuth, HealStaleModelChoice);
         var audit = new OperationAuditSink();
         var toolFilter = new ToolCallFilter();
 
@@ -96,7 +113,7 @@ internal static class AgentComposition
         var knowledge = new KnowledgePlugin(ResolveRetriever(context));
         var subAgents = new SubAgentService(
             kernelFactory, settingsStore, music, nativeControl, knowledge, toolFilter);
-        var orchestration = new OrchestrationPlugin(subAgents, settingsStore);
+        var orchestration = new OrchestrationPlugin(subAgents, settingsStore, nativeControl);
         // Versioning tools ship empty here; BuildVersionControl's store is attached later via
         // FlAgent.AttachVersionControl (the store needs the live bridge and is composed after us).
         var versioning = new VersioningPlugin();
@@ -104,6 +121,40 @@ internal static class AgentComposition
 
         return new FruityLink.Agent.FlAgent(kernelFactory, settingsStore, pluginSet, toolFilter);
     }
+
+    /// <summary>Client for the gateway's <c>/v1/bug-reports</c> endpoint (the chat's "Report bug"
+    /// button on failed turns). Rides the same shared auth session + settings as everything else.</summary>
+    public static BugReportClient BuildBugReportClient()
+        => new(SharedAuthHttp, SharedAuth, SharedSettings);
+
+    /// <summary>Client for the gateway's public <c>/v1/client-version</c> endpoint (the once-per-run
+    /// update check behind the chat's "update available" notice). No auth — the endpoint is public —
+    /// but it reuses the shared HttpClient + settings (gateway base URL).</summary>
+    public static UpdateCheckClient BuildUpdateCheckClient()
+        => new(SharedAuthHttp, SharedSettings);
+
+    /// <summary>
+    /// Self-heal for a stale saved model (see <see cref="LlmModelFallbackHandler"/>): persist
+    /// <c>"default"</c> so future kernel builds stop paying the 400-then-fallback round trip and
+    /// the Settings card shows the real state. Only rewrites the setting while it still holds the
+    /// rejected model (never clobber a pick the user made in the meantime). Fire-and-forget — the
+    /// heal must never block or fail the in-flight turn, which the wire fallback already saved.
+    /// </summary>
+    private static void HealStaleModelChoice(LlmModelFallback fallback) =>
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                CoreAppSettings app = await SharedSettings.LoadAsync().ConfigureAwait(false);
+                AccountSettings account = app.AccountOrDefault;
+                if (!string.Equals(account.Model, fallback.StaleModel, StringComparison.Ordinal))
+                    return;
+                await SharedSettings
+                    .SaveAsync(app with { Account = account with { Model = AccountSettings.DefaultModel } })
+                    .ConfigureAwait(false);
+            }
+            catch { /* best-effort; the wire fallback keeps turns working regardless */ }
+        });
 
     /// <summary>
     /// Builds the gateway the Avalonia Settings ACCOUNT card uses to sign in/out and edit the
@@ -114,11 +165,6 @@ internal static class AgentComposition
     /// store instances address the exact same files the agent uses whether it's the host's shared
     /// agent or a self-composed one.
     /// </summary>
-    /// <summary>Client for the gateway's <c>/v1/bug-reports</c> endpoint (the chat's "Report bug"
-    /// button on failed turns). Rides the same shared auth session + settings as everything else.</summary>
-    public static BugReportClient BuildBugReportClient()
-        => new(SharedAuthHttp, SharedAuth, SharedSettings);
-
     public static IAccountGateway BuildAccountGateway(FruityLink.Agent.FlAgent agent)
     {
         var connectivity = new GatewayConnectivity(SharedAuthHttp, SharedAuth);

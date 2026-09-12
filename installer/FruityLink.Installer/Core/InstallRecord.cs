@@ -2,7 +2,6 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Text.Json;
-using System.Text.Json.Serialization;
 
 namespace FruityLink.Installer.Core;
 
@@ -35,16 +34,10 @@ public sealed class InstallRecord
     /// <summary>Originals we moved aside (restored on uninstall).</summary>
     public List<BackupEntry> Backups { get; set; } = new();
 
-    private static readonly JsonSerializerOptions JsonOpts = new()
-    {
-        WriteIndented = true,
-        DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
-    };
-
-    public string ToJson() => JsonSerializer.Serialize(this, JsonOpts);
+    public string ToJson() => JsonSerializer.Serialize(this, InstallerJson.Default);
 
     public static InstallRecord FromJson(string json) =>
-        JsonSerializer.Deserialize<InstallRecord>(json, JsonOpts)
+        JsonSerializer.Deserialize<InstallRecord>(json, InstallerJson.Default)
         ?? throw new InvalidDataException("Install record JSON deserialized to null.");
 
     /// <summary>The mirror copy under %LocalAppData% used as a fallback for uninstall discovery.</summary>

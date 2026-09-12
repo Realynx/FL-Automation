@@ -49,6 +49,17 @@ public sealed class AccountSettingsViewModelTests
             return Task.CompletedTask;
         }
 
+        public bool? LastSavedShareDebugData { get; private set; }
+        public Exception? SaveShareDebugDataError { get; set; }
+
+        public Task SaveShareDebugDataAsync(bool enabled, CancellationToken ct = default)
+        {
+            if (SaveShareDebugDataError is not null) return Task.FromException(SaveShareDebugDataError);
+            LastSavedShareDebugData = enabled;
+            Snapshot.ShareDebugData = enabled;
+            return Task.CompletedTask;
+        }
+
         public Task<IReadOnlyList<AccountModel>> ListModelsAsync(CancellationToken ct = default)
         {
             ListModelsCalls++;

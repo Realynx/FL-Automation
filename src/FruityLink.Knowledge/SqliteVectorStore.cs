@@ -4,12 +4,11 @@ using Microsoft.Data.Sqlite;
 namespace FruityLink.Knowledge;
 
 /// <summary>A chunk row paired with its embedding vector, as streamed from the store.</summary>
-/// <param name="ChunkId">Chunk primary key.</param>
 /// <param name="SourceId">Owning source id.</param>
 /// <param name="SourceTitle">Owning source title (for citation).</param>
 /// <param name="Text">Chunk text.</param>
 /// <param name="Vector">Embedding vector (decoded from the stored BLOB).</param>
-internal sealed record ChunkVector(string ChunkId, string SourceId, string SourceTitle, string Text, float[] Vector);
+internal sealed record ChunkVector(string SourceId, string SourceTitle, string Text, float[] Vector);
 
 /// <summary>A chunk to be persisted, prior to vector encoding.</summary>
 /// <param name="Id">Chunk primary key.</param>
@@ -153,13 +152,7 @@ internal sealed class SqliteVectorStore
         using SqliteConnection connection = Open();
         using SqliteTransaction transaction = connection.BeginTransaction();
 
-        using (SqliteCommand delete = connection.CreateCommand())
-        {
-            delete.Transaction = transaction;
-            delete.CommandText = "DELETE FROM chunks WHERE source_id = $source_id;";
-            delete.Parameters.AddWithValue("$source_id", sourceId);
-            delete.ExecuteNonQuery();
-        }
+        DeleteChunksForSource(connection, transaction, sourceId);
 
         using (SqliteCommand insert = connection.CreateCommand())
         {
@@ -198,13 +191,7 @@ internal sealed class SqliteVectorStore
         using SqliteConnection connection = Open();
         using SqliteTransaction transaction = connection.BeginTransaction();
 
-        using (SqliteCommand deleteChunks = connection.CreateCommand())
-        {
-            deleteChunks.Transaction = transaction;
-            deleteChunks.CommandText = "DELETE FROM chunks WHERE source_id = $source_id;";
-            deleteChunks.Parameters.AddWithValue("$source_id", sourceId);
-            deleteChunks.ExecuteNonQuery();
-        }
+        DeleteChunksForSource(connection, transaction, sourceId);
 
         int affected;
         using (SqliteCommand deleteSource = connection.CreateCommand())
@@ -219,6 +206,17 @@ internal sealed class SqliteVectorStore
         return affected > 0;
     }
 
+    /// <summary>Deletes every chunk belonging to <paramref name="sourceId"/> within the transaction.</summary>
+    private static void DeleteChunksForSource(
+        SqliteConnection connection, SqliteTransaction transaction, string sourceId)
+    {
+        using SqliteCommand delete = connection.CreateCommand();
+        delete.Transaction = transaction;
+        delete.CommandText = "DELETE FROM chunks WHERE source_id = $source_id;";
+        delete.Parameters.AddWithValue("$source_id", sourceId);
+        delete.ExecuteNonQuery();
+    }
+
     /// <summary>
     /// Streams every chunk together with its decoded embedding vector, joined to its source
     /// title. Materialised lazily so the whole index need not be held in memory at once.
@@ -229,7 +227,7 @@ internal sealed class SqliteVectorStore
         using SqliteCommand command = connection.CreateCommand();
         command.CommandText =
             """
-            SELECT c.id, c.source_id, s.title, c.text, c.dim, c.vector
+            SELECT c.source_id, s.title, c.text, c.dim, c.vector
             FROM chunks c
             JOIN sources s ON s.id = c.source_id
             ORDER BY c.source_id, c.ordinal;
@@ -238,14 +236,13 @@ internal sealed class SqliteVectorStore
         using SqliteDataReader reader = command.ExecuteReader();
         while (reader.Read())
         {
-            string chunkId = reader.GetString(0);
-            string sourceId = reader.GetString(1);
-            string title = reader.GetString(2);
-            string text = reader.GetString(3);
-            int dim = reader.GetInt32(4);
-            byte[] blob = (byte[])reader[5];
+            string sourceId = reader.GetString(0);
+            string title = reader.GetString(1);
+            string text = reader.GetString(2);
+            int dim = reader.GetInt32(3);
+            byte[] blob = (byte[])reader[4];
             float[] vector = DecodeVector(blob, dim);
-            yield return new ChunkVector(chunkId, sourceId, title, text, vector);
+            yield return new ChunkVector(sourceId, title, text, vector);
         }
     }
 
@@ -285,7 +282,7 @@ internal sealed class SqliteVectorStore
     }
 
     /// <summary>Encodes a vector as a little-endian <c>dim*4</c>-byte BLOB.</summary>
-    internal static byte[] EncodeVector(float[] vector)
+    private static byte[] EncodeVector(float[] vector)
     {
         var bytes = new byte[vector.Length * sizeof(float)];
         System.Buffer.BlockCopy(vector, 0, bytes, 0, bytes.Length);
@@ -296,7 +293,7 @@ internal sealed class SqliteVectorStore
     }
 
     /// <summary>Decodes a little-endian BLOB of <paramref name="dim"/> floats.</summary>
-    internal static float[] DecodeVector(byte[] blob, int dim)
+    private static float[] DecodeVector(byte[] blob, int dim)
     {
         var vector = new float[dim];
         int byteCount = Math.Min(blob.Length, dim * sizeof(float));

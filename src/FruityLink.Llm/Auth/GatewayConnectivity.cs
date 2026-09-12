@@ -21,8 +21,6 @@ public sealed record GatewayModel(string Id, string DisplayName);
 /// </summary>
 public sealed class GatewayConnectivity
 {
-    private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
-
     private readonly HttpClient _http;
     private readonly IAccountAuth _auth;
 

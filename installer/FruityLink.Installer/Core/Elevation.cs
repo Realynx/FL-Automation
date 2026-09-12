@@ -26,7 +26,7 @@ public static class Elevation
     /// the elevated process was started. The caller should then exit so only the elevated instance
     /// continues. Returns false if the user declined the prompt or launch failed.
     /// </summary>
-    public static bool RelaunchAsAdmin(string[] args, string? extraArg = null)
+    public static bool RelaunchAsAdmin(string[] args)
     {
         try
         {
@@ -43,8 +43,6 @@ public static class Elevation
             };
             foreach (var a in args)
                 psi.ArgumentList.Add(a);
-            if (!string.IsNullOrEmpty(extraArg))
-                psi.ArgumentList.Add(extraArg);
 
             Process.Start(psi);
             return true;

@@ -55,6 +55,8 @@ internal sealed class RecordingFlControl : INativeFlControl
     public Task<string> ListMixerTracksAsync(CancellationToken ct = default) => Task.FromResult("0: Master");
     public Task SetMixerPanAsync(int track, int value, CancellationToken ct = default) => Task.CompletedTask;
     public Task<int> GetMixerPanAsync(int track, CancellationToken ct = default) => Task.FromResult(6400);
+    public Task SetMixerTrackMutedAsync(int track, bool muted, CancellationToken ct = default) => Task.CompletedTask;
+    public Task<bool> GetMixerTrackMutedAsync(int track, CancellationToken ct = default) => Task.FromResult(false);
     public Task SetMixerFxParamAsync(int track, int slot, int paramIndex, long value, CancellationToken ct = default) => Task.CompletedTask;
     public Task SetChannelPanAsync(int channel, int value, CancellationToken ct = default) => Task.CompletedTask;
     public Task<int> GetChannelPanAsync(int channel, CancellationToken ct = default) => Task.FromResult(6400);
@@ -66,6 +68,15 @@ internal sealed class RecordingFlControl : INativeFlControl
     public Task<int> GetChannelFxRouteAsync(int channel, CancellationToken ct = default) => Task.FromResult(0);
     public Task AddNoteAsync(int pattern, int channel, int key, int startTick, int lengthTick, int velocity, CancellationToken ct = default) => Task.CompletedTask;
     public Task AddNotesAsync(int pattern, IReadOnlyList<NoteSpec> notes, CancellationToken ct = default) => Task.CompletedTask;
+    public Task<int> EditNotesAsync(int pattern, IReadOnlyList<NoteEdit> edits, CancellationToken ct = default) => Task.FromResult(edits.Count);
+    public Task<int> DeleteNotesAsync(int pattern, IReadOnlyList<NoteRef> targets, CancellationToken ct = default) => Task.FromResult(targets.Count);
+    public Task<int> ClonePatternAsync(int sourcePattern, CancellationToken ct = default) => Task.FromResult(sourcePattern + 1);
+    public Task SetPatternNameAsync(int index, string name, CancellationToken ct = default) => Task.CompletedTask;
+    public Task SetChannelNameAsync(int index, string name, CancellationToken ct = default) => Task.CompletedTask;
+    public Task SetChannelSoloAsync(int index, CancellationToken ct = default) => Task.CompletedTask;
+    public Task SetMixerTrackNameAsync(int track, string name, CancellationToken ct = default) => Task.CompletedTask;
+    public Task SetTrackSoloAsync(int track, CancellationToken ct = default) => Task.CompletedTask;
+    public Task SetLoopRegionAsync(int startTick, int endTick, CancellationToken ct = default) => Task.CompletedTask;
     public Task<int> GetPpqAsync(CancellationToken ct = default) => Task.FromResult(96);
     public Task<int> GetCurrentPatternAsync(CancellationToken ct = default) => Task.FromResult(1);
     public Task SelectPatternAsync(int index, CancellationToken ct = default) => Task.CompletedTask;

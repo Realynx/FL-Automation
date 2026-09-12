@@ -41,6 +41,9 @@ public static class Program
     private static int RunGui(CliOptions opts)
     {
         InstallerApp.InitialFlPath = opts.FlPath;
+        InstallerApp.InitialPayloadRoot = opts.PayloadRoot;
+        InstallerApp.WithoutMcp = opts.WithoutMcp;
+        InstallerApp.InitialCommunityPlugins = opts.CommunityPluginIds;
         return AppBuilder.Configure<InstallerApp>()
             .UsePlatformDetect()
             .WithInterFont()   // guaranteed body-font fallback (Avalonia.Fonts.Inter)

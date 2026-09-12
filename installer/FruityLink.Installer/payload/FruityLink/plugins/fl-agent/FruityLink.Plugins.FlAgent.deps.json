@@ -6,16 +6,17 @@
   "compilationOptions": {},
   "targets": {
     ".NETCoreApp,Version=v9.0": {
-      "FruityLink.Plugins.FlAgent/1.0.0": {
+      "FruityLink.Plugins.FlAgent/0.1.9": {
         "dependencies": {
-          "FruityLink.Agent": "1.0.0",
-          "FruityLink.Core": "1.0.0",
-          "FruityLink.Knowledge": "1.0.0",
-          "FruityLink.Llm": "1.0.0",
-          "FruityLink.Persistence": "1.0.0",
-          "FruityLink.Plugins.Abstractions": "1.0.0",
-          "FruityLink.Speech": "1.0.0",
-          "FruityLink.Ui.Avalonia": "1.0.0",
+          "FruityLink.Agent": "0.1.9",
+          "FruityLink.AppCore": "0.1.9",
+          "FruityLink.Core": "0.2.0",
+          "FruityLink.Knowledge": "0.1.9",
+          "FruityLink.Llm": "0.1.9",
+          "FruityLink.Persistence": "0.1.9",
+          "FruityLink.Plugins.Abstractions": "0.2.0",
+          "FruityLink.Speech": "0.1.9",
+          "FruityLink.Ui.Avalonia": "0.1.9",
           "Microsoft.Extensions.AI": "10.7.0",
           "Microsoft.Extensions.AI.Abstractions": "10.7.0"
         },
@@ -1115,108 +1116,137 @@
           }
         }
       },
-      "FruityLink.Agent/1.0.0": {
+      "FruityLink.Agent/0.1.9": {
         "dependencies": {
-          "FruityLink.Core": "1.0.0",
-          "FruityLink.Llm": "1.0.0",
+          "FruityLink.AppCore": "0.1.9",
+          "FruityLink.Core": "0.2.0",
+          "FruityLink.Llm": "0.1.9",
           "Microsoft.SemanticKernel": "1.77.0"
         },
         "runtime": {
           "FruityLink.Agent.dll": {
-            "assemblyVersion": "1.0.0.0",
-            "fileVersion": "1.0.0.0"
+            "assemblyVersion": "0.1.9.0",
+            "fileVersion": "0.1.9.0"
           }
         }
       },
-      "FruityLink.Core/1.0.0": {
+      "FruityLink.AppCore/0.1.9": {
+        "dependencies": {
+          "FruityLink.Core": "0.2.0"
+        },
+        "runtime": {
+          "FruityLink.AppCore.dll": {
+            "assemblyVersion": "0.1.9.0",
+            "fileVersion": "0.1.9.0"
+          }
+        }
+      },
+      "FruityLink.Core/0.2.0": {
         "runtime": {
           "FruityLink.Core.dll": {
-            "assemblyVersion": "1.0.0.0",
-            "fileVersion": "1.0.0.0"
+            "assemblyVersion": "0.2.0.0",
+            "fileVersion": "0.2.0.0"
           }
         }
       },
-      "FruityLink.Knowledge/1.0.0": {
+      "FruityLink.Knowledge/0.1.9": {
         "dependencies": {
           "AngleSharp": "1.5.1",
-          "FruityLink.Core": "1.0.0",
+          "FruityLink.AppCore": "0.1.9",
+          "FruityLink.Core": "0.2.0",
           "Microsoft.Data.Sqlite": "9.0.11",
           "PdfPig": "0.1.15"
         },
         "runtime": {
           "FruityLink.Knowledge.dll": {
-            "assemblyVersion": "1.0.0.0",
-            "fileVersion": "1.0.0.0"
+            "assemblyVersion": "0.1.9.0",
+            "fileVersion": "0.1.9.0"
           }
         }
       },
-      "FruityLink.Llm/1.0.0": {
+      "FruityLink.Llm/0.1.9": {
         "dependencies": {
-          "FruityLink.Core": "1.0.0",
+          "FruityLink.AppCore": "0.1.9",
+          "FruityLink.Core": "0.2.0",
           "Microsoft.SemanticKernel": "1.77.0",
           "Microsoft.SemanticKernel.Connectors.OpenAI": "1.77.0"
         },
         "runtime": {
           "FruityLink.Llm.dll": {
-            "assemblyVersion": "1.0.0.0",
-            "fileVersion": "1.0.0.0"
+            "assemblyVersion": "0.1.9.0",
+            "fileVersion": "0.1.9.0"
           }
         }
       },
-      "FruityLink.Persistence/1.0.0": {
+      "FruityLink.Persistence/0.1.9": {
         "dependencies": {
-          "FruityLink.Core": "1.0.0"
+          "FruityLink.AppCore": "0.1.9",
+          "FruityLink.Core": "0.2.0"
         },
         "runtime": {
           "FruityLink.Persistence.dll": {
-            "assemblyVersion": "1.0.0.0",
-            "fileVersion": "1.0.0.0"
+            "assemblyVersion": "0.1.9.0",
+            "fileVersion": "0.1.9.0"
           }
         }
       },
-      "FruityLink.Plugins.Abstractions/1.0.0": {
+      "FruityLink.Plugins.Abstractions/0.2.0": {
         "dependencies": {
-          "FruityLink.Core": "1.0.0"
+          "FruityLink.Core": "0.2.0"
         },
         "runtime": {
           "FruityLink.Plugins.Abstractions.dll": {
-            "assemblyVersion": "1.0.0.0",
-            "fileVersion": "1.0.0.0"
+            "assemblyVersion": "0.2.0.0",
+            "fileVersion": "0.2.0.0"
           }
         }
       },
-      "FruityLink.Speech/1.0.0": {
+      "FruityLink.Speech/0.1.9": {
         "dependencies": {
-          "FruityLink.Core": "1.0.0",
+          "FruityLink.AppCore": "0.1.9",
+          "FruityLink.Core": "0.2.0",
           "NAudio": "2.3.0",
           "Whisper.net": "1.9.1"
         },
         "runtime": {
           "FruityLink.Speech.dll": {
-            "assemblyVersion": "1.0.0.0",
-            "fileVersion": "1.0.0.0"
+            "assemblyVersion": "0.1.9.0",
+            "fileVersion": "0.1.9.0"
           }
         }
       },
-      "FruityLink.Ui.Avalonia/1.0.0": {
+      "FruityLink.Ui.Avalonia/0.1.9": {
         "dependencies": {
           "Avalonia": "11.3.18",
           "Avalonia.Desktop": "11.3.18",
           "Avalonia.Fonts.Inter": "11.3.18",
           "Avalonia.Themes.Fluent": "11.3.18",
+          "FruityLink.Ui.Avalonia.Hosting": "0.2.0",
           "Markdown.Avalonia.Tight": "11.0.3"
         },
         "runtime": {
           "FruityLink.Ui.Avalonia.dll": {
-            "assemblyVersion": "1.0.0.0",
-            "fileVersion": "1.0.0.0"
+            "assemblyVersion": "0.1.9.0",
+            "fileVersion": "0.1.9.0"
+          }
+        }
+      },
+      "FruityLink.Ui.Avalonia.Hosting/0.2.0": {
+        "dependencies": {
+          "Avalonia": "11.3.18",
+          "Avalonia.Desktop": "11.3.18"
+        },
+        "runtime": {
+          "FruityLink.Ui.Avalonia.Hosting.dll": {
+            "assemblyVersion": "0.2.0.0",
+            "fileVersion": "0.2.0.0"
           }
         }
       }
     }
   },
   "libraries": {
-    "FruityLink.Plugins.FlAgent/1.0.0": {
+    "FruityLink.Plugins.FlAgent/0.1.9": {
       "type": "project",
       "serviceable": false,
       "sha512": ""
@@ -1739,42 +1769,52 @@
       "path": "whisper.net/1.9.1",
       "hashPath": "whisper.net.1.9.1.nupkg.sha512"
     },
-    "FruityLink.Agent/1.0.0": {
+    "FruityLink.Agent/0.1.9": {
       "type": "project",
       "serviceable": false,
       "sha512": ""
     },
-    "FruityLink.Core/1.0.0": {
+    "FruityLink.AppCore/0.1.9": {
       "type": "project",
       "serviceable": false,
       "sha512": ""
     },
-    "FruityLink.Knowledge/1.0.0": {
+    "FruityLink.Core/0.2.0": {
       "type": "project",
       "serviceable": false,
       "sha512": ""
     },
-    "FruityLink.Llm/1.0.0": {
+    "FruityLink.Knowledge/0.1.9": {
       "type": "project",
       "serviceable": false,
       "sha512": ""
     },
-    "FruityLink.Persistence/1.0.0": {
+    "FruityLink.Llm/0.1.9": {
       "type": "project",
       "serviceable": false,
       "sha512": ""
     },
-    "FruityLink.Plugins.Abstractions/1.0.0": {
+    "FruityLink.Persistence/0.1.9": {
       "type": "project",
       "serviceable": false,
       "sha512": ""
     },
-    "FruityLink.Speech/1.0.0": {
+    "FruityLink.Plugins.Abstractions/0.2.0": {
       "type": "project",
       "serviceable": false,
       "sha512": ""
     },
-    "FruityLink.Ui.Avalonia/1.0.0": {
+    "FruityLink.Speech/0.1.9": {
+      "type": "project",
+      "serviceable": false,
+      "sha512": ""
+    },
+    "FruityLink.Ui.Avalonia/0.1.9": {
+      "type": "project",
+      "serviceable": false,
+      "sha512": ""
+    },
+    "FruityLink.Ui.Avalonia.Hosting/0.2.0": {
       "type": "project",
       "serviceable": false,
       "sha512": ""

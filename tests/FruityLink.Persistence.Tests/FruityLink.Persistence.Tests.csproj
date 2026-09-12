@@ -17,7 +17,7 @@
     <ProjectReference Include="..\..\src\FruityLink.Persistence\FruityLink.Persistence.csproj" />
     <!-- Agent supplies the populated InverseOpRegistry so the ops.json → undo-replay path is tested end to end. -->
     <ProjectReference Include="..\..\src\FruityLink.Agent\FruityLink.Agent.csproj" />
-    <ProjectReference Include="..\..\src\FruityLink.Core\FruityLink.Core.csproj" />
+    <ProjectReference Include="..\..\sdk\src\FruityLink.Core\FruityLink.Core.csproj" />
   </ItemGroup>
 
 </Project>

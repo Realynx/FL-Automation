@@ -25,9 +25,10 @@
 
   <ItemGroup>
     <!-- The stable plugin contract (IFlPlugin / IPluginContext / INativeFlControl). -->
-    <ProjectReference Include="..\FruityLink.Plugins.Abstractions\FruityLink.Plugins.Abstractions.csproj" />
+    <ProjectReference Include="..\..\sdk\src\FruityLink.Plugins.Abstractions\FruityLink.Plugins.Abstractions.csproj" />
     <!-- Reused, existing LLM + agent stack. No logic is rebuilt here. -->
-    <ProjectReference Include="..\FruityLink.Core\FruityLink.Core.csproj" />
+    <ProjectReference Include="..\..\sdk\src\FruityLink.Core\FruityLink.Core.csproj" />
+    <ProjectReference Include="..\FruityLink.AppCore\FruityLink.AppCore.csproj" />
     <ProjectReference Include="..\FruityLink.Llm\FruityLink.Llm.csproj" />
     <ProjectReference Include="..\FruityLink.Agent\FruityLink.Agent.csproj" />
     <ProjectReference Include="..\FruityLink.Persistence\FruityLink.Persistence.csproj" />

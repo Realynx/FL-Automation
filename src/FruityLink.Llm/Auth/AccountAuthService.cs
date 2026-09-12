@@ -30,8 +30,6 @@ public sealed class AccountAuthService : IAccountAuth
     /// <summary>Refresh proactively when the access token has less than this left.</summary>
     private static readonly TimeSpan RefreshSkew = TimeSpan.FromMinutes(2);
 
-    private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
-
     private readonly HttpClient _http;
     private readonly ISettingsStore _settings;
     private readonly ISecretStore _secrets;
@@ -265,13 +263,13 @@ public sealed class AccountAuthService : IAccountAuth
     // framework (9.x), and the mixed type identities blow up with MissingMethodException inside
     // FL. Serializing by hand keeps every JSON type on the plugin-local assembly.
     private static StringContent JsonBody<T>(T body)
-        => new(JsonSerializer.Serialize(body, Json), Encoding.UTF8, "application/json");
+        => new(JsonSerializer.Serialize(body, LlmJson.Web), Encoding.UTF8, "application/json");
 
     private static async Task<T?> ReadJsonAsync<T>(HttpResponseMessage response, CancellationToken ct)
         where T : class
     {
         string body = await response.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
-        try { return JsonSerializer.Deserialize<T>(body, Json); }
+        try { return JsonSerializer.Deserialize<T>(body, LlmJson.Web); }
         catch (JsonException) { return null; } // callers treat null as "unexpected response"
     }
 

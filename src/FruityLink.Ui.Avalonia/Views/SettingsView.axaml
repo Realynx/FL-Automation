@@ -184,6 +184,23 @@
                             <CheckBox Grid.Column="1" Classes="toggle" VerticalAlignment="Center"
                                       IsChecked="{Binding ShowToolCalls, Mode=TwoWay}" />
                         </Grid>
+
+                        <Border Height="1" Background="{StaticResource BorderWhite10Brush}" Margin="0,4" />
+
+                        <!-- Share debug data (opt-in remote debugging; default OFF). Persists the
+                             instant it's toggled — a privacy switch must never sit unsaved behind
+                             a separate Save button. Binds through the ACCOUNT gateway because the
+                             flag lives in the agent's settings.json (the uploader reads it there),
+                             not in the UI-only ui-settings.json like the two toggles above. -->
+                        <Grid ColumnDefinitions="*,Auto" Margin="0,6">
+                            <StackPanel Grid.Column="0" Spacing="2" VerticalAlignment="Center">
+                                <TextBlock Classes="settingLabel" Text="Share debug data" />
+                                <TextBlock Classes="settingDesc"
+                                           Text="Upload each AI turn's debug log (tool calls, responses, timings) to FL Automate so we can diagnose issues and improve the AI. Off by default." />
+                            </StackPanel>
+                            <CheckBox Grid.Column="1" Classes="toggle" VerticalAlignment="Center"
+                                      IsChecked="{Binding Account.ShareDebugData, Mode=TwoWay}" />
+                        </Grid>
                     </StackPanel>
                 </Border>
 
@@ -203,6 +220,65 @@
                                       IsChecked="{Binding AutoScroll, Mode=TwoWay}" />
                         </Grid>
                     </StackPanel>
+                </Border>
+
+                <!-- ============================ Community ============================ -->
+                <Border Classes="card" Padding="18,16">
+                    <StackPanel Spacing="4">
+                        <TextBlock Classes="badge" Text="COMMUNITY" Margin="0,0,0,8" />
+
+                        <Grid ColumnDefinitions="*,Auto" Margin="0,6">
+                            <StackPanel Grid.Column="0" Spacing="2" VerticalAlignment="Center">
+                                <TextBlock Classes="settingLabel" Text="FL Automate Discord" />
+                                <TextBlock Classes="settingDesc" TextWrapping="Wrap"
+                                           Text="Tips, plugin ideas, FruityLink SDK help, and the people making FL Studio do new things." />
+                            </StackPanel>
+                            <Button Grid.Column="1" Classes="pill secondary" MinHeight="32" MinWidth="90"
+                                    VerticalAlignment="Center"
+                                    Content="Join ↗"
+                                    Command="{Binding OpenDiscordCommand}" />
+                        </Grid>
+                    </StackPanel>
+                </Border>
+
+                <!-- ============================ Climate pledge ============================ -->
+                <!-- A slim, green-accented HINT mirroring the marketing site's "Our climate pledge"
+                     section (marketing/web/.../Planet.tsx): 1.5% of AI revenue → verified carbon
+                     credits. GREEN is NOT in the plugin theme (accents are violet/cyan/magenta), so
+                     every green below is a LITERAL hex — no {StaticResource} lookup that could
+                     silently fail the whole view to the WPF fallback. Static text only: no bindings
+                     (safe under x:DataType) and no animations (both blank/crash the embedded FL host). -->
+                <Border CornerRadius="12" Padding="14,12"
+                        Background="#1410B981"
+                        BorderBrush="#4D34D399"
+                        BorderThickness="1">
+                    <Grid ColumnDefinitions="Auto,*">
+                        <!-- Leaf glyph = the marketing IconLeaf, stroked emerald like its source SVG
+                             (fill:none / stroke:currentColor / round caps). 24×24 Canvas is the icon's
+                             design grid so the Viewbox scales the glyph centred — same trick as the
+                             back-arrow above. -->
+                        <Viewbox Grid.Column="0" Width="18" Height="18"
+                                 Margin="0,1,12,0" VerticalAlignment="Top">
+                            <Canvas Width="24" Height="24">
+                                <Path Stroke="#34D399" StrokeThickness="1.6"
+                                      StrokeLineCap="Round" StrokeJoin="Round"
+                                      Data="M20 4c-8.5 0-14 4.5-14 11a5 5 0 0 0 5 5c6.5 0 9-5.5 9-16z" />
+                                <Path Stroke="#34D399" StrokeThickness="1.6"
+                                      StrokeLineCap="Round" StrokeJoin="Round"
+                                      Data="M4 20c3-6 7-9.5 12-12" />
+                            </Canvas>
+                        </Viewbox>
+                        <StackPanel Grid.Column="1" Spacing="3">
+                            <TextBlock Text="Climate pledge"
+                                       FontWeight="SemiBold" FontSize="12.5"
+                                       Foreground="#6EE7B7" />
+                            <TextBlock Classes="settingDesc" TextWrapping="Wrap">
+                                <Run Text="We donate " />
+                                <Run Text="1.5% of AI revenue" Foreground="#34D399" FontWeight="Medium" />
+                                <Run Text=" to verified carbon credits — helping offset the compute behind every session." />
+                            </TextBlock>
+                        </StackPanel>
+                    </Grid>
                 </Border>
 
                 <!-- storage location -->

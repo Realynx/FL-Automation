@@ -9,20 +9,12 @@ namespace FruityLink.Knowledge.Tests;
 /// unchanged content is skipped (no re-embed), changed content is re-embedded in place, the same
 /// URI never duplicates, and pruning drops sources no longer present.
 /// </summary>
-public sealed class IncrementalIngestTests : IDisposable
+public sealed class IncrementalIngestTests : KnowledgeDbTestBase
 {
-    private readonly string _dbPath;
-    private readonly string _workDir;
-
     public IncrementalIngestTests()
+        : base("fruitylink-incremental-tests", "manual.db")
     {
-        _workDir = Path.Combine(Path.GetTempPath(), "fruitylink-incremental-tests", Guid.NewGuid().ToString("N"));
-        Directory.CreateDirectory(_workDir);
-        _dbPath = Path.Combine(_workDir, "manual.db");
     }
-
-    private KnowledgeService CreateService(FakeEmbeddingClient embeddings)
-        => new(embeddings, new SqliteVectorStore(_dbPath), new SourceTextExtractor(), new HttpClient());
 
     [Fact]
     public async Task AddText_UnchangedContent_ReusesEmbeddingsAndDoesNotDuplicate()
@@ -94,16 +86,5 @@ public sealed class IncrementalIngestTests : IDisposable
 
         pruned.ShouldBe(0);
         (await svc.ListSourcesAsync()).Count.ShouldBe(2);
-    }
-
-    public void Dispose()
-    {
-        Microsoft.Data.Sqlite.SqliteConnection.ClearAllPools();
-        try
-        {
-            if (Directory.Exists(_workDir))
-                Directory.Delete(_workDir, recursive: true);
-        }
-        catch (IOException) { /* best-effort temp cleanup */ }
     }
 }

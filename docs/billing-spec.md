@@ -19,8 +19,8 @@ subscription editors, DTO @IsIn lists. Marketing pricing page gets a fourth card
 (copy tone from existing cards; "everything in Studio, plus…" — highest budget, priority
 framing; do NOT mark it highlighted — studio keeps the highlight). Prices: monthly $100,
 yearly per-month price follows the same discount ratio the existing tiers use in
-content.ts. Helcim: add `HELCIM_PLAN_LABEL_MONTHLY/_YEARLY` env plumbing exactly like
-pro/studio (empty until plans exist in Helcim — purchasing that tier then shows the same
+content.ts. Stripe: add `STRIPE_PRICE_LABEL_MONTHLY/_YEARLY` env plumbing exactly like
+pro/studio (empty until prices exist in Stripe — purchasing that tier then shows the same
 "unavailable" path an unconfigured plan takes today). Seeds: TierBudget label=100_000_000;
 PlanPrice label monthly=100_000_000, yearly per content.ts ratio.
 
@@ -40,9 +40,12 @@ GATEWAY_MODEL_COSTS="OPENAI/gpt-4o=in=2.50,out=10.00;OPENAI/gpt-4o-mini=in=0.15,
 GATEWAY_COST_FALLBACK="5.00"
 ```
 
-Resolution order for a request routed to backend B / upstream model M:
-exact `B/M` in GATEWAY_MODEL_COSTS → longest glob match `B/M*` → `GATEWAY_BACKEND_B_COST`
-→ `GATEWAY_COST_FALLBACK` (log a warn once per model). Parse once at boot.
+On top of the env family sits the DB layer: `CostOverride` rows (§2), edited live
+from the Ops Console Pricing page (~30s gateway cache, no restart). Resolution
+order for a request routed to backend B / upstream model M:
+DB exact `B/M` → exact `B/M` in GATEWAY_MODEL_COSTS → longest glob match `B/M*`
+→ DB backend B → `GATEWAY_BACKEND_B_COST` → DB fallback → `GATEWAY_COST_FALLBACK`
+(log a warn once per model). Env parsed once at boot; DB rows read live.
 
 ## 2. Dynamic business config (DB, edited live from the Ops Console)
 
@@ -72,6 +75,18 @@ model PricingSnapshot {
   json      String   // JSON: see §5
   updatedAt DateTime @updatedAt
 }
+
+/// Admin-editable per-token COST rates — the DB layer over the §1 env config.
+/// Rates in DOLLARS per Mtok. scope/key: model -> "BACKEND/upstreamModel" (exact,
+/// no globs; "" backend = plan-level provider); backend -> "BACKEND"; fallback ->
+/// "fallback". Resolution order: see §1. Read live by the gateway (~30s cache).
+model CostOverride {
+  key        String   @id
+  scope      String   // model | backend | fallback
+  inPerMtok  Float
+  outPerMtok Float
+  updatedAt  DateTime @updatedAt
+}
 ```
 
 Boot seeds (create-if-missing only): BillingConfig{minMarginBps:5000}; TierBudget
@@ -99,8 +114,8 @@ model LimitOverride { // ADD:
 
 ```prisma
 /// Subscription display prices, editable from the VPN-only Ops Console. The pricing
-/// page reads these via GET /api/plans. NOTE: Helcim charges existing subscribers per
-/// its own plan amounts — keep the Helcim dashboard in sync when changing these.
+/// page reads these via GET /api/plans. NOTE: Stripe charges existing subscribers per
+/// its own price amounts — keep the Stripe price catalog in sync when changing these.
 model PlanPrice {
   tier          String   @id // free | pro | studio | label
   monthlyMicros Int
@@ -177,6 +192,14 @@ PUT /api/pricing/margin  { minMarginBps: int 0..9000 }        -> updated GET pay
 PUT /api/pricing/budget  { tier, budgetMicros: int >= 0 }     -> updated GET payload   // audit 'pricing.budget.set'
 PUT /api/pricing/plan-price { tier, monthlyMicros >= 0, yearlyMicros >= 0 } -> updated  // audit 'pricing.plan-price.set' (writes marketing PlanPrice upsert)
 
+// Per-token cost rates (gateway CostOverride upsert; live on the gateway ~30s).
+// GET /api/pricing additionally returns costOverrides: Array<{ key, scope, inPerMtok,
+// outPerMtok, updatedAt }>, and snapshot.models comes back with the live rows already
+// overlaid (costSource then one of 'db-model'|'db-backend'|'db-fallback').
+PUT /api/pricing/cost { scope: 'model'|'backend'|'fallback', backend?, model?,
+                        inPerMtok >= 0, outPerMtok >= 0 }    -> updated GET payload   // audit 'pricing.cost.set'
+PUT /api/pricing/cost/clear { scope, backend?, model? }      -> updated GET payload   // audit 'pricing.cost.clear' (env config applies again)
+
 // users: budget override replaces the token override in the UI
 PUT /api/users/:id/limit  body becomes { budgetMicros: number | null, note?: string }
   // null -> delete override row entirely (as before). Writes LimitOverride.budgetMicros
@@ -200,7 +223,7 @@ UserDetail.limitOverride becomes { budgetMicros, note, updatedAt } | null.
   input, stored bps) with a formula hint "price = cost ÷ (1 − margin)"; (b) per-tier
   table: subscription price monthly/yearly (editable, dollars) + monthly budget
   (editable, dollars) + a "match budget to monthly price" convenience button; the
-  Helcim caveat note under the price editor; (c) model catalog table from the snapshot:
+  Stripe caveat note under the price editor; (c) model catalog table from the snapshot:
   plan, model label, backend, upstream, cost in/out per Mtok, LIVE computed price in/out
   per Mtok, margin source badge ('backend'/'override'/'fallback' — fallback in amber
   with "unpriced model" warning); snapshot age shown ("as of <relative time>" — it
@@ -223,7 +246,7 @@ UserDetail.limitOverride becomes { budgetMicros, note, updatedAt } | null.
 
 ## 9. Non-goals / cautions
 
-- Do NOT touch Helcim integration; price changes here are display+budget only.
+- Do NOT touch the Stripe integration; price changes here are display+budget only.
 - Do NOT enforce budgets in marketing; enforcement is gateway-only.
 - Mirrors: admin-console/api/prisma/{marketing,gateway}.prisma MUST byte-match the new
   models/fields above. Console never `db push`es the mirrors.

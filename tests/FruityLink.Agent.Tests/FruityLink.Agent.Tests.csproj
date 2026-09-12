@@ -15,7 +15,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\FruityLink.Agent\FruityLink.Agent.csproj" />
-    <ProjectReference Include="..\..\src\FruityLink.Core\FruityLink.Core.csproj" />
+    <ProjectReference Include="..\..\sdk\src\FruityLink.Core\FruityLink.Core.csproj" />
   </ItemGroup>
 
 </Project>

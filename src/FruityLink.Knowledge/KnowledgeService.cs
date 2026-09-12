@@ -240,10 +240,16 @@ public sealed class KnowledgeService : IKnowledgeIngestor, IKnowledgeRetriever
     private static string NewSourceId() => Guid.NewGuid().ToString("N");
 
     /// <summary>A deterministic source id derived from the URI (stable across rebuilds).</summary>
-    private static string StableSourceId(string uri)
-        => Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(uri))).ToLowerInvariant();
+    private static string StableSourceId(string uri) => Sha256Hex(uri);
 
     /// <summary>A content fingerprint of the source text (empty string for empty text).</summary>
-    private static string ContentHash(string text)
-        => text.Length == 0 ? "" : Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(text))).ToLowerInvariant();
+    private static string ContentHash(string text) => text.Length == 0 ? "" : Sha256Hex(text);
+
+    /// <summary>
+    /// Lowercase hex SHA-256 of the UTF-8 bytes of <paramref name="value"/>. The casing and
+    /// encoding are load-bearing: the result is persisted as the stable source id and in
+    /// <c>sources.content_hash</c>.
+    /// </summary>
+    private static string Sha256Hex(string value)
+        => Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(value))).ToLowerInvariant();
 }

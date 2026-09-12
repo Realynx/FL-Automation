@@ -85,17 +85,10 @@ public sealed class InstallManifest
 
     public List<PayloadItem> Items { get; set; } = new();
 
-    private static readonly JsonSerializerOptions JsonOpts = new()
-    {
-        WriteIndented = true,
-        DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
-        Converters = { new JsonStringEnumConverter() },
-    };
-
-    public string ToJson() => JsonSerializer.Serialize(this, JsonOpts);
+    public string ToJson() => JsonSerializer.Serialize(this, InstallerJson.WithEnumStrings);
 
     public static InstallManifest FromJson(string json) =>
-        JsonSerializer.Deserialize<InstallManifest>(json, JsonOpts)
+        JsonSerializer.Deserialize<InstallManifest>(json, InstallerJson.WithEnumStrings)
         ?? throw new InvalidDataException("Manifest JSON deserialized to null.");
 
     public static InstallManifest Load(string path) => FromJson(File.ReadAllText(path));

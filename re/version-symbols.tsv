@@ -1,0 +1,85 @@
+name	kind	ghidra2025	ghidra2026	dispOff	instrEnd	pattern
+FLui_CreateFormFromClassRef	Function	010c2aa0	11c2870	-	-	48 83 EC 28 48 8B 05 ?? ?? ?? ?? 48 8B 00 49 89 C8 49 89 D1
+FLwp_SetFormCaption	Function	00841690	869370	-	-	57 56 53 48 83 EC 20 48 89 CB 48 89 D6 48 8B 8B 10 01 00 00
+FLwp_SetVisible	Function	00833ec0	85bba0	-	-	57 56 53 48 83 EC 20 48 89 CB 40 89 D6 48 0F B6 83 6C 06 00 00
+FLui_ZOrderRefresh	Function	005d0ea0	60a780	-	-	56 53 48 83 EC 28 48 89 CB 48 89 D9 66 BA CE FF E8 ?? ?? ?? ?? 48 89 C6 48 89 D9 B2 01
+FLui_WP_GetHandle	Function	005ddf70	617850	-	-	53 48 83 EC 20 48 89 CB 48 89 D9 E8 ?? ?? ?? ?? 48 8B 83 5C 04 00 00
+FLwp_SetWindowState	Function	00836600	85e2e0	-	-	53 48 83 EC 20 89 D3 38 99 C2 04 00 00 74 5B
+FLui_DockLayout	Function	007e6170	808160	-	-	56 53 48 83 EC 28 48 89 CB 89 54 24 48 8B 44 24 48 89 83 D2 06 00 00
+FLui_Focusable	Function	005de3e0	617cc0	-	-	56 53 48 83 EC 28 48 89 CB 40 89 D6 40 38 B3 7C 03 00 00
+FLwp_Render	Function	0077adb0	79ad70	-	-	57 56 53 48 83 EC 20 48 89 CB 48 89 D9 E8 ?? ?? ?? ?? 48 8B 0D ?? ?? ?? ?? 48 0F B6 93 C3 05 00 00
+FLui_WP_SetAlign	Function	005ceef0	6087d0	-	-	53 48 83 EC 30 88 54 24 48 48 0F B6 81 B3 00 00 00
+FLwp_SetterA	Function	005d0d90	60a670	-	-	48 83 EC 28 38 91 AC 00 00 00 74 28 88 91 AC 00 00 00
+FLwp_SetterB	Function	005d0c50	60a530	-	-	48 83 EC 28 38 91 AB 00 00 00 74 28 88 91 AB 00 00 00
+FLwp_CreateButtonControl	Function	00f0ddb0	ff11e0	-	-	56 53 48 83 EC 28 48 8B 0D ?? ?? ?? ?? B2 01 4D 33 C0 E8 ?? ?? ?? ?? 48 89 C3 48 89 D9 33 D2 E8 ?? ?? ?? ?? 48 89 D9 48 8B 05 ?? ?? ?? ??
+FLwp_SetButtonCaption	Function	005d0ae0	60a3c0	-	-	55 48 83 EC 40 48 8B EC 48 89 4D 28 48 89 55 30 48 C7 45 38 ?? ?? ?? ?? 90 48 8B 4D 28 48 8D 55 38 E8 ?? ?? ?? ?? 48 8B 4D 38 48 8B 55 30 E8 ?? ?? ?? ?? 85 C0 74 15 48 8B 4D 30
+FLwp_SetControlValue	Function	005d0d10	60a5f0	-	-	56 53 48 83 EC 28 48 89 CB 39 93 C4 00 00 00
+FLbrz_AddTabClone	Function	009ac910	a7cc20	-	-	55 41 55 57 56 53 48 81 EC B0 00 00 00 48 8B EC 48 89 4D 78
+Delphi_UStrAsg	Function	004133f0	4133f0	-	-	41 55 57 56 53 48 83 EC 28 48 89 CB 49 89 D5 4C 89 EE 48 85 F6
+FLmenu_CreateItem	Function	0070e1a0	72d670	-	-	55 57 56 48 83 EC 50 48 8B EC 48 89 4D 28 89 55 34 4C 89 CE
+FL_ChildCount	Function	0081dda0	83fdf0	-	-	48 8B 81 B0 00 00 00 48 85 C0 75 04 33 C0
+FL_ChildAt	Function	0081ddc0	83fe10	-	-	56 53 48 83 EC 28 48 89 CB 89 D6 48 83 BB B0 00 00 00 00
+FL_FreeObj	Function	0040faa0	40faa0	-	-	53 48 83 EC 20 48 85 C9 74 0E 48 89 C8 B2 01
+FL_ListRemoveAt	Function	0064f4d0	663b10	-	-	53 48 83 EC 20 83 69 10 01 8B 41 10 3B D0
+FLui_SetStatusHint	Function	010ec870	11eb580	-	-	53 48 83 EC 20 4D 33 C0 E8 ?? ?? ?? ?? 84 C0
+FormShortCut	Function	0114de10	1248140	-	-	41 55 57 56 53 48 83 EC 28 48 89 CB 48 89 D6 4C 89 C7 80 BB C5 04 00 00 00
+FormKeyDown	Function	010c9920	11c9980	-	-	55 53 48 81 EC B8 00 00 00 48 8B EC 48 89 4D 58 48 89 55 60 4C 89 45 68
+FLgl_GlobalCommandDispatch	Function	00ef7b20	fd8800	-	-	55 57 56 53 48 81 EC 68 01 00 00 48 8B EC 89 4D 40 89 55 44
+FLtr_SeekToSongTick	Function	010e3470	11e1860	-	-	56 53 48 83 EC 48 66 0F ?? ?? ?? ?? 66 0F ?? ?? ?? ?? 66 0F 29 C6
+FL_DispatchCommand	Function	00f53fe0	1041320	-	-	55 56 53 48 81 EC 90 05 00 00 48 8B EC 48 C7 45 50 ?? ?? ?? ??
+FLpat_RebuildPattern	Function	011d4140	12cf620	-	-	55 41 56 41 55 57 56 53 48 83 EC 68 48 8B EC 89 4D 20 88 55 27
+FLpat_NotifyChanged	Function	00f53d30	1041070	-	-	56 53 48 83 EC 28 48 8B 05 ?? ?? ?? ?? 48 83 38 00 74 4C 48 8B 05 ?? ?? ?? ??
+FLui_RefreshEditors	Function	00d421c0	e43d70	-	-	57 56 53 48 83 EC 20 33 C0 48 8B 0D ?? ?? ?? ?? 8B 79 10 83 EF 01 89 C3 3B DF 7F 33
+FLcr_RefreshRack	Function	0107ead0	11804a0	-	-	56 53 48 83 EC 28 48 8B 05 ?? ?? ?? ?? 8B 08
+FLpat_GetNoteRecorder	Function	011d4080	12cf560	-	-	57 56 53 48 83 EC 20 89 CB 40 89 D6 48 8D 05 ?? ?? ?? ?? 48 63 CB 48 C1 E1 03 48 8D 0C 49 48 8D 3C C8 48 ?? ?? ?? ?? 75 3C
+FLpat_GetParamRecorder	Function	011d4000	12cf4e0	-	-	57 56 53 48 83 EC 20 89 CB 40 89 D6 48 8D 05 ?? ?? ?? ?? 48 63 CB 48 C1 E1 03 48 8D 0C 49 48 8D 3C C8 48 ?? ?? ?? ?? 75 3F
+FLpat_RecordNoteOn	Function	00f6d740	105abc0	-	-	55 41 56 41 55 57 56 53 48 83 EC 48 48 8B EC 48 89 CB 89 D6 44 89 C7 45 89 CD 48 89 D9
+FLpat_RecordNoteOff	Function	00f6d880	105ad00	-	-	41 56 41 55 57 56 53 48 83 EC 20 48 89 CB 89 D6 44 89 C7 44 8B 6B 14 41 83 ED 01 45 8B F1
+FLpat_SetCurrentPattern	Function	00cbb300	dce120	-	-	55 53 48 83 EC 68 48 8B EC 48 89 6D 28 89 8D ?? ?? ?? ?? 48 8B 05 ?? ?? ?? ??
+FLpat_IsPatternEmpty	Function	011db510	12d6bf0	-	-	48 8D 05 ?? ?? ?? ?? 48 63 C9 48 C1 E1 03 48 8D 0C 49 48 8D 0C C8
+FLpat_NoteArrayClear	Function	011e0930	12dcc40	-	-	55 53 48 83 EC 38 48 8B EC 48 89 CB C7 43 14 00 00 00 00 48 89 5D 28 48 8B 45 28 48 63 40 14 48 3D 80 00 00 00 7F 05 B8 80 00 00 00
+FLpat_SetPatternName	Function	011d3960	12cee40	-	-	56 53 48 83 EC 28 89 CB 48 8D 05 ?? ?? ?? ??
+FLcr_ChannelListGetItem	Function	00f00f80	fe4090	-	-	8B 41 10 83 E8 01 48 63 C0 4C 63 C2 4D 85 C0
+FLcr_SelectOneChannel	Function	010e3eb0	11e2300	-	-	57 56 53 48 83 EC 20 89 CB 48 8B 05 ?? ?? ?? ?? 48 8B 00 8B 40 10
+FLcr_ApplyChannelSolo	Function	00e012f0	d5a3c0	-	-	55 53 48 83 EC 38 48 8B EC 48 89 CB 48 C7 43 60 FE FF FF FF 48 8B 05 ?? ?? ?? ?? 48 8B 00 48 8B 40 08 48 89 C1 48 8B 00 FF 90 A0 00 00 00 84 C0 74 54 8B 4B 18 48 83 7B 28 00
+FLcr_InsertChannel	Function	00f215e0	fff2f0	-	-	41 55 57 56 53 48 83 EC 28 89 CB 40 89 D6 44 89 C7 48 8B 05 ?? ?? ?? ??
+FLcr_GetEventIDName	Function	00f5ca00	1049e60	-	-	55 56 53 48 81 EC 60 01 00 00 48 8B EC 89 55 34
+Delphi_DynArraySetLength	Function	00417fc0	417fc0	-	-	55 53 48 83 EC 28 48 8B EC 4C 89 4D 58 48 89 4D 40
+FLac_DeletePoint	Function	00b30ad0	b97e30	-	-	41 55 57 56 53 48 83 EC 28 48 89 CB 41 89 D5 48 89 D9 44 89 EA 48 8B 03 FF 50 30 84 C0
+FLmx_RefreshRouting	Function	011a5d20	12a0d50	-	-	53 48 83 EC 20 48 89 CB E8 ?? ?? ?? ?? 48 8B 05 ?? ?? ?? ?? 8B 08 BA 1A 00 00 00 41 B0 01
+FLpl_SetCurrentArrangement	Function	011fc880	12f8bc0	-	-	55 56 53 48 83 EC 60 48 8B EC 89 4D 34 48 C7 45 50 ?? ?? ?? ??
+FLpl_SetTrackNameColor	Function	011e7940	12e3c40	-	-	55 53 48 83 EC 48 48 8B EC 4C 89 45 28 44 89 4D 34
+FLpl_SetTrackSolo	Function	011e9810	12e5b10	-	-	55 41 55 57 56 53 48 83 EC 50 48 8B EC 48 89 4D 30 89 55 3C 44 89 C3 44 89 CE 48 8B 4D 30
+FLpl_SetTrackSelection	Function	011e9c30	12e5f30	-	-	53 48 83 EC 20 4D 0F B6 C0 41 83 F8 05 7F 51
+FLpl_RecountActiveClips	Function	00f6e180	105b600	-	-	57 56 53 48 83 EC 20 48 89 CB C7 43 48 00 00 00 00
+FLpl_SetClipSourceRange	Function	00f71a70	105ef70	-	-	55 56 53 48 83 EC 60 48 8B EC 66 44 ?? ?? ?? ?? 66 ?? ?? ?? ?? 66 ?? ?? ?? ?? 48 89 CB 66 0F 29 CE 66 0F 29 D7 F2 0F 10 05 ?? ?? ?? ??
+FLpr_OpenProject	Function	010d50c0	11d52c0	-	-	55 53 48 83 EC 68 48 8B EC 48 C7 45 20 ?? ?? ?? ?? 48 C7 45 28 ?? ?? ?? ?? 48 C7 45 30 ?? ?? ?? ?? 48 C7 45 58 ?? ?? ?? ??
+FLpr_SetProjectPath	Function	010d2c90	f50ce0	-	-	55 56 53 B8 A0 0B 00 00 48 2D 00 10 00 00
+FLpr_WriteFlpFile	Function	010d5a60	11d5c60	-	-	55 53 48 81 EC 98 00 00 00 48 8B EC 48 89 4D 20 48 C7 45 38 ?? ?? ?? ??
+FL_AutoIncrementFileName	Function	007f7800	819880	-	-	55 56 53 48 83 EC 70 48 8B EC 48 89 4D 30 48 89 55 38 48 C7 45 40 ?? ?? ?? ?? 48 C7 45 48 ?? ?? ?? ?? 48 C7 45 68 ?? ?? ?? ??
+FLpl_SetTimeSelection	Function	00d41e60	e43a10	-	-	55 41 55 57 56 53 48 83 EC 30 48 8B EC 48 89 CB 89 D6 44 89 C7 45 89 CD
+FLtr_AddTimelineMarkerCore	Function	00d523c0	e54090	-	-	55 48 83 EC 40 48 8B EC 48 89 4D 30 89 55 38
+FLar_AddArrangement	Function	011fabc0	12f6f00	-	-	55 41 55 57 56 53 48 83 EC 30 48 8B EC 88 4D 22
+FLar_SetName	Function	011fb0d0	12f7410	-	-	55 48 83 EC 30 48 8B EC 89 4D 2C 48 89 55 48
+FLar_CopyInto	Function	011fb420	12f7760	-	-	55 48 83 EC 30 48 8B EC 48 8B 05 ?? ?? ?? ?? 48 63 C9 48 8B 04 C8
+FLar_GetName	Function	011fb160	12f74a0	-	-	53 48 83 EC 20 48 89 CB 48 89 D9 48 8B 05 ?? ?? ?? ?? 48 63 D2
+FLar_Delete	Function	011fb1c0	12f7500	-	-	55 57 56 53 48 83 EC 38 48 8B EC 89 CB 40 89 D6
+TQuickEdit_ctor	Function	0074c400	76bf30	-	-	55 53 48 83 EC 38 48 8B EC 48 89 6D 28 48 89 4D 50 88 55 58 4C 89 45 60 80 7D 58 00 74 12 48 8B 4D 50 48 ?? ?? ?? ?? E8 ?? ?? ?? ?? 48 89 45 50 90 48 8B 4D 50 33 D2 4C 8B 45 60 E8 ?? ?? ?? ?? 48 8B 4D 50 BA 03 00 00 00
+MainFormPtr	DataRef	014a8750	15d8968	3	7	48 8B 0D ?? ?? ?? ?? 48 8B 09 89 C2 41 B8 00 00 00 40
+ToolbarFormPtr	DataRef	014aa4c8	15da830	3	7	48 8B 05 ?? ?? ?? ?? 48 8B 00 4C 8B A8 58 08 00 00
+MainBrowserPtr	DataRef	0157ffb8	16b2968	3	7	48 8B 0D ?? ?? ?? ?? 48 8B 55 28 E8 ?? ?? ?? ?? 84 C0
+StatusHintStr	DataRef	015817d0	16b41d8	3	7	48 8B 15 ?? ?? ?? ?? E8 ?? ?? ?? ?? 85 C0 75 1E 48 8B 05 ?? ?? ?? ??
+BusyCounter	DataRef	014bdbac	15ee0c4	2	7	83 3D ?? ?? ?? ?? 00 75 78 C7 44 24 28 ?? ?? ?? ??
+PPQ	DataRef	014a79f8	15d7b40	3	7	48 8B 05 ?? ?? ?? ?? 8B 08 B8 AB AA AA 2A F7 E9 C1 FA 02
+CurPatternIdx	DataRef	014ab580	15db998	3	7	48 8B 0D ?? ?? ?? ?? 48 63 09 48 C1 E1 03 48 8D 0C 49 48 ?? ?? ?? ?? 48 8D 55 38 48 8B 05 ?? ?? ?? ??
+PatternArray	DataRef	014aa0c8	15da418	3	7	48 8B 05 ?? ?? ?? ?? 48 8B 0D ?? ?? ?? ?? 48 63 09 48 C1 E1 03 48 8D 0C 49 8B 44 C8 48
+ChannelList	DataRef	014a98d8	15d9b90	3	7	48 8B 05 ?? ?? ?? ?? 48 83 38 00 0F 84 ?? ?? ?? ?? 48 8B 05 ?? ?? ?? ?? 80 38 00 0F 85 ?? ?? ?? ??
+AutoLinkRegistry	DataRef	014a81b8	15d8368	3	7	48 8B 05 ?? ?? ?? ?? 48 8B 08 E8 ?? ?? ?? ?? 90 48 8D 4D 30 E8 ?? ?? ?? ?? 48 8D 4D 70
+CurArrangementIdx	DataRef	0149e8b4	15ce02c	2	6	39 1D ?? ?? ?? ?? 75 18 83 FB 01 7C 0C 8B CB 83 E9 01
+ProjectObject	DataRef	01581200	16b3c08	3	7	48 8B 0D ?? ?? ?? ?? 33 D2 E8 ?? ?? ?? ?? 90 48 8D 4D 50
+ProjectPath	DataRef	01581298	16b3c98	3	7	48 8B 15 ?? ?? ?? ?? E8 ?? ?? ?? ?? 48 8B 8D ?? ?? ?? ?? 48 8B 15 ?? ?? ?? ?? E8 ?? ?? ?? ??
+ProjectTitle	DataRef	015812a0	16b3ca0	3	7	48 8B 15 ?? ?? ?? ?? E8 ?? ?? ?? ?? 48 83 BD 90 ?? ?? ?? ??
+SongPatternMode	DataRef	014a8670	15d8860	3	7	48 8B 05 ?? ?? ?? ?? 83 38 01 75 7D E8 ?? ?? ?? ??
+PatternNameArrayBase	DataRef	01803b68	1936ce8	3	7	48 8D 05 ?? ?? ?? ?? 8B 54 24 28 83 EA 01 48 63 D2
+NoteRecorderArrayBase	DataRef	01803b90	1936d10	3	7	48 8D 0D ?? ?? ?? ?? 48 8B D0 48 C1 E2 03 48 8D 14 52 48 ?? ?? ?? ?? 0F 84 ?? ?? ?? ??
+ReadySongObj	DataRef	014a9f40	15da278	3	7	48 8B 05 ?? ?? ?? ?? 48 8B 00 80 78 3C 00 75 39 48 8B 05 ?? ?? ?? ??

@@ -29,6 +29,10 @@ public sealed class AccountSnapshot
 
     /// <summary>Model id sent to the gateway; "default" lets the gateway pick the plan's model.</summary>
     public string Model { get; set; } = "default";
+
+    /// <summary>Opt-in: upload per-turn debug transcripts to FL Automate for remote review.
+    /// Default false — the toggle in Settings is the only thing that turns it on.</summary>
+    public bool ShareDebugData { get; set; }
 }
 
 /// <summary>
@@ -80,6 +84,11 @@ public interface IAccountGateway
     /// effect without an FL restart. May throw if the re-configure fails (the on-disk save has
     /// already happened by then).</summary>
     Task SaveModelAsync(string model, CancellationToken ct = default);
+
+    /// <summary>Persists the "share debug data" opt-in (upload per-turn debug transcripts to
+    /// FL Automate for remote review; default off). Takes effect on the next turn — the uploader
+    /// re-reads the flag per turn, so no agent re-configure is needed. Throws on a failed save.</summary>
+    Task SaveShareDebugDataAsync(bool enabled, CancellationToken ct = default);
 
     /// <summary>Fetches the models available to the account's plan (<c>GET /v1/models</c> with the
     /// session token; default model first, as served by the gateway). An empty list is valid (plan
@@ -135,6 +144,12 @@ public sealed class InMemoryAccountGateway : IAccountGateway
         return Task.CompletedTask;
     }
 
+    public Task SaveShareDebugDataAsync(bool enabled, CancellationToken ct = default)
+    {
+        _current.ShareDebugData = enabled;
+        return Task.CompletedTask;
+    }
+
     public Task<IReadOnlyList<AccountModel>> ListModelsAsync(CancellationToken ct = default)
         => Task.FromResult<IReadOnlyList<AccountModel>>(FakeModels);
 
@@ -147,5 +162,6 @@ public sealed class InMemoryAccountGateway : IAccountGateway
         Email = s.Email,
         Plan = s.Plan,
         Model = s.Model,
+        ShareDebugData = s.ShareDebugData,
     };
 }

@@ -10,6 +10,14 @@
     <Deterministic>true</Deterministic>
     <Authors>FruityLink</Authors>
     <Product>FruityLink</Product>
+    <!-- The PRODUCT version stamped on every assembly (installer included — its csproj
+         deliberately carries no <Version> of its own), read from the repo-root VERSION file:
+         the SINGLE source of truth shared with installer/package.ps1 (artifact name) and
+         deploy/install-all.sh (which AUTO-INCREMENTS the patch on every publish and advertises
+         the published version through the gateway's GATEWAY_CLIENT_LATEST_VERSION, so older
+         clients detect the update). Never hand-edit a version anywhere else. -->
+    <ProductVersionFile>$(MSBuildThisFileDirectory)VERSION</ProductVersionFile>
+    <Version>$([System.IO.File]::ReadAllText('$(ProductVersionFile)').Trim())</Version>
     <!-- Semantic Kernel vector-data / connectors ship experimental-tagged APIs.
          These are intentionally isolated behind Core interfaces, so suppress the
          experimental diagnostics project-wide rather than per-call. -->

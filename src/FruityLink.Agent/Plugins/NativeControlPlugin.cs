@@ -1,8 +1,8 @@
 using System.ComponentModel;
-using System.Text.Json;
 using FruityLink.Agent.Versioning;
 using FruityLink.Core.Abstractions;
 using Microsoft.SemanticKernel;
+using static FruityLink.Agent.Plugins.BulkArgs;
 using static FruityLink.Agent.Plugins.PluginSupport;
 
 namespace FruityLink.Agent.Plugins;
@@ -26,6 +26,16 @@ public sealed class NativeControlPlugin(INativeFlControl fl, ChangeCapture? capt
     // burned a round-trip. Kept public — the UI/probe check bridge health through it explicitly.
     public Task<string> IsAvailableAsync(CancellationToken ct = default) => Run(async () =>
         await fl.IsAvailableAsync(ct) ? Ok("native bridge available") : Err("native bridge NOT injected"));
+
+    // Multi-version tool gating (infrastructure — NOT a [KernelFunction], never advertised to the model):
+    // exposes the injected bridge's signature-scan status so the kernel builder can hide native tools
+    // whose required FL symbol didn't resolve on the running FL version. Returns null when the wrapped
+    // control can't report it (mocks/tests) or the bridge isn't ready yet → the builder then gates
+    // nothing (fail open). See NativeSymbolGate + AgentKernelBuilder.
+    internal Task<FlSymbolStatus?> GetSymbolStatusAsync(CancellationToken ct = default) =>
+        fl is IFlSymbolResolution resolver
+            ? resolver.GetSymbolStatusAsync(ct)
+            : Task.FromResult<FlSymbolStatus?>(null);
 
     [KernelFunction("native_set_tempo")]
     [Description("Set tempo, BPM 10-522.")]
@@ -158,17 +168,45 @@ public sealed class NativeControlPlugin(INativeFlControl fl, ChangeCapture? capt
         return Ok($"chan {channel} {(muted ? "muted" : "unmuted")}");
     });
 
+    /// <summary>Resolves a channel reference — an integer index OR a channel NAME (exact case-insensitive,
+    /// then a unique case-insensitive substring) — to its index, so write tools accept "Bass" as well as "3"
+    /// and the model can skip the native_list_channels index lookup (a read-before-write round-trip). Returns
+    /// (index, error): a non-null error is a ready-to-return tool ERR.</summary>
+    private async Task<(int index, string? error)> ResolveChannelAsync(string reference, CancellationToken ct)
+    {
+        string r = (reference ?? string.Empty).Trim();
+        if (r.Length == 0) return (-1, Err("no channel given — pass a channel index or name"));
+        if (int.TryParse(r, out int idx))
+            return Guard("channel", idx, 0, int.MaxValue) is { } g ? (-1, g) : (idx, null);
+
+        int count = await fl.GetChannelCountAsync(ct);
+        var exact = new List<int>();
+        var partial = new List<int>();
+        for (int i = 0; i < count; i++)
+        {
+            string name = await fl.GetChannelNameAsync(i, ct);
+            if (string.Equals(name, r, StringComparison.OrdinalIgnoreCase)) exact.Add(i);
+            else if (name.Contains(r, StringComparison.OrdinalIgnoreCase)) partial.Add(i);
+        }
+        if (exact.Count == 1) return (exact[0], null);
+        if (exact.Count > 1) return (-1, Err($"channel name '{r}' is ambiguous ({exact.Count} matches) — use its index from native_list_channels"));
+        if (partial.Count == 1) return (partial[0], null);
+        if (partial.Count > 1) return (-1, Err($"'{r}' matches {partial.Count} channels — be more specific or use its index"));
+        return (-1, Err($"no channel named '{r}' — use native_list_channels to see channel names/indices"));
+    }
+
     [KernelFunction("native_route_channel_to_mixer")]
-    [Description("Route a channel to a mixer track 0-125.")]
+    [Description("Route a channel (index OR name, e.g. 3 or 'Bass') to a mixer track 0-125.")]
     public Task<string> SetChannelFxRouteAsync(
-        [Description("Channel index")] int channel,
+        [Description("Channel index or name")] string channel,
         [Description("Mixer track 0-125")] int mixerTrack, CancellationToken ct = default) => Run(async () =>
     {
-        if (Guard("channel", channel, 0, int.MaxValue) is { } ce) return ce;
+        var (ch, chErr) = await ResolveChannelAsync(channel, ct);
+        if (chErr is not null) return chErr;
         if (Guard("mixer track", mixerTrack, 0, 125) is { } me) return me;
-        await _capture.ScalarAsync(InverseOps.ChannelRoute, JournalDict.Of("channel", channel), JournalDict.Of("value", mixerTrack),
-            c => fl.SetChannelFxRouteAsync(channel, mixerTrack, c), ct);
-        return Ok($"chan {channel} -> mixer {mixerTrack}");
+        await _capture.ScalarAsync(InverseOps.ChannelRoute, JournalDict.Of("channel", ch), JournalDict.Of("value", mixerTrack),
+            c => fl.SetChannelFxRouteAsync(ch, mixerTrack, c), ct);
+        return Ok($"chan {ch} -> mixer {mixerTrack}");
     });
 
     [KernelFunction("native_add_note")]
@@ -191,12 +229,13 @@ public sealed class NativeControlPlugin(INativeFlControl fl, ChangeCapture? capt
     [Description("Add MANY piano-roll notes in ONE call (preferred over native_add_note). notes: entries sep by ';' or newline, each 'key,start,length[,velocity=100[,channel]]' — e.g. '60,0,480; 64,0,480,90'. A note's 5th field overrides the channel arg.")]
     public Task<string> AddNotesAsync(
         [Description("Pattern 1-based; 0 or -1 = current")] int pattern,
-        [Description("Default channel for notes without a 5th field")] int channel,
+        [Description("Default channel (index or name) for notes lacking a 5th field")] string channel,
         [Description("Entries 'key,start,length[,velocity[,channel]]' sep by ';' or newline")] string notes,
         CancellationToken ct = default) => Run(async () =>
     {
-        if (Guard("channel", channel, 0, int.MaxValue) is { } e) return e;
-        var (parsed, skipped) = ParseNotes(notes, channel);
+        var (channelIdx, chErr) = await ResolveChannelAsync(channel, ct);
+        if (chErr is not null) return chErr;
+        var (parsed, skipped) = ParseNotes(notes, channelIdx);
         if (parsed.Count == 0)
             return skipped.Count > 0
                 ? Err($"no valid notes — {skipped.Count} malformed (e.g. '{skipped[0]}'). Use 'key,start,length[,velocity[,channel]]' with numbers")
@@ -208,33 +247,6 @@ public sealed class NativeControlPlugin(INativeFlControl fl, ChangeCapture? capt
             : Ok($"{parsed.Count} note(s) -> pattern {where}; skipped {skipped.Count} malformed (e.g. '{skipped[0]}')");
     });
 
-    /// <summary>Parse the native_add_notes string ('key,start,length[,velocity[,channel]]' per note,
-    /// separated by ';' or newlines) into NoteSpecs. Tolerant by design for weak backends: accepts
-    /// decimals (rounded), treats velocity as optional (defaults to 100), and SKIPS malformed lines
-    /// (returned separately) instead of throwing away the whole batch — one typo shouldn't lose a
-    /// 32-note melody. Notes without a channel field use <paramref name="defaultChannel"/>.</summary>
-    private static (List<NoteSpec> Parsed, List<string> Skipped) ParseNotes(string notes, int defaultChannel)
-    {
-        var list = new List<NoteSpec>();
-        var skipped = new List<string>();
-        if (string.IsNullOrWhiteSpace(notes)) return (list, skipped);
-        foreach (var item in notes.Split(new[] { ';', '\n', '\r' }, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
-        {
-            var f = item.Split(',', StringSplitOptions.TrimEntries);
-            if (f.Length < 3 || !TryNum(f[0], out int key) || !TryNum(f[1], out int start) || !TryNum(f[2], out int len))
-            {
-                skipped.Add(item);
-                continue;
-            }
-            int vel = 100;
-            if (f.Length >= 4 && f[3].Length > 0 && !TryNum(f[3], out vel)) { skipped.Add(item); continue; }
-            int chan = defaultChannel;
-            if (f.Length >= 5 && f[4].Length > 0 && !TryNum(f[4], out chan)) { skipped.Add(item); continue; }
-            list.Add(new NoteSpec(chan, key, start, len, vel));
-        }
-        return (list, skipped);
-    }
-
     [KernelFunction("native_get_ppq")]
     [Description("Get timebase: ticks per quarter note (PPQ).")]
     public Task<string> GetPpqAsync(CancellationToken ct = default) => Run(async () =>
@@ -243,7 +255,7 @@ public sealed class NativeControlPlugin(INativeFlControl fl, ChangeCapture? capt
     // ---------------- Patterns ----------------
 
     [KernelFunction("native_list_patterns")]
-    [Description("List patterns with content as 'index: name', marking current.")]
+    [Description("List patterns with content as 'index: name [length ticks/bars, notes]', marking current.")]
     public Task<string> ListPatternsAsync(CancellationToken ct = default) => Run(async () =>
         Ok(await fl.ListPatternsAsync(ct)));
 
@@ -261,9 +273,18 @@ public sealed class NativeControlPlugin(INativeFlControl fl, ChangeCapture? capt
     });
 
     [KernelFunction("native_create_pattern")]
-    [Description("Create new empty pattern; returns its number.")]
-    public Task<string> CreatePatternAsync(CancellationToken ct = default) => Run(async () =>
-        Ok($"pattern {await fl.CreatePatternAsync(ct)} created + selected"));
+    [Description("Usually unneeded — native_add_notes(pattern=N) realizes pattern N directly. Pass index to SELECT a specific number (e.g. 12); omit/0 = first empty. Targeting a number is collision-safe in parallel tasks, unlike 'next empty'.")]
+    public Task<string> CreatePatternAsync(
+        [Description("Target pattern number 1-based; 0 = next empty")] int index = 0,
+        CancellationToken ct = default) => Run(async () =>
+    {
+        if (index > 0)
+        {
+            await fl.SelectPatternAsync(index, ct);
+            return Ok($"pattern {index} selected — add its notes now");
+        }
+        return Ok($"pattern {await fl.CreatePatternAsync(ct)} selected (empty — add its notes now; calling native_create_pattern again before you do returns this same number)");
+    });
 
     [KernelFunction("native_clear_pattern")]
     [Description("Delete all notes in a pattern (1-based).")]
@@ -273,10 +294,20 @@ public sealed class NativeControlPlugin(INativeFlControl fl, ChangeCapture? capt
         return Ok($"pattern {index} cleared");
     });
 
+    [KernelFunction("native_set_pattern_name")]
+    [Description("Rename a pattern (1-based; persists) — label parts like 'Verse'/'Drop' instead of 'Pattern N'.")]
+    public Task<string> SetPatternNameAsync(
+        [Description("Pattern 1-based")] int index,
+        [Description("New name")] string name, CancellationToken ct = default) => Run(async () =>
+    {
+        await fl.SetPatternNameAsync(index, name ?? string.Empty, ct);
+        return Ok($"pattern {index} = '{name}'");
+    });
+
     // ---------------- Channels ----------------
 
     [KernelFunction("native_list_channels")]
-    [Description("List channels as 'index: name' — map instrument names to the index other tools need.")]
+    [Description("List channels with state (mixer route, mute, non-default vol/pan) as 'index: name …' — map instrument names to the index other tools need.")]
     public Task<string> ListChannelsAsync(CancellationToken ct = default) => Run(async () =>
         Ok(await fl.ListChannelsAsync(ct)));
 
@@ -288,6 +319,26 @@ public sealed class NativeControlPlugin(INativeFlControl fl, ChangeCapture? capt
         return Ok($"channel {index} selected");
     });
 
+    [KernelFunction("native_set_channel_name")]
+    [Description("Rename a channel (persists). Do this after adding a channel so you can find it by name later with native_list_channels.")]
+    public Task<string> SetChannelNameAsync(
+        [Description("Channel 0-based")] int index,
+        [Description("New name")] string name, CancellationToken ct = default) => Run(async () =>
+    {
+        if (Guard("channel", index, 0, int.MaxValue) is { } e) return e;
+        await fl.SetChannelNameAsync(index, name ?? string.Empty, ct);
+        return Ok($"channel {index} = '{name}'");
+    });
+
+    [KernelFunction("native_solo_channel")]
+    [Description("Toggle exclusive SOLO on a channel (call again to un-solo) — hear one part without muting every other channel by hand.")]
+    public Task<string> SoloChannelAsync([Description("Channel 0-based")] int index, CancellationToken ct = default) => Run(async () =>
+    {
+        if (Guard("channel", index, 0, int.MaxValue) is { } e) return e;
+        await fl.SetChannelSoloAsync(index, ct);
+        return Ok($"toggled solo on channel {index}");
+    });
+
     // ---------------- Mixer (sends / EQ) ----------------
 
     [KernelFunction("native_list_mixer_tracks")]
@@ -296,6 +347,29 @@ public sealed class NativeControlPlugin(INativeFlControl fl, ChangeCapture? capt
                  "don't scan channels.")]
     public Task<string> ListMixerTracksAsync(CancellationToken ct = default) => Run(async () =>
         Ok(await fl.ListMixerTracksAsync(ct)));
+
+    [KernelFunction("native_set_mixer_track_name")]
+    [Description("Rename a mixer track/bus (persists) so a bus you create is resolvable by name later with native_list_mixer_tracks. Empty name resets to the default (Insert N / Master).")]
+    public Task<string> SetMixerTrackNameAsync(
+        [Description("Mixer track 0-125")] int track,
+        [Description("New name; empty = default")] string name, CancellationToken ct = default) => Run(async () =>
+    {
+        if (Guard("mixer track", track, 0, 125) is { } e) return e;
+        await fl.SetMixerTrackNameAsync(track, name ?? string.Empty, ct);
+        return Ok($"mixer {track} = '{name}'");
+    });
+
+    [KernelFunction("native_set_mixer_track_muted")]
+    [Description("Mute/unmute a mixer track.")]
+    public Task<string> SetMixerTrackMutedAsync(
+        [Description("Mixer track 0-125")] int track,
+        [Description("true = mute, false = unmute")] bool muted, CancellationToken ct = default) => Run(async () =>
+    {
+        if (Guard("mixer track", track, 0, 125) is { } e) return e;
+        await _capture.ScalarAsync(InverseOps.MixerTrackMuted, JournalDict.Of("track", track), JournalDict.Of("value", muted),
+            c => fl.SetMixerTrackMutedAsync(track, muted, c), ct);
+        return Ok($"mixer {track} {(muted ? "muted" : "unmuted")}");
+    });
 
     [KernelFunction("native_set_mixer_send")]
     [Description("Route + set mixer send srcTrack->dstTrack, level 0.0-1.25 (1.0 = unity).")]
@@ -358,6 +432,17 @@ public sealed class NativeControlPlugin(INativeFlControl fl, ChangeCapture? capt
         return Ok("record toggled");
     });
 
+    [KernelFunction("native_set_loop_region")]
+    [Description("Set the song loop region to [startTick, endTick] (PPQ ticks) so the transport loops just that span — e.g. loop the drop while editing. Pass endTick < 0 (or <= startTick) to CLEAR the loop.")]
+    public Task<string> SetLoopRegionAsync(
+        [Description("Loop start tick")] int startTick,
+        [Description("Loop end tick; < 0 or <= start clears the loop")] int endTick,
+        CancellationToken ct = default) => Run(async () =>
+    {
+        await fl.SetLoopRegionAsync(startTick, endTick, ct);
+        return Ok(endTick < 0 || endTick <= startTick ? "loop cleared" : $"loop [{Math.Max(0, startTick)}..{endTick}]");
+    });
+
     // ---------------- Plugins / inserts ----------------
 
     [KernelFunction("native_list_available_plugins")]
@@ -386,7 +471,7 @@ public sealed class NativeControlPlugin(INativeFlControl fl, ChangeCapture? capt
     });
 
     [KernelFunction("native_get_channel_plugin")]
-    [Description("Report a channel's loaded generator plugin.")]
+    [Description("Report a channel's loaded generator plugin (name + param count).")]
     public Task<string> GetChannelPluginAsync(
         [Description("Channel 0-based")] int channel, CancellationToken ct = default) => Run(async () =>
         Ok(await fl.GetChannelPluginAsync(channel, ct)));
@@ -398,7 +483,7 @@ public sealed class NativeControlPlugin(INativeFlControl fl, ChangeCapture? capt
         Ok($"channel {await fl.AddChannelAsync(plugin, ct)} = '{plugin}'"));
 
     [KernelFunction("native_list_mixer_effects")]
-    [Description("List effects in a mixer track's 10 FX slots.")]
+    [Description("Inspect a mixer track: FX slots, current vol/pan, mute/solo, and sends (destinations + levels).")]
     public Task<string> ListMixerEffectsAsync(
         [Description("Mixer track 0-125")] int track, CancellationToken ct = default) => Run(async () =>
     {
@@ -466,15 +551,8 @@ public sealed class NativeControlPlugin(INativeFlControl fl, ChangeCapture? capt
         CancellationToken ct = default) => Run(async () =>
     {
         if (Guard("channel", channel, 0, int.MaxValue) is { } ce) return ce;
-        var (items, err) = ParseParams(@params);
-        if (err is not null) return Err(err);
-        if (items.Count == 0) return Err("no params parsed — provide '[{\"index\":205,\"value\":0.5}]'");
-        foreach (var (index, value) in items)
-        {
-            if (Guard("param index", index, 0, int.MaxValue) is { } pe) return pe;
-            await fl.SetPluginParamAsync(channel, -1, index, Math.Clamp(value, 0.0, 1.0), ct);
-        }
-        return Ok($"set {items.Count} param(s) on chan {channel}");
+        return await SetPluginParamsCoreAsync(channel, -1, @params,
+            "[{\"index\":205,\"value\":0.5}]", $"chan {channel}", ct);
     });
 
     [KernelFunction("native_list_mixer_plugin_params")]
@@ -500,16 +578,28 @@ public sealed class NativeControlPlugin(INativeFlControl fl, ChangeCapture? capt
     {
         if (Guard("mixer track", track, 0, 125) is { } te) return te;
         if (Guard("FX slot", slot, 0, 9) is { } se) return se;
+        return await SetPluginParamsCoreAsync(track, slot, @params,
+            "[{\"index\":3,\"value\":0.5}]", $"mixer {track} slot {slot}", ct);
+    });
+
+    /// <summary>Shared core of the two Set*PluginParams tools: parse the {index,value} list, guard
+    /// each param index, clamp values to 0.0-1.0, and set them one by one. <paramref name="index"/> +
+    /// <paramref name="slot"/> address the plugin (channel = index with slot -1; mixer = track + FX
+    /// slot); <paramref name="example"/> and <paramref name="okTarget"/> keep each tool's exact
+    /// ERR/OK wording.</summary>
+    private async Task<string> SetPluginParamsCoreAsync(
+        int index, int slot, string @params, string example, string okTarget, CancellationToken ct)
+    {
         var (items, err) = ParseParams(@params);
         if (err is not null) return Err(err);
-        if (items.Count == 0) return Err("no params parsed — provide '[{\"index\":3,\"value\":0.5}]'");
-        foreach (var (index, value) in items)
+        if (items.Count == 0) return Err($"no params parsed — provide '{example}'");
+        foreach (var (paramIndex, value) in items)
         {
-            if (Guard("param index", index, 0, int.MaxValue) is { } pe) return pe;
-            await fl.SetPluginParamAsync(track, slot, index, Math.Clamp(value, 0.0, 1.0), ct);
+            if (Guard("param index", paramIndex, 0, int.MaxValue) is { } pe) return pe;
+            await fl.SetPluginParamAsync(index, slot, paramIndex, Math.Clamp(value, 0.0, 1.0), ct);
         }
-        return Ok($"set {items.Count} param(s) on mixer {track} slot {slot}");
-    });
+        return Ok($"set {items.Count} param(s) on {okTarget}");
+    }
 
     // ---------------- Samples ----------------
 
@@ -537,7 +627,7 @@ public sealed class NativeControlPlugin(INativeFlControl fl, ChangeCapture? capt
         return Ok($"chan {channel} sample = {System.IO.Path.GetFileName(samplePath)}");
     });
 
-    // ---------------- Notes (read) ----------------
+    // ---------------- Notes (read + surgical edit) ----------------
 
     [KernelFunction("native_get_notes")]
     [Description("Read a pattern's piano-roll notes (channel, pitch, position, length, velocity), paged. Call ONLY when you need existing notes — not before adding new ones.")]
@@ -547,6 +637,50 @@ public sealed class NativeControlPlugin(INativeFlControl fl, ChangeCapture? capt
         [Description("Skip first N notes; the result's continuation hint gives the next offset")] int offset = 0,
         CancellationToken ct = default) => Run(async () =>
         Ok(await fl.GetNotesAsync(pattern, channel, offset, ct)));
+
+    [KernelFunction("native_edit_notes")]
+    [Description("Change existing notes in place — never clear+re-add (that wipes the pattern). edits: JSON array; locate each note by its current channel,key,pos from native_get_notes, then set any of newKey, newStart, newLength, newVelocity, muted, e.g. '[{\"channel\":0,\"key\":60,\"pos\":0,\"newKey\":62}]'.")]
+    public Task<string> EditNotesAsync(
+        [Description("Pattern 1-based; 0 or -1 = current")] int pattern,
+        [Description("JSON array; per note channel,key,pos + new field(s)")] string edits,
+        CancellationToken ct = default) => Run(async () =>
+    {
+        var (parsed, err) = ParseNoteEdits(edits);
+        if (err is not null) return Err(err);
+        if (parsed.Count == 0) return Err("no edits parsed — provide '[{\"channel\":0,\"key\":60,\"pos\":0,\"newKey\":62}]'");
+        int changed = await fl.EditNotesAsync(pattern, parsed, ct);
+        return changed == 0
+            ? Err($"no notes matched — check channel/key/pos against native_get_notes (pattern {(pattern <= 0 ? "current" : pattern.ToString())})")
+            : Ok($"edited {changed} note(s) in pattern {(pattern <= 0 ? "current" : pattern.ToString())}");
+    });
+
+    [KernelFunction("native_delete_notes")]
+    [Description("Delete specific notes, keeping the rest of the pattern (surgical; native_clear_pattern wipes ALL). notes: JSON array identifying each note by channel,key,pos from native_get_notes.")]
+    public Task<string> DeleteNotesAsync(
+        [Description("Pattern 1-based; 0 or -1 = current")] int pattern,
+        [Description("JSON array of {channel,key,pos} from native_get_notes")] string notes,
+        CancellationToken ct = default) => Run(async () =>
+    {
+        var (parsed, err) = ParseNoteRefs(notes);
+        if (err is not null) return Err(err);
+        if (parsed.Count == 0) return Err("no notes parsed — provide '[{\"channel\":0,\"key\":60,\"pos\":0}]'");
+        int deleted = await fl.DeleteNotesAsync(pattern, parsed, ct);
+        return deleted == 0
+            ? Err($"no notes matched — check channel/key/pos against native_get_notes (pattern {(pattern <= 0 ? "current" : pattern.ToString())})")
+            : Ok($"deleted {deleted} note(s) from pattern {(pattern <= 0 ? "current" : pattern.ToString())}");
+    });
+
+    [KernelFunction("native_clone_pattern")]
+    [Description("Duplicate a pattern's notes into a NEW empty pattern (for making a variation without recreating notes by hand); returns the new pattern number. All note detail is preserved. Add/rename the new pattern's content after.")]
+    public Task<string> ClonePatternAsync(
+        [Description("Source pattern 1-based; 0 or -1 = current")] int pattern = 0,
+        CancellationToken ct = default) => Run(async () =>
+    {
+        int newIdx = await fl.ClonePatternAsync(pattern, ct);
+        return newIdx == 0
+            ? Err($"nothing to clone — pattern {(pattern <= 0 ? "current" : pattern.ToString())} has no notes")
+            : Ok($"cloned pattern {(pattern <= 0 ? "current" : pattern.ToString())} -> new pattern {newIdx}");
+    });
 
     // ---------------- Playlist tracks ----------------
 
@@ -598,6 +732,15 @@ public sealed class NativeControlPlugin(INativeFlControl fl, ChangeCapture? capt
         return Ok($"track {track} {(muted ? "muted" : "unmuted")}");
     });
 
+    [KernelFunction("native_solo_track")]
+    [Description("Toggle exclusive SOLO on a PLAYLIST track (call again to un-solo).")]
+    public Task<string> SoloTrackAsync([Description("Playlist track 1-500")] int track, CancellationToken ct = default) => Run(async () =>
+    {
+        if (Guard("track", track, 1, 500) is { } e) return e;
+        await fl.SetTrackSoloAsync(track, ct);
+        return Ok($"toggled solo on track {track}");
+    });
+
     [KernelFunction("native_set_track_collapsed")]
     [Description("Collapse/expand a playlist track's height.")]
     public Task<string> SetTrackCollapsedAsync(
@@ -623,7 +766,7 @@ public sealed class NativeControlPlugin(INativeFlControl fl, ChangeCapture? capt
     // ---------------- Playlist clips (arrangement) ----------------
 
     [KernelFunction("native_list_clips")]
-    [Description("List playlist clips (slot index, track, start, length, source pattern/channel), paged.")]
+    [Description("List playlist clips (slot index, track, start, length, source pattern/channel with its name), paged.")]
     public Task<string> ListClipsAsync(
         [Description("Skip first N clips; the result's continuation hint gives the next offset")] int offset = 0,
         [Description("Playlist track filter 1-500; 0 or -1 = all")] int track = -1,
@@ -638,8 +781,18 @@ public sealed class NativeControlPlugin(INativeFlControl fl, ChangeCapture? capt
     // is ~1000 slots; ValidatePattern now caps at 999) plus the pattern's PARAM recorder (+0x20) not being
     // realized. AddPatternClipAsync now caps the index, realizes BOTH recorders, inserts atomically, and
     // refreshes. See re/generated/clipcrash-rootcause.md. (Pending harness cliptest on a CLEAN project.)
+    /// <summary>Wraps a clip-mutation result with the CURRENT clip listing, so after placing/deleting clips
+    /// (which change the slot-index set) the model already has the new indices for follow-up move/resize/delete
+    /// and never needs a separate native_list_clips (the single biggest read-back in the usage logs). Best-effort:
+    /// if the listing fails, the bare result stands.</summary>
+    private async Task<string> OkWithClipsAsync(string message, CancellationToken ct)
+    {
+        try { return Ok($"{message}\nclips now: {await fl.ListClipsAsync(0, -1, ct)}"); }
+        catch { return Ok(message); }
+    }
+
     [KernelFunction("native_add_pattern_clips")]
-    [Description("Place ONE or MANY pattern clips in ONE call. clips = JSON array of {pattern,track,start,length}, e.g. '[{\"pattern\":1,\"track\":1,\"start\":0,\"length\":0}]'. pattern 1-999 (create + add notes first); track = playlist track 1-500 (NOT a channel); ticks PPQ; length 0 = pattern length.")]
+    [Description("Place ONE or MANY pattern clips in ONE call. clips = JSON array of {pattern,track,start,length}, e.g. '[{\"pattern\":1,\"track\":1,\"start\":0,\"length\":0}]'. pattern 1-999 (create + add notes first); track = playlist track 1-500 (NOT a channel); ticks PPQ; length 0 = pattern length. Returns the clip list.")]
     public Task<string> AddPatternClipsAsync(
         [Description("JSON array of {pattern,track,start,length}")] string clips,
         CancellationToken ct = default) => Run(async () =>
@@ -667,210 +820,32 @@ public sealed class NativeControlPlugin(INativeFlControl fl, ChangeCapture? capt
             { skipped++; continue; }
             toPlace.Add(s);
         }
-        if (toPlace.Count == 0) return Ok($"all {specs.Count} clip(s) already placed (skipped {skipped} duplicate(s))");
+        if (toPlace.Count == 0) return await OkWithClipsAsync($"all {specs.Count} clip(s) already placed (skipped {skipped} duplicate(s))", ct);
         // Journal each placed clip as a Create (identity = pattern+track+start) so undo deletes it by identity.
         await _capture.PatternClipsAddedAsync(toPlace, c => fl.AddPatternClipsAsync(toPlace, c), ct);
-        return Ok($"placed {toPlace.Count} clip(s)" + (skipped > 0 ? $"; skipped {skipped} duplicate(s)" : ""));
+        return await OkWithClipsAsync($"placed {toPlace.Count} clip(s)" + (skipped > 0 ? $"; skipped {skipped} duplicate(s)" : ""), ct);
     });
 
     /// <summary>Detects whether a pattern clip identical to (pattern, track, startTick) is already present in
-    /// native_list_clips output. Clip lines look like "[i] track T start=S len=L pattern N" (the source token
-    /// is "pattern N" for pattern clips, "channel N" for audio/automation clips). Only an EXACT
-    /// (pattern, track, start) match counts as a duplicate — a different track or start is a new placement.
-    /// Lenient by design: header/continuation lines and any unparsable line simply don't match, so a format
-    /// hiccup never blocks a legitimate insert.</summary>
-    private static bool ClipAlreadyPlaced(string clipList, int pattern, int track, int startTick)
-    {
-        if (string.IsNullOrWhiteSpace(clipList)) return false;
-        foreach (var line in clipList.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
-        {
-            // A pattern clip line carries all three tokens; channel clips lack "pattern " (p stays null → no match).
-            if (FieldAfter(line, "pattern ") == pattern
-                && FieldAfter(line, "track ") == track
-                && FieldAfter(line, "start=") == startTick)
-                return true;
-        }
-        return false;
-    }
+    /// native_list_clips output ("[i] track T start=S len=L pattern N" — channel/audio clips parse to
+    /// Pattern=-1 and never match). Only an EXACT (pattern, track, start) match counts as a duplicate — a
+    /// different track or start is a new placement. Lenient by design (via <see cref="ClipList.Parse"/>):
+    /// header/continuation lines and any unparsable line simply don't match, so a format hiccup never blocks
+    /// a legitimate insert.</summary>
+    private static bool ClipAlreadyPlaced(string clipList, int pattern, int track, int startTick) =>
+        ClipList.FindSlot(ClipList.Parse(clipList), pattern, startTick, track) >= 0;
 
-    /// <summary>Read the signed integer that immediately follows <paramref name="token"/> in a clip line
-    /// (e.g. "start=" -> 384, "pattern " -> 1), or null when the token is absent or not followed by a number.</summary>
-    private static int? FieldAfter(string line, string token)
-    {
-        int i = line.IndexOf(token, StringComparison.Ordinal);
-        if (i < 0) return null;
-        int j = i + token.Length, k = j;
-        if (k < line.Length && (line[k] == '-' || line[k] == '+')) k++;
-        while (k < line.Length && char.IsDigit(line[k])) k++;
-        return int.TryParse(line.AsSpan(j, k - j), out int v) ? v : null;
-    }
+    // Bulk-argument parsing (single OR multiple items in one string) lives in BulkArgs — see its
+    // class doc for the leniency contract; the `using static` keeps these call sites unchanged.
 
-    // ---------------- Bulk-argument parsing (single OR multiple in one string) ----------------
-    // The batchable clip/param tools take a SINGLE string arg that is parsed leniently, because weak
-    // backends vary wildly in how they emit a list. Index lists accept CSV or a JSON array; object
-    // lists (moves/resizes/adds/params) accept a JSON array, a bare single object, and case-insensitive
-    // field names with a few aliases. On a hard parse failure the tool returns a clear ERR naming the
-    // offending item so the model can self-correct instead of retrying blind.
-
-    private static readonly JsonDocumentOptions LenientJson =
-        new() { AllowTrailingCommas = true, CommentHandling = JsonCommentHandling.Skip };
-
-    /// <summary>Parse an index list: a JSON array ("[0,2,5]"), a bare CSV ("0,2,5"), or a single value
-    /// ("3"). Tolerates surrounding brackets, and comma/space/semicolon separators. Returns false with
-    /// <paramref name="bad"/> = the first non-numeric token (empty when simply nothing was provided).</summary>
-    private static bool TryParseIndexList(string raw, out List<int> result, out string bad)
-    {
-        result = new List<int>();
-        bad = "";
-        if (string.IsNullOrWhiteSpace(raw)) return false;
-        string s = raw.Trim().Trim('[', ']', '(', ')');
-        foreach (var tok in s.Split(new[] { ',', ' ', '\t', '\n', '\r', ';' }, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
-        {
-            if (TryNum(tok, out int v)) result.Add(v);
-            else { bad = tok; result.Clear(); return false; }
-        }
-        return result.Count > 0;
-    }
-
-    /// <summary>Normalize a JSON object-or-array string into a list of object elements. Returns the parse
-    /// error (or null on success). The caller must keep <paramref name="doc"/> alive while reading elements.</summary>
-    private static string? ParseObjectList(string raw, out JsonDocument? doc, out List<JsonElement> objs)
-    {
-        doc = null;
-        objs = new List<JsonElement>();
-        if (string.IsNullOrWhiteSpace(raw)) return "empty input — provide a JSON array of objects";
-        JsonDocument parsed;
-        try { parsed = JsonDocument.Parse(raw, LenientJson); }
-        catch (JsonException ex) { return $"not valid JSON ({ex.Message})"; }
-        var root = parsed.RootElement;
-        if (root.ValueKind == JsonValueKind.Array)
-        {
-            foreach (var e in root.EnumerateArray())
-            {
-                if (e.ValueKind != JsonValueKind.Object) { parsed.Dispose(); return "each list entry must be a JSON object like {\"index\":0,...}"; }
-                objs.Add(e);
-            }
-        }
-        else if (root.ValueKind == JsonValueKind.Object)
-        {
-            objs.Add(root);   // tolerate a single bare object as a 1-element list
-        }
-        else { parsed.Dispose(); return "expected a JSON array of objects (or a single object)"; }
-        doc = parsed;
-        return null;
-    }
-
-    /// <summary>Read a numeric field by any of <paramref name="names"/> (case-insensitive), accepting a JSON
-    /// number or a numeric string. Returns false if absent or non-numeric.</summary>
-    private static bool TryGetNum(JsonElement o, out double value, params string[] names)
-    {
-        value = 0;
-        foreach (var prop in o.EnumerateObject())
-        {
-            if (!names.Any(n => string.Equals(prop.Name, n, StringComparison.OrdinalIgnoreCase))) continue;
-            var v = prop.Value;
-            if (v.ValueKind == JsonValueKind.Number) { value = v.GetDouble(); return true; }
-            if (v.ValueKind == JsonValueKind.String
-                && double.TryParse(v.GetString(), System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out value))
-                return true;
-            return false;   // present but wrong type
-        }
-        return false;
-    }
-
-    private static bool TryGetInt(JsonElement o, out int value, params string[] names)
-    {
-        value = 0;
-        if (!TryGetNum(o, out double d, names)) return false;
-        value = (int)Math.Round(d);
-        return true;
-    }
-
-    /// <summary>Parse the native_move_clips arg into ClipMoves. Requires index + start; track is optional
-    /// (missing or &lt;= 0 = keep current, encoded as -1).</summary>
-    private static (List<ClipMove> Parsed, string? Err) ParseMoves(string raw)
-    {
-        var err = ParseObjectList(raw, out var doc, out var objs);
-        using (doc)
-        {
-            if (err is not null) return (new List<ClipMove>(), $"moves: {err}");
-            var list = new List<ClipMove>();
-            for (int i = 0; i < objs.Count; i++)
-            {
-                if (!TryGetInt(objs[i], out int index, "index", "idx", "clip", "clipIndex", "slot"))
-                    return (list, $"move #{i + 1} is missing a numeric 'index'");
-                if (!TryGetInt(objs[i], out int start, "start", "startTick", "tick", "pos", "position"))
-                    return (list, $"move #{i + 1} is missing a numeric 'start'");
-                int track = TryGetInt(objs[i], out int t, "track", "trk") && t > 0 ? t : -1;
-                list.Add(new ClipMove(index, start, track));
-            }
-            return (list, null);
-        }
-    }
-
-    /// <summary>Parse the native_resize_clips arg into ClipResizes (index + length required).</summary>
-    private static (List<ClipResize> Parsed, string? Err) ParseResizes(string raw)
-    {
-        var err = ParseObjectList(raw, out var doc, out var objs);
-        using (doc)
-        {
-            if (err is not null) return (new List<ClipResize>(), $"resizes: {err}");
-            var list = new List<ClipResize>();
-            for (int i = 0; i < objs.Count; i++)
-            {
-                if (!TryGetInt(objs[i], out int index, "index", "idx", "clip", "clipIndex", "slot"))
-                    return (list, $"resize #{i + 1} is missing a numeric 'index'");
-                if (!TryGetInt(objs[i], out int length, "length", "len", "lengthTick"))
-                    return (list, $"resize #{i + 1} is missing a numeric 'length'");
-                list.Add(new ClipResize(index, length));
-            }
-            return (list, null);
-        }
-    }
-
-    /// <summary>Parse the native_add_pattern_clips arg into PatternClipSpecs (pattern + track + start
-    /// required; length optional, defaults 0 = the pattern's own length).</summary>
-    private static (List<PatternClipSpec> Parsed, string? Err) ParseClipSpecs(string raw)
-    {
-        var err = ParseObjectList(raw, out var doc, out var objs);
-        using (doc)
-        {
-            if (err is not null) return (new List<PatternClipSpec>(), $"clips: {err}");
-            var list = new List<PatternClipSpec>();
-            for (int i = 0; i < objs.Count; i++)
-            {
-                if (!TryGetInt(objs[i], out int pattern, "pattern", "pat", "patternIndex"))
-                    return (list, $"clip #{i + 1} is missing a numeric 'pattern'");
-                if (!TryGetInt(objs[i], out int track, "track", "trk"))
-                    return (list, $"clip #{i + 1} is missing a numeric 'track'");
-                if (!TryGetInt(objs[i], out int start, "start", "startTick", "tick", "pos", "position"))
-                    return (list, $"clip #{i + 1} is missing a numeric 'start'");
-                int length = TryGetInt(objs[i], out int len, "length", "len", "lengthTick") ? len : 0;
-                list.Add(new PatternClipSpec(pattern, track, start, length));
-            }
-            return (list, null);
-        }
-    }
-
-    /// <summary>Parse the plugin-param arg into (index, value) pairs (both required per entry).</summary>
-    private static (List<(int Index, double Value)> Parsed, string? Err) ParseParams(string raw)
-    {
-        var err = ParseObjectList(raw, out var doc, out var objs);
-        using (doc)
-        {
-            if (err is not null) return (new List<(int, double)>(), $"params: {err}");
-            var list = new List<(int, double)>();
-            for (int i = 0; i < objs.Count; i++)
-            {
-                if (!TryGetInt(objs[i], out int index, "index", "idx", "param", "paramIndex", "i"))
-                    return (list, $"param #{i + 1} is missing a numeric 'index'");
-                if (!TryGetNum(objs[i], out double value, "value", "val", "v"))
-                    return (list, $"param #{i + 1} is missing a numeric 'value'");
-                list.Add((index, value));
-            }
-            return (list, null);
-        }
-    }
+    /// <summary>Guard-style clip-index-list parse (null = ok): the shared ERR wording for a bad or
+    /// empty indices arg, used by the tools that take clip slots as CSV or a JSON array.</summary>
+    private static string? IndexListError(string indices, out List<int> list) =>
+        TryParseIndexList(indices, out list, out var bad)
+            ? null
+            : Err(bad.Length > 0
+                ? $"bad index '{bad}' in indices — use integers as CSV or a JSON array, e.g. '0,2,5'"
+                : "no indices — provide clip slots like '0,2,5' or '[0,2,5]'");
 
     [KernelFunction("native_move_clips")]
     [Description("Move ONE or MANY playlist clips in ONE call. moves = JSON array of {index,start,track}, e.g. '[{\"index\":0,\"start\":0,\"track\":3}]'. index = clip slot from native_list_clips; start PPQ ticks; track = playlist 1-500, omit/0/-1 keeps current track.")]
@@ -906,15 +881,14 @@ public sealed class NativeControlPlugin(INativeFlControl fl, ChangeCapture? capt
         [Description("Clip slots: CSV or JSON array, e.g. '0,2,5'; single '3'")] string indices,
         CancellationToken ct = default) => Run(async () =>
     {
-        if (!TryParseIndexList(indices, out var list, out var bad))
-            return Err(bad.Length > 0
-                ? $"bad index '{bad}' in indices — use integers as CSV or a JSON array, e.g. '0,2,5'"
-                : "no indices — provide clip slots like '0,2,5' or '[0,2,5]'");
+        if (IndexListError(indices, out var list) is { } e) return e;
         int n = list.Distinct().Count();
         // Snapshot each clip's full spec BEFORE deleting so undo can re-add it (pattern clips only; an
         // audio/automation clip in the batch taints the turn → whole-commit .flp fallback).
         await _capture.ClipsDeletedAsync(list, c => fl.DeleteClipsAsync(list, c), ct);
-        return Ok($"deleted {n} clip(s)");
+        // Deleting renumbers the remaining slots — return the updated listing so the model has the new
+        // indices instead of re-reading with native_list_clips.
+        return await OkWithClipsAsync($"deleted {n} clip(s)", ct);
     });
 
     [KernelFunction("native_mute_clips")]
@@ -923,10 +897,7 @@ public sealed class NativeControlPlugin(INativeFlControl fl, ChangeCapture? capt
         [Description("Clip slots: CSV or JSON array, e.g. '0,2,5'; single '3'")] string indices,
         [Description("true = mute, false = unmute")] bool muted, CancellationToken ct = default) => Run(async () =>
     {
-        if (!TryParseIndexList(indices, out var list, out var bad))
-            return Err(bad.Length > 0
-                ? $"bad index '{bad}' in indices — use integers as CSV or a JSON array, e.g. '0,2,5'"
-                : "no indices — provide clip slots like '0,2,5' or '[0,2,5]'");
+        if (IndexListError(indices, out var list) is { } e) return e;
         // Journal each clip's prior mute state (identity-addressed) so undo restores it exactly.
         await _capture.ClipMutesAsync(list, muted, c => fl.SetClipsMutedAsync(list, muted, c), ct);
         return Ok($"{(muted ? "muted" : "unmuted")} {list.Distinct().Count()} clip(s)");
@@ -956,7 +927,7 @@ public sealed class NativeControlPlugin(INativeFlControl fl, ChangeCapture? capt
     // ---------------- Song / transport state ----------------
 
     [KernelFunction("native_get_song_state")]
-    [Description("Read playhead position, song/pattern mode, play state, loop region, song length.")]
+    [Description("Read playhead position, song/pattern mode, play state, loop region, song length, tempo, master volume/shuffle/pitch.")]
     public Task<string> GetSongStateAsync(CancellationToken ct = default) => Run(async () =>
         Ok(await fl.GetSongStateAsync(ct)));
 
@@ -980,11 +951,19 @@ public sealed class NativeControlPlugin(INativeFlControl fl, ChangeCapture? capt
     });
 
     [KernelFunction("native_list_markers")]
-    [Description("List timeline markers (name + tick).")]
+    [Description("List timeline markers (name, tick, bar).")]
     public Task<string> ListMarkersAsync(CancellationToken ct = default) => Run(async () =>
         Ok(await fl.ListMarkersAsync(ct)));
 
-    [KernelFunction("native_add_marker")]
+    // DISABLED (not a [KernelFunction]) 2026-07-08 — this tool FREEZES THE DAW. FLtr_AddTimelineMarkerCore
+    // (0xd523c0) enters a critical section, and its dynarray insert FAULTS on the main thread (confirmed:
+    // "call d523c0 … faulted (ok:0)" precedes every "DAW suspended processing" freeze). The bridge's SEH
+    // guard catches the AV so FL doesn't crash, but LeaveCriticalSection is skipped → the main thread leaks
+    // the lock the AUDIO thread needs → playback suspended, playhead frozen. FL's own EEMarkerAddMenuClick
+    // uses the SAME args but wraps the core in an undo/edit transaction (FUN_00f37ec0) first; calling the
+    // core raw is the suspected fault. Re-enable only after (a) the root fault is pinned + fixed AND (b) the
+    // bridge gains a critical-section-safe call path that releases the lock on fault. See [[fl-control-catalog]].
+    // [KernelFunction("native_add_marker")]
     [Description("Add a timeline marker at a tick (e.g. 'Verse', 'Drop').")]
     public Task<string> AddMarkerAsync(
         [Description("Tick")] int tick,

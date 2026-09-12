@@ -72,6 +72,7 @@ public sealed class AccountSettingsViewModel : ViewModelBase
     private string _password = string.Empty;
     private bool _isBusy;
     private string? _status;
+    private bool _shareDebugData;
 
     /// <summary>The persisted model id (what settings.json currently holds, or what the user last
     /// saved). The picker's selection is derived from it; unknown ids stay visible as raw entries.</summary>
@@ -134,6 +135,39 @@ public sealed class AccountSettingsViewModel : ViewModelBase
                 ? string.Empty
                 : $" — {char.ToUpperInvariant(_plan[0])}{_plan[1..]} plan";
             return $"Signed in as {_signedInEmail}{plan}";
+        }
+    }
+
+    /// <summary>
+    /// The "Share debug data" opt-in (upload per-turn debug transcripts — tool calls + LLM
+    /// responses — to FL Automate for remote review). Default off. Persists immediately on toggle
+    /// (no Save button round-trip: a privacy switch must never sit unsaved), reverting the checkbox
+    /// if the save fails so the UI never claims an opt-in state that didn't land on disk.
+    /// </summary>
+    public bool ShareDebugData
+    {
+        get => _shareDebugData;
+        set
+        {
+            if (!SetProperty(ref _shareDebugData, value)) return;
+            _ = PersistShareDebugDataAsync(value);
+        }
+    }
+
+    private async Task PersistShareDebugDataAsync(bool enabled)
+    {
+        try
+        {
+            await _gateway.SaveShareDebugDataAsync(enabled, CancellationToken.None).ConfigureAwait(true);
+            Status = enabled
+                ? "Debug data sharing is ON — each AI turn's debug log uploads to FL Automate."
+                : "Debug data sharing is off.";
+        }
+        catch (Exception ex)
+        {
+            _shareDebugData = !enabled;   // the save didn't land — the checkbox must not lie
+            OnPropertyChanged(nameof(ShareDebugData));
+            Status = "Couldn't save the debug-data preference: " + ex.Message;
         }
     }
 
@@ -252,6 +286,10 @@ public sealed class AccountSettingsViewModel : ViewModelBase
         _plan = s.Plan;
         IsLoggedIn = s.IsLoggedIn;
         OnPropertyChanged(nameof(SignedInText));
+        // Seed the persisted value through the FIELD (not the property) — the property setter
+        // persists on change, and applying a loaded snapshot must never trigger a redundant save.
+        _shareDebugData = s.ShareDebugData;
+        OnPropertyChanged(nameof(ShareDebugData));
         _savedModelId = string.IsNullOrWhiteSpace(s.Model) ? DefaultModelId : s.Model.Trim();
         RebuildModelOptions();
         if (s.IsLoggedIn) { Email = string.Empty; Password = string.Empty; }
@@ -318,6 +356,34 @@ public sealed class AccountSettingsViewModel : ViewModelBase
         }
     }
 
+    /// <summary>
+    /// Shared scaffold for the card's async operations: busy-gate (a re-entrant call is a no-op),
+    /// busy flag + "…ing" status line, error mapping into <see cref="Status"/> (defaults to the raw
+    /// <see cref="Exception.Message"/>), and an always-run <paramref name="beforeUnbusy"/> hook that
+    /// fires in the finally BEFORE the busy flag drops (e.g. clearing the password).
+    /// </summary>
+    private async Task RunGuardedAsync(string busyStatus, Func<Task> body,
+        Func<Exception, string>? mapError = null, Action? beforeUnbusy = null)
+    {
+        if (_isBusy) return;
+
+        IsBusy = true;
+        Status = busyStatus;
+        try
+        {
+            await body().ConfigureAwait(true);
+        }
+        catch (Exception ex)
+        {
+            Status = mapError is null ? ex.Message : mapError(ex);
+        }
+        finally
+        {
+            beforeUnbusy?.Invoke();
+            IsBusy = false;
+        }
+    }
+
     private async Task SignInAsync()
     {
         if (_isBusy) return;
@@ -327,95 +393,42 @@ public sealed class AccountSettingsViewModel : ViewModelBase
         if (email.Length == 0) { Status = "Enter your account email."; return; }
         if (password.Length == 0) { Status = "Enter your password."; return; }
 
-        IsBusy = true;
-        Status = "Signing in…";
-        try
+        await RunGuardedAsync("Signing in…", async () =>
         {
             AccountSnapshot s = await _gateway.LoginAsync(email, password, CancellationToken.None).ConfigureAwait(true);
             Apply(s);
             Status = "Signed in.";
             await RefreshModelsAsync(force: true).ConfigureAwait(true);   // fresh account ⇒ fresh list
-        }
-        catch (Exception ex)
-        {
-            Status = ex.Message;
-        }
-        finally
-        {
-            Password = string.Empty;   // never keep the password around past the attempt
-            IsBusy = false;
-        }
+        },
+        beforeUnbusy: () => Password = string.Empty);   // never keep the password around past the attempt
     }
 
-    private async Task SignOutAsync()
+    private Task SignOutAsync() => RunGuardedAsync("Signing out…", async () =>
     {
-        if (_isBusy) return;
+        AccountSnapshot s = await _gateway.LogoutAsync(CancellationToken.None).ConfigureAwait(true);
+        _fetchedModels = null;                            // the list belongs to the old session
+        _lastModelsFetchUtc = DateTimeOffset.MinValue;
+        Apply(s);
+        Status = "Signed out.";
+    },
+    mapError: ex => "Sign-out hit a snag (session cleared locally): " + ex.Message);
 
-        IsBusy = true;
-        Status = "Signing out…";
-        try
-        {
-            AccountSnapshot s = await _gateway.LogoutAsync(CancellationToken.None).ConfigureAwait(true);
-            _fetchedModels = null;                            // the list belongs to the old session
-            _lastModelsFetchUtc = DateTimeOffset.MinValue;
-            Apply(s);
-            Status = "Signed out.";
-        }
-        catch (Exception ex)
-        {
-            Status = "Sign-out hit a snag (session cleared locally): " + ex.Message;
-        }
-        finally
-        {
-            IsBusy = false;
-        }
-    }
-
-    private async Task SaveAsync()
+    private Task SaveAsync() => RunGuardedAsync("Saving…", async () =>
     {
-        if (_isBusy) return;
+        string model = _selectedModelOption?.Id ?? DefaultModelId;
+        await _gateway.SaveModelAsync(model, CancellationToken.None).ConfigureAwait(true);
+        _savedModelId = model;
+        Status = "Saved and applied.";
+    },
+    // The on-disk save happens before the live re-configure inside the gateway, so a failure
+    // here means "persisted, but the agent couldn't be brought up on the new settings".
+    mapError: ex => "Saved, but the agent couldn't be reconfigured: " + ex.Message);
 
-        IsBusy = true;
-        Status = "Saving…";
-        try
-        {
-            string model = _selectedModelOption?.Id ?? DefaultModelId;
-            await _gateway.SaveModelAsync(model, CancellationToken.None).ConfigureAwait(true);
-            _savedModelId = model;
-            Status = "Saved and applied.";
-        }
-        catch (Exception ex)
-        {
-            // The on-disk save happens before the live re-configure inside the gateway, so a failure
-            // here means "persisted, but the agent couldn't be brought up on the new settings".
-            Status = "Saved, but the agent couldn't be reconfigured: " + ex.Message;
-        }
-        finally
-        {
-            IsBusy = false;
-        }
-    }
-
-    private async Task TestAsync()
+    private Task TestAsync() => RunGuardedAsync("Testing connection…", async () =>
     {
-        if (_isBusy) return;
-
-        IsBusy = true;
-        Status = "Testing connection…";
-        try
-        {
-            var models = await _gateway.TestConnectionAsync(CancellationToken.None).ConfigureAwait(true);
-            Status = models.Count == 0
-                ? "Gateway reachable — no models listed for your plan."
-                : $"Gateway reachable — models: {string.Join(", ", models)}";
-        }
-        catch (Exception ex)
-        {
-            Status = ex.Message;
-        }
-        finally
-        {
-            IsBusy = false;
-        }
-    }
+        var models = await _gateway.TestConnectionAsync(CancellationToken.None).ConfigureAwait(true);
+        Status = models.Count == 0
+            ? "Gateway reachable — no models listed for your plan."
+            : $"Gateway reachable — models: {string.Join(", ", models)}";
+    });
 }

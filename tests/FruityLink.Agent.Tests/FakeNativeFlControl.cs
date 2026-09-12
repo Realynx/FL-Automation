@@ -46,6 +46,7 @@ internal sealed class FakeNativeFlControl : INativeFlControl
     public Task<string> ListMixerTracksAsync(CancellationToken ct = default) => Record($"ListMixerTracksAsync()", "0: Master");
     public Task SetMixerVolumeAsync(int track, int value, CancellationToken ct = default) => Record($"SetMixerVolumeAsync({track},{value})");
     public Task SetMixerPanAsync(int track, int value, CancellationToken ct = default) => Record($"SetMixerPanAsync({track},{value})");
+    public Task SetMixerTrackMutedAsync(int track, bool muted, CancellationToken ct = default) => Record($"SetMixerTrackMutedAsync({track},{muted})");
     public Task SetMixerFxParamAsync(int track, int slot, int paramIndex, long value, CancellationToken ct = default) =>
         Record($"SetMixerFxParamAsync({track},{slot},{paramIndex},{value})");
 
@@ -61,6 +62,24 @@ internal sealed class FakeNativeFlControl : INativeFlControl
         Record($"AddNoteAsync({pattern},{channel},{key},{startTick},{lengthTick},{velocity})");
     public Task AddNotesAsync(int pattern, IReadOnlyList<NoteSpec> notes, CancellationToken ct = default) =>
         Record($"AddNotesAsync({pattern},[{notes.Count} notes])");
+    public Task<int> EditNotesAsync(int pattern, IReadOnlyList<NoteEdit> edits, CancellationToken ct = default) =>
+        Record($"EditNotesAsync({pattern},[{edits.Count} edits])", edits.Count);
+    public Task<int> DeleteNotesAsync(int pattern, IReadOnlyList<NoteRef> targets, CancellationToken ct = default) =>
+        Record($"DeleteNotesAsync({pattern},[{targets.Count} targets])", targets.Count);
+    public Task<int> ClonePatternAsync(int sourcePattern, CancellationToken ct = default) =>
+        Record($"ClonePatternAsync({sourcePattern})", 6);
+    public Task SetPatternNameAsync(int index, string name, CancellationToken ct = default) =>
+        Record($"SetPatternNameAsync({index},{name})");
+    public Task SetChannelNameAsync(int index, string name, CancellationToken ct = default) =>
+        Record($"SetChannelNameAsync({index},{name})");
+    public Task SetChannelSoloAsync(int index, CancellationToken ct = default) =>
+        Record($"SetChannelSoloAsync({index})");
+    public Task SetMixerTrackNameAsync(int track, string name, CancellationToken ct = default) =>
+        Record($"SetMixerTrackNameAsync({track},{name})");
+    public Task SetTrackSoloAsync(int track, CancellationToken ct = default) =>
+        Record($"SetTrackSoloAsync({track})");
+    public Task SetLoopRegionAsync(int startTick, int endTick, CancellationToken ct = default) =>
+        Record($"SetLoopRegionAsync({startTick},{endTick})");
     public Task<int> GetPpqAsync(CancellationToken ct = default) => Record($"GetPpqAsync()", 96);
 
     // --- patterns ---
@@ -287,6 +306,7 @@ internal sealed class FakeNativeFlControl : INativeFlControl
     public Task<int> GetShuffleAsync(CancellationToken ct = default) => Record($"GetShuffleAsync()", 64);
     public Task<long> GetMixerVolumeAsync(int track, CancellationToken ct = default) => Record($"GetMixerVolumeAsync({track})", 10000L);
     public Task<int> GetMixerPanAsync(int track, CancellationToken ct = default) => Record($"GetMixerPanAsync({track})", 6400);
+    public Task<bool> GetMixerTrackMutedAsync(int track, CancellationToken ct = default) => Record($"GetMixerTrackMutedAsync({track})", false);
     public Task<long> GetChannelVolumeAsync(int channel, CancellationToken ct = default) => Record($"GetChannelVolumeAsync({channel})", 10000L);
     public Task<int> GetChannelPanAsync(int channel, CancellationToken ct = default) => Record($"GetChannelPanAsync({channel})", 6400);
     public Task<int> GetChannelPitchAsync(int channel, CancellationToken ct = default) => Record($"GetChannelPitchAsync({channel})", -1200);

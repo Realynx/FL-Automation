@@ -17,10 +17,17 @@ public sealed class CliOptions
     public bool PrintFlHashes { get; private set; }
     public bool ForceGui { get; private set; }
     public bool Force { get; private set; }
+    public bool WithoutMcp { get; private set; }
 
     public string? FlPath { get; private set; }
     public string? ManifestPath { get; private set; }
     public string? PayloadRoot { get; private set; }
+
+    /// <summary>
+    /// Community plugin ids to pre-select in the GUI (internal: preserves the user's checkbox
+    /// selection across the elevation relaunch).
+    /// </summary>
+    public List<string> CommunityPluginIds { get; } = new();
 
     public List<string> Unknown { get; } = new();
 
@@ -93,9 +100,18 @@ public sealed class CliOptions
                 case "--payload":
                     o.PayloadRoot = Value();
                     break;
+                case "--community-plugins":
+                    var ids = Value();
+                    if (!string.IsNullOrWhiteSpace(ids))
+                        o.CommunityPluginIds.AddRange(
+                            ids.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries));
+                    break;
                 case "--force":
                 case "-f":
                     o.Force = true;
+                    break;
+                case "--without-mcp":
+                    o.WithoutMcp = true;
                     break;
                 case "--gui":
                 case "-g":
@@ -156,6 +172,7 @@ OPTIONS
   --silent, --headless, -s No prompts; for unattended / GitHub one-line installs.
   --manifest <file>, -m    Use an external manifest.json instead of the built-in default.
   --payload-root <dir>     Where the payload files live. Default: <exe dir>\payload.
+  --without-mcp           Exclude the bundled FLMCP plugin, server, and Python wheel (selected by default).
   --force, -f              Proceed past non-fatal validation warnings, INCLUDING the verified-build
                            and file-integrity gates (unsupported; for development only).
   --help, -h               Show this help.

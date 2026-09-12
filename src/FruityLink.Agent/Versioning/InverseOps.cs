@@ -24,6 +24,7 @@ public static class InverseOps
     public const string Shuffle = "shuffle";
     public const string MixerVolume = "mixer_volume";
     public const string MixerPan = "mixer_pan";
+    public const string MixerTrackMuted = "mixer_track_muted";
     public const string ChannelVolume = "channel_volume";
     public const string ChannelPan = "channel_pan";
     public const string ChannelPitch = "channel_pitch";
@@ -65,6 +66,7 @@ public static class InverseOps
         "native_set_shuffle",
         "native_set_mixer_volume",
         "native_set_mixer_pan",
+        "native_set_mixer_track_muted",
         "native_set_channel_volume",
         "native_set_channel_pan",
         "native_set_channel_pitch",
@@ -119,6 +121,10 @@ public static class InverseOps
         r.Register(MixerPan, Scalar(
             async (fl, t, ct) => Value(await fl.GetMixerPanAsync(Track(t), ct)),
             (fl, t, v, ct) => fl.SetMixerPanAsync(Track(t), AsInt(v), ct)));
+
+        r.Register(MixerTrackMuted, Scalar(
+            async (fl, t, ct) => Value(await fl.GetMixerTrackMutedAsync(Track(t), ct)),
+            (fl, t, v, ct) => fl.SetMixerTrackMutedAsync(Track(t), AsBool(v), ct)));
 
         // ── channel rack (target = { channel }) ──────────────────────────────────────────────────
         r.Register(ChannelVolume, Scalar(

@@ -44,7 +44,7 @@ internal sealed class TextChunker
             return Array.Empty<string>();
 
         // Normalise so boundary detection is predictable; embedding does not need raw layout.
-        string normalized = NormalizeWhitespace(text);
+        string normalized = TextNormalization.CollapseWhitespace(text);
         if (normalized.Length == 0)
             return Array.Empty<string>();
 
@@ -147,26 +147,4 @@ internal sealed class TextChunker
     }
 
     private static bool IsSentenceEnd(char c) => c is '.' or '!' or '?';
-
-    /// <summary>Collapses runs of whitespace to single spaces, preserving paragraph intent loosely.</summary>
-    private static string NormalizeWhitespace(string text)
-    {
-        var sb = new System.Text.StringBuilder(text.Length);
-        bool inWhitespace = false;
-        foreach (char c in text)
-        {
-            if (char.IsWhiteSpace(c))
-            {
-                inWhitespace = true;
-                continue;
-            }
-
-            if (inWhitespace && sb.Length > 0)
-                sb.Append(' ');
-            inWhitespace = false;
-            sb.Append(c);
-        }
-
-        return sb.ToString();
-    }
 }

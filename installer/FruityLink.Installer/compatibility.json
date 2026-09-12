@@ -293,6 +293,11 @@
         "uninstall.exe": "adcf929d2fba9941a390e81022a4697b33c7fb5331390d5b040a247858d2c99b",
         "WebView2Loader.dll": "f4839ab5bd42f5d72aceb1399550ce5e8f2be2c721dffdd366c648232eb15bb2"
       }
+    },
+    {
+      "Version": "26.1.0.5530",
+      "Note": "version-only entry (2026 launch) — INTEGRITY HASHES PENDING: run --print-fl-hashes on a verified 26.1.0.5530 install and paste its Files here before re-arming FlIntegrity.GateEnforced. Until then this build is version-accepted but NOT hash-verified.",
+      "Files": {}
     }
   ]
 }

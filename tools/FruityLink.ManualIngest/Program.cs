@@ -38,53 +38,35 @@ try
     switch (command)
     {
         case "crawl":
-            await new Crawler(paths, Int(opts, "delay-ms", 1000), Int(opts, "max", 0)).RunAsync(cts.Token);
+            await CrawlAsync();
             break;
 
         case "convert":
-            await new HtmlToMarkdown(paths).RunAsync(cts.Token);
+            await ConvertAsync();
             break;
 
         case "build":
-        {
-            string key = ResolveKey(opts);
-            var builder = new CorpusBuilder(
-                paths,
-                opts.GetValueOrDefault("endpoint", DefaultEndpoint),
-                opts.GetValueOrDefault("model", DefaultModel),
-                Int(opts, "dimensions", DefaultDimensions),
-                key,
-                fresh: opts.ContainsKey("fresh"));
-            await builder.RunAsync(cts.Token);
+            await BuildAsync(ResolveKey(opts));
             break;
-        }
 
         case "search":
         {
             string key = ResolveKey(opts);
             string query = opts.GetValueOrDefault("query", "").Trim();
             if (query.Length == 0) { Console.Error.WriteLine("Provide --query \"...\"."); return 2; }
-            await new SearchRunner(
-                paths,
-                opts.GetValueOrDefault("endpoint", DefaultEndpoint),
-                opts.GetValueOrDefault("model", DefaultModel),
-                Int(opts, "dimensions", DefaultDimensions),
-                key).RunAsync(query, Int(opts, "topk", 5), cts.Token);
+            (string endpoint, string model, int dimensions) = EmbeddingOptions();
+            await new SearchRunner(paths, endpoint, model, dimensions, key)
+                .RunAsync(query, Int(opts, "topk", 5), cts.Token);
             break;
         }
 
         case "all":
         {
+            // Resolve the key up front so a missing key fails fast instead of after a long crawl.
             string key = ResolveKey(opts);
-            await new Crawler(paths, Int(opts, "delay-ms", 1000), Int(opts, "max", 0)).RunAsync(cts.Token);
-            await new HtmlToMarkdown(paths).RunAsync(cts.Token);
-            await new CorpusBuilder(
-                paths,
-                opts.GetValueOrDefault("endpoint", DefaultEndpoint),
-                opts.GetValueOrDefault("model", DefaultModel),
-                Int(opts, "dimensions", DefaultDimensions),
-                key,
-                fresh: opts.ContainsKey("fresh")).RunAsync(cts.Token);
+            await CrawlAsync();
+            await ConvertAsync();
+            await BuildAsync(key);
             break;
         }
 
@@ -103,6 +85,24 @@ catch (OperationCanceledException)
 return 0;
 
 // --- helpers ---------------------------------------------------------------
+
+Task CrawlAsync()
+    => new Crawler(paths, Int(opts, "delay-ms", 1000), Int(opts, "max", 0)).RunAsync(cts.Token);
+
+Task ConvertAsync()
+    => new HtmlToMarkdown(paths).RunAsync(cts.Token);
+
+Task BuildAsync(string key)
+{
+    (string endpoint, string model, int dimensions) = EmbeddingOptions();
+    return new CorpusBuilder(paths, endpoint, model, dimensions, key, fresh: opts.ContainsKey("fresh"))
+        .RunAsync(cts.Token);
+}
+
+(string Endpoint, string Model, int Dimensions) EmbeddingOptions() => (
+    opts.GetValueOrDefault("endpoint", DefaultEndpoint),
+    opts.GetValueOrDefault("model", DefaultModel),
+    Int(opts, "dimensions", DefaultDimensions));
 
 static Dictionary<string, string> ParseFlags(IEnumerable<string> args)
 {

@@ -101,7 +101,7 @@ public sealed class LlmLoggingHandler : DelegatingHandler
     private async Task TryRecordUsageAsync(HttpRequestMessage request, HttpResponseMessage response)
     {
         if (_usage is null) return;
-        if (request.RequestUri?.AbsolutePath.EndsWith("chat/completions", StringComparison.OrdinalIgnoreCase) != true)
+        if (!LlmHttp.IsChatCompletions(request))
             return;
 
         try
@@ -109,8 +109,7 @@ public sealed class LlmLoggingHandler : DelegatingHandler
             // Never drain a real SSE stream. Everything else is safe to buffer: the agent runs
             // non-streaming, and the repair handler beneath us has already re-buffered the body
             // into a repeatable StringContent; LoadIntoBufferAsync covers any wiring without it.
-            string? mediaType = response.Content.Headers.ContentType?.MediaType;
-            if (string.Equals(mediaType, "text/event-stream", StringComparison.OrdinalIgnoreCase))
+            if (LlmHttp.IsEventStream(response))
                 return;
 
             await response.Content.LoadIntoBufferAsync().ConfigureAwait(false);
@@ -134,6 +133,15 @@ public sealed class LlmLoggingHandler : DelegatingHandler
             long toolsBytes = requestBody is null ? 0 : MeasureToolsPropertyBytes(requestBody);
 
             _usage.RecordUsage(new LlmUsageSample(promptTokens, completionTokens, requestBytes, toolsBytes));
+
+            // Feed the per-turn transcript too (best-effort): the model the backend ACTUALLY used
+            // (differs from requested under "default"/plan-routing or a stale-model fallback) plus this
+            // request's token/byte cost, correlated to the active turn via the ambient scope.
+            string? modelUsed = doc.RootElement.TryGetProperty("model", out JsonElement modelEl)
+                && modelEl.ValueKind == JsonValueKind.String
+                ? modelEl.GetString()
+                : null;
+            SessionTranscript.Current?.RecordRequest(modelUsed, promptTokens, completionTokens, requestBytes, toolsBytes);
         }
         catch
         {

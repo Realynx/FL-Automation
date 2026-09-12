@@ -1,4 +1,3 @@
-using System.Text.Json;
 using FruityLink.Core.Abstractions;
 using FruityLink.Core.Configuration;
 
@@ -24,32 +23,15 @@ public sealed class JsonSettingsStore : ISettingsStore
     /// <inheritdoc />
     public async Task<AppSettings> LoadAsync(CancellationToken ct = default)
     {
-        string path = _paths.SettingsFile;
-        if (!File.Exists(path))
-        {
-            return new AppSettings();
-        }
-
-        try
-        {
-            await using FileStream stream = File.OpenRead(path);
-            AppSettings? settings = await JsonSerializer
-                .DeserializeAsync<AppSettings>(stream, JsonDefaults.Options, ct)
-                .ConfigureAwait(false);
-            return settings ?? new AppSettings();
-        }
-        catch (JsonException)
-        {
-            // Corrupt settings should not break the app; fall back to defaults.
-            return new AppSettings();
-        }
+        // Corrupt settings should not break the app; fall back to defaults.
+        return await JsonFile.TryReadAsync<AppSettings>(_paths.SettingsFile, ct).ConfigureAwait(false)
+            ?? new AppSettings();
     }
 
     /// <inheritdoc />
     public async Task SaveAsync(AppSettings settings, CancellationToken ct = default)
     {
         ArgumentNullException.ThrowIfNull(settings);
-        string json = JsonSerializer.Serialize(settings, JsonDefaults.Options);
-        await AtomicFile.WriteAllTextAsync(_paths.SettingsFile, json, ct).ConfigureAwait(false);
+        await JsonFile.WriteAsync(_paths.SettingsFile, settings, ct).ConfigureAwait(false);
     }
 }

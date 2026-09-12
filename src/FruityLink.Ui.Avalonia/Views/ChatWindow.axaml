@@ -44,9 +44,10 @@
     <Grid>
 
         <!-- ============================ CHAT SURFACE ============================ -->
-        <!-- Three bounded rows only: header (Auto) · transcript (*) · composer (Auto). The transcript owns
-             its own clipped region between header + composer, so long messages scroll and never spill. -->
-        <Grid RowDefinitions="Auto,*,Auto" IsVisible="{Binding IsChatVisible}">
+        <!-- Four bounded rows: header (Auto) · update banner (Auto, usually collapsed) · transcript (*) ·
+             composer (Auto). The transcript owns its own clipped region between header + composer, so long
+             messages scroll and never spill. -->
+        <Grid RowDefinitions="Auto,Auto,*,Auto" IsVisible="{Binding IsChatVisible}">
 
             <!-- ============================ Header ============================ -->
             <!-- Mirrors the hero ChatPanel header: logo mark + branded wordmark + status pill + settings gear. -->
@@ -104,11 +105,49 @@
                 </Grid>
             </Border>
 
+            <!-- ============================ Update notice ============================ -->
+            <!-- Slim dismissible banner, its own layout row so it never overlaps the crash-recovery
+                 banner pinned over the transcript. Driven by the host presenter via ShowUpdateNotice;
+                 collapsed until then. STATIC on purpose — no animations (they crash the embedded FL
+                 host). ✕ hides it for the rest of the session. -->
+            <Border Grid.Row="1"
+                    IsVisible="{Binding HasUpdateNotice}"
+                    Background="{StaticResource SurfaceTranslucentBrush}"
+                    BorderBrush="{StaticResource BorderWhite10Brush}"
+                    BorderThickness="0,0,0,1"
+                    Padding="16,8">
+                <Grid ColumnDefinitions="Auto,*,Auto,Auto">
+                    <!-- accent dot (echoes the header status pill's dot, accent-tinted for "news") -->
+                    <Border Grid.Column="0" Width="8" Height="8" CornerRadius="4"
+                            Background="{StaticResource Accent300Brush}"
+                            VerticalAlignment="Center" />
+                    <TextBlock Grid.Column="1" Classes="meta"
+                               Text="{Binding UpdateNoticeText}"
+                               Margin="10,0,8,0" VerticalAlignment="Center"
+                               TextTrimming="CharacterEllipsis" />
+                    <Button Grid.Column="2" Classes="link" VerticalAlignment="Center"
+                            Content="Download"
+                            Command="{Binding OpenUpdateCommand}"
+                            ToolTip.Tip="Open the download page in your browser" />
+                    <Button Grid.Column="3" Classes="miniIcon" Margin="8,0,0,0"
+                            VerticalAlignment="Center"
+                            Command="{Binding DismissUpdateCommand}"
+                            ToolTip.Tip="Dismiss">
+                        <Viewbox Width="12" Height="12">
+                            <Canvas Width="24" Height="24">
+                                <Path Fill="{Binding $parent[Button].Foreground}"
+                                      Data="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z" />
+                            </Canvas>
+                        </Viewbox>
+                    </Button>
+                </Grid>
+            </Border>
+
             <!-- ============================ Transcript ============================ -->
             <!-- Own clipped region: the aurora glow is a non-layout, non-hit-test BACKGROUND layer behind the
                  scroller; the ScrollViewer clips to its bounds so long messages scroll instead of spilling
                  into the composer. -->
-            <Grid Grid.Row="1" ClipToBounds="True">
+            <Grid Grid.Row="2" ClipToBounds="True">
                 <!-- Aurora glow blobs echoing the hero background. Background layer only — never captures input
                      and never affects layout of the transcript. -->
                 <Panel IsHitTestVisible="False" ClipToBounds="True" ZIndex="0">
@@ -321,7 +360,7 @@
             </Grid>
 
             <!-- ============================ Composer ============================ -->
-            <Border Grid.Row="2"
+            <Border Grid.Row="3"
                     Background="{StaticResource SurfaceBrush}"
                     BorderBrush="{StaticResource BorderWhite10Brush}"
                     BorderThickness="0,1,0,0"

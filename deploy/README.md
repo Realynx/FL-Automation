@@ -165,6 +165,6 @@ The site step also ships the desktop-app installer:
 Not automated (interactive by nature): `cloudflared tunnel login` — the script
 prints the tunnel steps at the end. (Admin tooling lives on the VPN-only Ops
 Console, Server D — the public services have no admin surface.) Fresh installs come up in
-**beta mode** (no Helcim key → purchasing disabled); fill in Helcim + email
+**beta mode** (no Stripe key → purchasing disabled); fill in Stripe + email
 (the `GRAPH_*` Microsoft Graph vars) in `/opt/fl-automate/.env` and restart
 when you start selling.

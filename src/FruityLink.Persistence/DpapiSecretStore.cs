@@ -1,7 +1,6 @@
 using System.Runtime.Versioning;
 using System.Security.Cryptography;
 using System.Text;
-using System.Text.Json;
 using FruityLink.Core.Abstractions;
 
 namespace FruityLink.Persistence;
@@ -108,31 +107,14 @@ public sealed class DpapiSecretStore : ISecretStore
 
     private async Task<Dictionary<string, string>> ReadMapAsync(CancellationToken ct)
     {
-        string path = _paths.SecretsFile;
-        if (!File.Exists(path))
-        {
-            return new Dictionary<string, string>(StringComparer.Ordinal);
-        }
-
-        try
-        {
-            await using FileStream stream = File.OpenRead(path);
-            Dictionary<string, string>? map = await JsonSerializer
-                .DeserializeAsync<Dictionary<string, string>>(stream, JsonDefaults.Options, ct)
-                .ConfigureAwait(false);
-            return map is null
-                ? new Dictionary<string, string>(StringComparer.Ordinal)
-                : new Dictionary<string, string>(map, StringComparer.Ordinal);
-        }
-        catch (JsonException)
-        {
-            return new Dictionary<string, string>(StringComparer.Ordinal);
-        }
+        Dictionary<string, string>? map = await JsonFile
+            .TryReadAsync<Dictionary<string, string>>(_paths.SecretsFile, ct)
+            .ConfigureAwait(false);
+        return map is null
+            ? new Dictionary<string, string>(StringComparer.Ordinal)
+            : new Dictionary<string, string>(map, StringComparer.Ordinal);
     }
 
-    private async Task WriteMapAsync(Dictionary<string, string> map, CancellationToken ct)
-    {
-        string json = JsonSerializer.Serialize(map, JsonDefaults.Options);
-        await AtomicFile.WriteAllTextAsync(_paths.SecretsFile, json, ct).ConfigureAwait(false);
-    }
+    private async Task WriteMapAsync(Dictionary<string, string> map, CancellationToken ct) =>
+        await JsonFile.WriteAsync(_paths.SecretsFile, map, ct).ConfigureAwait(false);
 }

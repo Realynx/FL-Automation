@@ -70,6 +70,7 @@ internal sealed class AgentAccountGateway : IAccountGateway
             Email = session?.Email ?? account.Email ?? string.Empty,
             Plan = session?.Plan ?? account.Plan ?? string.Empty,
             Model = account.Model,
+            ShareDebugData = account.ShareDebugData,
         };
     }
 
@@ -109,6 +110,15 @@ internal sealed class AgentAccountGateway : IAccountGateway
         // Then live-apply. If this throws, the save has already landed on disk — the caller
         // surfaces it as "saved, but couldn't reconfigure".
         await ReconfigureAgentsAsync(ct).ConfigureAwait(false);
+    }
+
+    /// <summary>Persists the debug-data opt-in. No agent re-configure: the uploader re-reads the
+    /// flag from settings on every turn, so the change is live the moment the save lands.</summary>
+    public async Task SaveShareDebugDataAsync(bool enabled, CancellationToken ct = default)
+    {
+        CoreAppSettings app = await _settings.LoadAsync(ct).ConfigureAwait(false);
+        AccountSettings account = app.AccountOrDefault with { ShareDebugData = enabled };
+        await _settings.SaveAsync(app with { Account = account }, ct).ConfigureAwait(false);
     }
 
     public async Task<IReadOnlyList<AccountModel>> ListModelsAsync(CancellationToken ct = default)

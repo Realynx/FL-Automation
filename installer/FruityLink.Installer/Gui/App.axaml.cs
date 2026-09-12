@@ -12,6 +12,11 @@ public sealed class InstallerApp : Application
 {
     /// <summary>--fl-path handed through from the CLI parse, applied to the window on startup.</summary>
     public static string? InitialFlPath { get; set; }
+    public static string? InitialPayloadRoot { get; set; }
+    public static bool WithoutMcp { get; set; }
+
+    /// <summary>--community-plugins ids to re-check after an elevation relaunch.</summary>
+    public static IReadOnlyList<string> InitialCommunityPlugins { get; set; } = [];
 
     public override void Initialize() => AvaloniaXamlLoader.Load(this);
 

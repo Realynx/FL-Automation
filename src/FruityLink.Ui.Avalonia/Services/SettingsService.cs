@@ -9,7 +9,7 @@ namespace FruityLink.Ui.Avalonia.Services;
 /// every window / view-model (the embedded FL plugin path AND the standalone dev head) shares ONE
 /// authoritative settings instance and a single file.
 ///
-/// <para>The file lives at <c>%APPDATA%\FruityLink\ui-settings.json</c> (roaming app data — always writable
+/// <para>The file lives at <c>%APPDATA%\FLAutomate\ui-settings.json</c> (roaming app data — always writable
 /// for the current user). The directory is created on first save. All I/O is best-effort: a missing or
 /// corrupt file just yields defaults, and a failed write is swallowed (settings persistence must never
 /// take down the UI, least of all when embedded inside FL Studio).</para>

@@ -1,0 +1,1246 @@
+<?xml version="1.0"?>
+<doc>
+    <assembly>
+        <name>FruityLink.Core</name>
+    </assembly>
+    <members>
+        <member name="T:FruityLink.Core.Abstractions.ClipMove">
+            <summary>One playlist-clip move for a batch: <paramref name="Index"/> is the clip's slot index
+            (from ListClips), <paramref name="StartTick"/> the new absolute start in PPQ ticks, and
+            <paramref name="Track"/> the destination playlist track (1-based); a Track &lt; 0 keeps the
+            clip on its current track.</summary>
+        </member>
+        <member name="M:FruityLink.Core.Abstractions.ClipMove.#ctor(System.Int32,System.Int32,System.Int32)">
+            <summary>One playlist-clip move for a batch: <paramref name="Index"/> is the clip's slot index
+            (from ListClips), <paramref name="StartTick"/> the new absolute start in PPQ ticks, and
+            <paramref name="Track"/> the destination playlist track (1-based); a Track &lt; 0 keeps the
+            clip on its current track.</summary>
+        </member>
+        <member name="T:FruityLink.Core.Abstractions.ClipResize">
+            <summary>One playlist-clip resize for a batch: set the clip at <paramref name="Index"/> to
+            <paramref name="LengthTick"/> PPQ ticks.</summary>
+        </member>
+        <member name="M:FruityLink.Core.Abstractions.ClipResize.#ctor(System.Int32,System.Int32)">
+            <summary>One playlist-clip resize for a batch: set the clip at <paramref name="Index"/> to
+            <paramref name="LengthTick"/> PPQ ticks.</summary>
+        </member>
+        <member name="T:FruityLink.Core.Abstractions.PatternClipSpec">
+            <summary>One pattern-clip placement for a batch: place <paramref name="Pattern"/> (1-based) on
+            playlist track <paramref name="Track"/> (1-based) at <paramref name="StartTick"/> for
+            <paramref name="LengthTick"/> ticks (&lt;= 0 = the pattern's own length).</summary>
+        </member>
+        <member name="M:FruityLink.Core.Abstractions.PatternClipSpec.#ctor(System.Int32,System.Int32,System.Int32,System.Int32)">
+            <summary>One pattern-clip placement for a batch: place <paramref name="Pattern"/> (1-based) on
+            playlist track <paramref name="Track"/> (1-based) at <paramref name="StartTick"/> for
+            <paramref name="LengthTick"/> ticks (&lt;= 0 = the pattern's own length).</summary>
+        </member>
+        <member name="T:FruityLink.Core.Abstractions.IFlStructuredQuery">
+            <summary>Optional structured inspection for scripting clients. Indices describe the current project;
+            edits can invalidate them. Queries are read-only but are not atomic snapshots of the DAW.</summary>
+        </member>
+        <member name="M:FruityLink.Core.Abstractions.IFlStructuredQuery.QueryChannelsAsync(System.Threading.CancellationToken)">
+            <summary>Read the channel rack, using zero-based channel indices.</summary>
+        </member>
+        <member name="M:FruityLink.Core.Abstractions.IFlStructuredQuery.QueryPatternsAsync(System.Threading.CancellationToken)">
+            <summary>Read nonempty patterns, using one-based pattern indices.</summary>
+        </member>
+        <member name="M:FruityLink.Core.Abstractions.IFlStructuredQuery.QueryNotesAsync(System.Int32,System.Int32,System.Int32,System.Int32,System.Threading.CancellationToken)">
+            <summary>Read a bounded page of raw note slots. Negative channel means all channels.
+            Offset and total count raw slots, so filtered pages can be empty with a continuation.</summary>
+        </member>
+        <member name="M:FruityLink.Core.Abstractions.IFlStructuredQuery.QueryPlaylistTracksAsync(System.Threading.CancellationToken)">
+            <summary>Read all 500 playlist tracks, including default tracks, using one-based indices.</summary>
+        </member>
+        <member name="M:FruityLink.Core.Abstractions.IFlStructuredQuery.QueryClipsAsync(System.Int32,System.Int32,System.Int32,System.Threading.CancellationToken)">
+            <summary>Read a bounded page of raw clip slots. Negative track means all tracks.
+            Offset and total count raw slots, not filter matches.</summary>
+        </member>
+        <member name="M:FruityLink.Core.Abstractions.IFlStructuredQuery.QueryArrangementsAsync(System.Threading.CancellationToken)">
+            <summary>Read arrangements, using zero-based indices.</summary>
+        </member>
+        <member name="M:FruityLink.Core.Abstractions.IFlStructuredQuery.QueryPluginParametersAsync(System.Int32,System.Int32,System.String,System.Int32,System.Int32,System.Threading.CancellationToken)">
+            <summary>Read plugin parameters without guessing normalized values from native integer bits.
+            Negative slot selects a channel generator; otherwise select a mixer track and slot.
+            Offset and total count unfiltered parameter slots.</summary>
+        </member>
+        <member name="M:FruityLink.Core.Abstractions.IFlStructuredQuery.QueryProjectAsync(System.Threading.CancellationToken)">
+            <summary>Read the exact project title and path. Untitled does not indicate unsaved edits.</summary>
+        </member>
+        <member name="M:FruityLink.Core.Abstractions.IFlStructuredQuery.QueryAutomationPointsAsync(System.Int32,System.Threading.CancellationToken)">
+            <summary>Read automation points with absolute times in quarter-note beats.</summary>
+        </member>
+        <member name="T:FruityLink.Core.Abstractions.FlQueryPage`1">
+            <summary>A page over raw collection slots. Follow NextOffset even when filtering returns no Items.</summary>
+            <param name="Items">Matching records in this page.</param>
+            <param name="NextOffset">Next raw slot, or null at the end.</param>
+            <param name="Total">Total raw slots before filtering.</param>
+        </member>
+        <member name="M:FruityLink.Core.Abstractions.FlQueryPage`1.#ctor(System.Collections.Generic.IReadOnlyList{`0},System.Nullable{System.Int32},System.Int32)">
+            <summary>A page over raw collection slots. Follow NextOffset even when filtering returns no Items.</summary>
+            <param name="Items">Matching records in this page.</param>
+            <param name="NextOffset">Next raw slot, or null at the end.</param>
+            <param name="Total">Total raw slots before filtering.</param>
+        </member>
+        <member name="P:FruityLink.Core.Abstractions.FlQueryPage`1.Items">
+            <summary>Matching records in this page.</summary>
+        </member>
+        <member name="P:FruityLink.Core.Abstractions.FlQueryPage`1.NextOffset">
+            <summary>Next raw slot, or null at the end.</summary>
+        </member>
+        <member name="P:FruityLink.Core.Abstractions.FlQueryPage`1.Total">
+            <summary>Total raw slots before filtering.</summary>
+        </member>
+        <member name="T:FruityLink.Core.Abstractions.FlChannelInfo">
+            <summary>A channel snapshot; volume and pan retain FL's integer control units.</summary>
+            <param name="Index">Zero-based channel index.</param><param name="Name">Display name.</param>
+            <param name="MixerTrack">Mixer route, zero means master.</param><param name="Muted">Mute state.</param>
+            <param name="Volume">Volume in native units.</param><param name="Pan">Pan in native units.</param>
+        </member>
+        <member name="M:FruityLink.Core.Abstractions.FlChannelInfo.#ctor(System.Int32,System.String,System.Int32,System.Boolean,System.Int64,System.Int32)">
+            <summary>A channel snapshot; volume and pan retain FL's integer control units.</summary>
+            <param name="Index">Zero-based channel index.</param><param name="Name">Display name.</param>
+            <param name="MixerTrack">Mixer route, zero means master.</param><param name="Muted">Mute state.</param>
+            <param name="Volume">Volume in native units.</param><param name="Pan">Pan in native units.</param>
+        </member>
+        <member name="P:FruityLink.Core.Abstractions.FlChannelInfo.Index">
+            <summary>Zero-based channel index.</summary>
+        </member>
+        <member name="P:FruityLink.Core.Abstractions.FlChannelInfo.Name">
+            ><summary>Display name.</summary>
+        </member>
+        <member name="P:FruityLink.Core.Abstractions.FlChannelInfo.MixerTrack">
+            <summary>Mixer route, zero means master.</summary>
+        </member>
+        <member name="P:FruityLink.Core.Abstractions.FlChannelInfo.Muted">
+            ><summary>Mute state.</summary>
+        </member>
+        <member name="P:FruityLink.Core.Abstractions.FlChannelInfo.Volume">
+            <summary>Volume in native units.</summary>
+        </member>
+        <member name="P:FruityLink.Core.Abstractions.FlChannelInfo.Pan">
+            ><summary>Pan in native units.</summary>
+        </member>
+        <member name="T:FruityLink.Core.Abstractions.FlPatternInfo">
+            <summary>A nonempty pattern snapshot.</summary>
+            <param name="Index">One-based index.</param><param name="Name">Display name.</param>
+            <param name="LengthTick">Length in ticks, null when unavailable.</param><param name="NoteCount">Note count, null when unavailable.</param>
+            <param name="Current">Whether selected.</param>
+        </member>
+        <member name="M:FruityLink.Core.Abstractions.FlPatternInfo.#ctor(System.Int32,System.String,System.Nullable{System.Int32},System.Nullable{System.Int32},System.Boolean)">
+            <summary>A nonempty pattern snapshot.</summary>
+            <param name="Index">One-based index.</param><param name="Name">Display name.</param>
+            <param name="LengthTick">Length in ticks, null when unavailable.</param><param name="NoteCount">Note count, null when unavailable.</param>
+            <param name="Current">Whether selected.</param>
+        </member>
+        <member name="P:FruityLink.Core.Abstractions.FlPatternInfo.Index">
+            <summary>One-based index.</summary>
+        </member>
+        <member name="P:FruityLink.Core.Abstractions.FlPatternInfo.Name">
+            ><summary>Display name.</summary>
+        </member>
+        <member name="P:FruityLink.Core.Abstractions.FlPatternInfo.LengthTick">
+            <summary>Length in ticks, null when unavailable.</summary>
+        </member>
+        <member name="P:FruityLink.Core.Abstractions.FlPatternInfo.NoteCount">
+            ><summary>Note count, null when unavailable.</summary>
+        </member>
+        <member name="P:FruityLink.Core.Abstractions.FlPatternInfo.Current">
+            <summary>Whether selected.</summary>
+        </member>
+        <member name="T:FruityLink.Core.Abstractions.FlNoteInfo">
+            <summary>A piano-roll note snapshot. Index is a transient raw slot, not a durable note ID.</summary>
+            <param name="Index">Raw slot.</param><param name="Channel">Zero-based channel.</param><param name="Key">MIDI key.</param>
+            <param name="StartTick">Start tick.</param><param name="LengthTick">Duration ticks.</param>
+            <param name="Velocity">Velocity.</param><param name="Muted">Mute state.</param>
+        </member>
+        <member name="M:FruityLink.Core.Abstractions.FlNoteInfo.#ctor(System.Int32,System.Int32,System.Int32,System.Int32,System.Int32,System.Int32,System.Boolean)">
+            <summary>A piano-roll note snapshot. Index is a transient raw slot, not a durable note ID.</summary>
+            <param name="Index">Raw slot.</param><param name="Channel">Zero-based channel.</param><param name="Key">MIDI key.</param>
+            <param name="StartTick">Start tick.</param><param name="LengthTick">Duration ticks.</param>
+            <param name="Velocity">Velocity.</param><param name="Muted">Mute state.</param>
+        </member>
+        <member name="P:FruityLink.Core.Abstractions.FlNoteInfo.Index">
+            <summary>Raw slot.</summary>
+        </member>
+        <member name="P:FruityLink.Core.Abstractions.FlNoteInfo.Channel">
+            ><summary>Zero-based channel.</summary>
+        </member>
+        <member name="P:FruityLink.Core.Abstractions.FlNoteInfo.Key">
+            ><summary>MIDI key.</summary>
+        </member>
+        <member name="P:FruityLink.Core.Abstractions.FlNoteInfo.StartTick">
+            <summary>Start tick.</summary>
+        </member>
+        <member name="P:FruityLink.Core.Abstractions.FlNoteInfo.LengthTick">
+            ><summary>Duration ticks.</summary>
+        </member>
+        <member name="P:FruityLink.Core.Abstractions.FlNoteInfo.Velocity">
+            <summary>Velocity.</summary>
+        </member>
+        <member name="P:FruityLink.Core.Abstractions.FlNoteInfo.Muted">
+            ><summary>Mute state.</summary>
+        </member>
+        <member name="T:FruityLink.Core.Abstractions.FlPlaylistTrackInfo">
+            <summary>A playlist track snapshot.</summary>
+            <param name="Index">One-based track.</param><param name="Name">Display name.</param><param name="Color">RGB color.</param>
+            <param name="Muted">Mute state.</param><param name="Collapsed">Collapsed state.</param><param name="Selected">Selection state.</param>
+            <param name="Mode">Native track mode: zero normal, one audio, three instrument.</param>
+        </member>
+        <member name="M:FruityLink.Core.Abstractions.FlPlaylistTrackInfo.#ctor(System.Int32,System.String,System.UInt32,System.Boolean,System.Boolean,System.Boolean,System.Int32)">
+            <summary>A playlist track snapshot.</summary>
+            <param name="Index">One-based track.</param><param name="Name">Display name.</param><param name="Color">RGB color.</param>
+            <param name="Muted">Mute state.</param><param name="Collapsed">Collapsed state.</param><param name="Selected">Selection state.</param>
+            <param name="Mode">Native track mode: zero normal, one audio, three instrument.</param>
+        </member>
+        <member name="P:FruityLink.Core.Abstractions.FlPlaylistTrackInfo.Index">
+            <summary>One-based track.</summary>
+        </member>
+        <member name="P:FruityLink.Core.Abstractions.FlPlaylistTrackInfo.Name">
+            ><summary>Display name.</summary>
+        </member>
+        <member name="P:FruityLink.Core.Abstractions.FlPlaylistTrackInfo.Color">
+            ><summary>RGB color.</summary>
+        </member>
+        <member name="P:FruityLink.Core.Abstractions.FlPlaylistTrackInfo.Muted">
+            <summary>Mute state.</summary>
+        </member>
+        <member name="P:FruityLink.Core.Abstractions.FlPlaylistTrackInfo.Collapsed">
+            ><summary>Collapsed state.</summary>
+        </member>
+        <member name="P:FruityLink.Core.Abstractions.FlPlaylistTrackInfo.Selected">
+            ><summary>Selection state.</summary>
+        </member>
+        <member name="P:FruityLink.Core.Abstractions.FlPlaylistTrackInfo.Mode">
+            <summary>Native track mode: zero normal, one audio, three instrument.</summary>
+        </member>
+        <member name="T:FruityLink.Core.Abstractions.FlClipInfo">
+            <summary>A playlist clip snapshot. Index is invalidated by collection edits.</summary>
+            <param name="Index">Raw slot.</param><param name="Track">One-based playlist track.</param>
+            <param name="StartTick">Start tick.</param><param name="LengthTick">Duration ticks.</param>
+            <param name="SourceKind">Pattern or channel.</param><param name="SourceIndex">Source pattern or channel index.</param>
+            <param name="Muted">Mute state.</param>
+        </member>
+        <member name="M:FruityLink.Core.Abstractions.FlClipInfo.#ctor(System.Int32,System.Int32,System.Int32,System.Int32,System.String,System.Int32,System.Boolean)">
+            <summary>A playlist clip snapshot. Index is invalidated by collection edits.</summary>
+            <param name="Index">Raw slot.</param><param name="Track">One-based playlist track.</param>
+            <param name="StartTick">Start tick.</param><param name="LengthTick">Duration ticks.</param>
+            <param name="SourceKind">Pattern or channel.</param><param name="SourceIndex">Source pattern or channel index.</param>
+            <param name="Muted">Mute state.</param>
+        </member>
+        <member name="P:FruityLink.Core.Abstractions.FlClipInfo.Index">
+            <summary>Raw slot.</summary>
+        </member>
+        <member name="P:FruityLink.Core.Abstractions.FlClipInfo.Track">
+            ><summary>One-based playlist track.</summary>
+        </member>
+        <member name="P:FruityLink.Core.Abstractions.FlClipInfo.StartTick">
+            <summary>Start tick.</summary>
+        </member>
+        <member name="P:FruityLink.Core.Abstractions.FlClipInfo.LengthTick">
+            ><summary>Duration ticks.</summary>
+        </member>
+        <member name="P:FruityLink.Core.Abstractions.FlClipInfo.SourceKind">
+            <summary>Pattern or channel.</summary>
+        </member>
+        <member name="P:FruityLink.Core.Abstractions.FlClipInfo.SourceIndex">
+            ><summary>Source pattern or channel index.</summary>
+        </member>
+        <member name="P:FruityLink.Core.Abstractions.FlClipInfo.Muted">
+            <summary>Mute state.</summary>
+        </member>
+        <member name="T:FruityLink.Core.Abstractions.FlArrangementInfo">
+            <summary>An arrangement snapshot.</summary>
+            <param name="Index">Zero-based index.</param><param name="Name">Display name.</param><param name="Current">Whether selected.</param>
+        </member>
+        <member name="M:FruityLink.Core.Abstractions.FlArrangementInfo.#ctor(System.Int32,System.String,System.Boolean)">
+            <summary>An arrangement snapshot.</summary>
+            <param name="Index">Zero-based index.</param><param name="Name">Display name.</param><param name="Current">Whether selected.</param>
+        </member>
+        <member name="P:FruityLink.Core.Abstractions.FlArrangementInfo.Index">
+            <summary>Zero-based index.</summary>
+        </member>
+        <member name="P:FruityLink.Core.Abstractions.FlArrangementInfo.Name">
+            ><summary>Display name.</summary>
+        </member>
+        <member name="P:FruityLink.Core.Abstractions.FlArrangementInfo.Current">
+            ><summary>Whether selected.</summary>
+        </member>
+        <member name="T:FruityLink.Core.Abstractions.FlPluginParameterInfo">
+            <summary>A plugin parameter snapshot. RawValue is plugin-specific and is not a normalized float.</summary>
+            <param name="Index">Parameter index.</param><param name="Name">Parameter name.</param>
+            <param name="RawValue">Native integer representation.</param><param name="DisplayValue">Plugin-provided display text, possibly empty.</param>
+        </member>
+        <member name="M:FruityLink.Core.Abstractions.FlPluginParameterInfo.#ctor(System.Int32,System.String,System.Int32,System.String)">
+            <summary>A plugin parameter snapshot. RawValue is plugin-specific and is not a normalized float.</summary>
+            <param name="Index">Parameter index.</param><param name="Name">Parameter name.</param>
+            <param name="RawValue">Native integer representation.</param><param name="DisplayValue">Plugin-provided display text, possibly empty.</param>
+        </member>
+        <member name="P:FruityLink.Core.Abstractions.FlPluginParameterInfo.Index">
+            <summary>Parameter index.</summary>
+        </member>
+        <member name="P:FruityLink.Core.Abstractions.FlPluginParameterInfo.Name">
+            ><summary>Parameter name.</summary>
+        </member>
+        <member name="P:FruityLink.Core.Abstractions.FlPluginParameterInfo.RawValue">
+            <summary>Native integer representation.</summary>
+        </member>
+        <member name="P:FruityLink.Core.Abstractions.FlPluginParameterInfo.DisplayValue">
+            ><summary>Plugin-provided display text, possibly empty.</summary>
+        </member>
+        <member name="T:FruityLink.Core.Abstractions.FlProjectInfo">
+            <summary>Exact project identity fields, including names containing newlines or punctuation.</summary>
+            <param name="Title">Project title.</param><param name="Path">Project path.</param>
+            <param name="Untitled">Whether the project has no assigned filename; not an unsaved-edits flag.</param>
+        </member>
+        <member name="M:FruityLink.Core.Abstractions.FlProjectInfo.#ctor(System.String,System.String,System.Boolean)">
+            <summary>Exact project identity fields, including names containing newlines or punctuation.</summary>
+            <param name="Title">Project title.</param><param name="Path">Project path.</param>
+            <param name="Untitled">Whether the project has no assigned filename; not an unsaved-edits flag.</param>
+        </member>
+        <member name="P:FruityLink.Core.Abstractions.FlProjectInfo.Title">
+            <summary>Project title.</summary>
+        </member>
+        <member name="P:FruityLink.Core.Abstractions.FlProjectInfo.Path">
+            ><summary>Project path.</summary>
+        </member>
+        <member name="P:FruityLink.Core.Abstractions.FlProjectInfo.Untitled">
+            <summary>Whether the project has no assigned filename; not an unsaved-edits flag.</summary>
+        </member>
+        <member name="T:FruityLink.Core.Abstractions.FlAutomationPointInfo">
+            <summary>An automation point with an absolute time.</summary>
+            <param name="Index">Point index.</param><param name="TimeBeats">Quarter-note beats.</param>
+            <param name="Value">Value.</param><param name="Tension">Curve tension.</param><param name="Curve">Native curve type.</param>
+        </member>
+        <member name="M:FruityLink.Core.Abstractions.FlAutomationPointInfo.#ctor(System.Int32,System.Double,System.Double,System.Double,System.Int32)">
+            <summary>An automation point with an absolute time.</summary>
+            <param name="Index">Point index.</param><param name="TimeBeats">Quarter-note beats.</param>
+            <param name="Value">Value.</param><param name="Tension">Curve tension.</param><param name="Curve">Native curve type.</param>
+        </member>
+        <member name="P:FruityLink.Core.Abstractions.FlAutomationPointInfo.Index">
+            <summary>Point index.</summary>
+        </member>
+        <member name="P:FruityLink.Core.Abstractions.FlAutomationPointInfo.TimeBeats">
+            ><summary>Quarter-note beats.</summary>
+        </member>
+        <member name="P:FruityLink.Core.Abstractions.FlAutomationPointInfo.Value">
+            <summary>Value.</summary>
+        </member>
+        <member name="P:FruityLink.Core.Abstractions.FlAutomationPointInfo.Tension">
+            ><summary>Curve tension.</summary>
+        </member>
+        <member name="P:FruityLink.Core.Abstractions.FlAutomationPointInfo.Curve">
+            ><summary>Native curve type.</summary>
+        </member>
+        <member name="T:FruityLink.Core.Abstractions.FlSymbolStatus">
+            <summary>
+            Result of the native bridge's <c>syms</c> diagnostic (see <c>native/bridge/sigscan.*</c>): the
+            FL version the bridge detected at runtime plus the set of reverse-engineered FL symbols it could
+            NOT locate on THIS FL build. The bridge selects a supported scanner profile and resolves addresses
+            by byte-signature scan; a symbol whose signature did not match this version is
+            reported here so a tool depending on it can be hidden instead of firing a wrong address (an
+            uncatchable access violation inside FL).
+            </summary>
+            <param name="Version">Legacy exact-build index (0 = unknown; 1 = 25.2.5.5319; 2 = 26.1.0.5530).</param>
+            <param name="Resolved">Count of symbols that resolved OK.</param>
+            <param name="Failed">Count of symbols that did not resolve.</param>
+            <param name="Unresolved">Names of the symbols that did not resolve (ordinal-compared).</param>
+        </member>
+        <member name="M:FruityLink.Core.Abstractions.FlSymbolStatus.#ctor(System.Int32,System.Int32,System.Int32,System.Collections.Generic.IReadOnlySet{System.String})">
+            <summary>
+            Result of the native bridge's <c>syms</c> diagnostic (see <c>native/bridge/sigscan.*</c>): the
+            FL version the bridge detected at runtime plus the set of reverse-engineered FL symbols it could
+            NOT locate on THIS FL build. The bridge selects a supported scanner profile and resolves addresses
+            by byte-signature scan; a symbol whose signature did not match this version is
+            reported here so a tool depending on it can be hidden instead of firing a wrong address (an
+            uncatchable access violation inside FL).
+            </summary>
+            <param name="Version">Legacy exact-build index (0 = unknown; 1 = 25.2.5.5319; 2 = 26.1.0.5530).</param>
+            <param name="Resolved">Count of symbols that resolved OK.</param>
+            <param name="Failed">Count of symbols that did not resolve.</param>
+            <param name="Unresolved">Names of the symbols that did not resolve (ordinal-compared).</param>
+        </member>
+        <member name="P:FruityLink.Core.Abstractions.FlSymbolStatus.Version">
+            <summary>Legacy exact-build index (0 = unknown; 1 = 25.2.5.5319; 2 = 26.1.0.5530).</summary>
+        </member>
+        <member name="P:FruityLink.Core.Abstractions.FlSymbolStatus.Resolved">
+            <summary>Count of symbols that resolved OK.</summary>
+        </member>
+        <member name="P:FruityLink.Core.Abstractions.FlSymbolStatus.Failed">
+            <summary>Count of symbols that did not resolve.</summary>
+        </member>
+        <member name="P:FruityLink.Core.Abstractions.FlSymbolStatus.Unresolved">
+            <summary>Names of the symbols that did not resolve (ordinal-compared).</summary>
+        </member>
+        <member name="P:FruityLink.Core.Abstractions.FlSymbolStatus.FileVersion">
+            <summary>Full engine file version reported by the native bridge; null for older diagnostics.</summary>
+        </member>
+        <member name="P:FruityLink.Core.Abstractions.FlSymbolStatus.Scanner">
+            <summary>Selected native scanner profile name, or "unsupported"; null for older diagnostics.</summary>
+        </member>
+        <member name="P:FruityLink.Core.Abstractions.FlSymbolStatus.Supported">
+            <summary>Whether the native bridge supports scanning this engine version. True does not imply
+            every symbol resolved or every object layout is verified. Null means the field was not reported.</summary>
+        </member>
+        <member name="P:FruityLink.Core.Abstractions.FlSymbolStatus.Complete">
+            <summary>Whether native resolution finished, including a completed scan with no resolved symbols.
+            False means startup is still pending; null identifies a legacy or unspecified completion field.</summary>
+        </member>
+        <member name="P:FruityLink.Core.Abstractions.FlSymbolStatus.MixerTrackStride">
+            <summary>Diagnostic mixer-track stride, including exact-version compatibility for older bridges.
+            This scalar alone cannot authorize raw mixer operations without a complete <see cref="P:FruityLink.Core.Abstractions.FlSymbolStatus.MixerLayout"/>.</summary>
+        </member>
+        <member name="P:FruityLink.Core.Abstractions.FlSymbolStatus.MixerLayout">
+            <summary>Complete verified mixer layout from the native profile. Null means raw mixer
+            operations must refuse; a scalar stride or legacy version cannot establish this layout.</summary>
+        </member>
+        <member name="F:FruityLink.Core.Abstractions.FlSymbolStatus.AllResolved">
+            <summary>An empty, all-resolved status (nothing unresolved) — the common case sentinel.</summary>
+        </member>
+        <member name="T:FruityLink.Core.Abstractions.FlMixerLayout">
+            <summary>Verified byte layout for native mixer tracks and their send/effect structures.
+            Supplied as a complete unit by the native scanner profile; offsets must not be guessed individually.</summary>
+            <param name="TrackStride">Size of one mixer track structure.</param>
+            <param name="NameOffset">Track name pointer offset within a mixer track.</param>
+            <param name="TypeOffset">Track type integer offset within a mixer track.</param>
+            <param name="EnabledOffset">Track enabled-byte offset within a mixer track.</param>
+            <param name="SoloOffset">Track solo-byte offset within a mixer track.</param>
+            <param name="SendTableOffset">Send table offset within a mixer track.</param>
+            <param name="EffectSlotsOffset">Effect slot pointer-table offset within a mixer track.</param>
+            <param name="SendStride">Size of one destination's send record.</param>
+            <param name="SendLevelOffset">Level integer offset within a send record.</param>
+            <param name="SendActiveOffset">Active-byte offset within a send record.</param>
+            <param name="EffectSlotStride">Stride between pointers in the effect slot table.</param>
+            <param name="EffectIndexOffset">Plugin index integer offset within an effect object.</param>
+            <param name="EffectNameOffset">Plugin name pointer offset within an effect object.</param>
+            <param name="EffectLoadVtableOffset">Load-method pointer offset within the effect object's vtable.</param>
+        </member>
+        <member name="M:FruityLink.Core.Abstractions.FlMixerLayout.#ctor(System.Int32,System.Int32,System.Int32,System.Int32,System.Int32,System.Int32,System.Int32,System.Int32,System.Int32,System.Int32,System.Int32,System.Int32,System.Int32,System.Int32)">
+            <summary>Verified byte layout for native mixer tracks and their send/effect structures.
+            Supplied as a complete unit by the native scanner profile; offsets must not be guessed individually.</summary>
+            <param name="TrackStride">Size of one mixer track structure.</param>
+            <param name="NameOffset">Track name pointer offset within a mixer track.</param>
+            <param name="TypeOffset">Track type integer offset within a mixer track.</param>
+            <param name="EnabledOffset">Track enabled-byte offset within a mixer track.</param>
+            <param name="SoloOffset">Track solo-byte offset within a mixer track.</param>
+            <param name="SendTableOffset">Send table offset within a mixer track.</param>
+            <param name="EffectSlotsOffset">Effect slot pointer-table offset within a mixer track.</param>
+            <param name="SendStride">Size of one destination's send record.</param>
+            <param name="SendLevelOffset">Level integer offset within a send record.</param>
+            <param name="SendActiveOffset">Active-byte offset within a send record.</param>
+            <param name="EffectSlotStride">Stride between pointers in the effect slot table.</param>
+            <param name="EffectIndexOffset">Plugin index integer offset within an effect object.</param>
+            <param name="EffectNameOffset">Plugin name pointer offset within an effect object.</param>
+            <param name="EffectLoadVtableOffset">Load-method pointer offset within the effect object's vtable.</param>
+        </member>
+        <member name="P:FruityLink.Core.Abstractions.FlMixerLayout.TrackStride">
+            <summary>Size of one mixer track structure.</summary>
+        </member>
+        <member name="P:FruityLink.Core.Abstractions.FlMixerLayout.NameOffset">
+            <summary>Track name pointer offset within a mixer track.</summary>
+        </member>
+        <member name="P:FruityLink.Core.Abstractions.FlMixerLayout.TypeOffset">
+            <summary>Track type integer offset within a mixer track.</summary>
+        </member>
+        <member name="P:FruityLink.Core.Abstractions.FlMixerLayout.EnabledOffset">
+            <summary>Track enabled-byte offset within a mixer track.</summary>
+        </member>
+        <member name="P:FruityLink.Core.Abstractions.FlMixerLayout.SoloOffset">
+            <summary>Track solo-byte offset within a mixer track.</summary>
+        </member>
+        <member name="P:FruityLink.Core.Abstractions.FlMixerLayout.SendTableOffset">
+            <summary>Send table offset within a mixer track.</summary>
+        </member>
+        <member name="P:FruityLink.Core.Abstractions.FlMixerLayout.EffectSlotsOffset">
+            <summary>Effect slot pointer-table offset within a mixer track.</summary>
+        </member>
+        <member name="P:FruityLink.Core.Abstractions.FlMixerLayout.SendStride">
+            <summary>Size of one destination's send record.</summary>
+        </member>
+        <member name="P:FruityLink.Core.Abstractions.FlMixerLayout.SendLevelOffset">
+            <summary>Level integer offset within a send record.</summary>
+        </member>
+        <member name="P:FruityLink.Core.Abstractions.FlMixerLayout.SendActiveOffset">
+            <summary>Active-byte offset within a send record.</summary>
+        </member>
+        <member name="P:FruityLink.Core.Abstractions.FlMixerLayout.EffectSlotStride">
+            <summary>Stride between pointers in the effect slot table.</summary>
+        </member>
+        <member name="P:FruityLink.Core.Abstractions.FlMixerLayout.EffectIndexOffset">
+            <summary>Plugin index integer offset within an effect object.</summary>
+        </member>
+        <member name="P:FruityLink.Core.Abstractions.FlMixerLayout.EffectNameOffset">
+            <summary>Plugin name pointer offset within an effect object.</summary>
+        </member>
+        <member name="P:FruityLink.Core.Abstractions.FlMixerLayout.EffectLoadVtableOffset">
+            <summary>Load-method pointer offset within the effect object's vtable.</summary>
+        </member>
+        <member name="T:FruityLink.Core.Abstractions.IFlSymbolResolution">
+            <summary>
+            Optional capability of an <see cref="T:FruityLink.Core.Abstractions.INativeFlControl"/>: report which reverse-engineered FL
+            symbols resolved on the running FL Studio version. Only the real injected bridge implements this;
+            mocks/tests do not, so consumers MUST feature-detect (<c>fl is IFlSymbolResolution</c>) and fail
+            OPEN — advertise every tool — when it is absent or returns null.
+            </summary>
+        </member>
+        <member name="M:FruityLink.Core.Abstractions.IFlSymbolResolution.GetSymbolStatusAsync(System.Threading.CancellationToken)">
+            <summary>
+            Query symbol-resolution status, caching completed results only for the stable in-process
+            transport. Pipe requests are re-queried because reconnection may reach another FL process.
+            Returns <c>null</c> for unavailable, pending, or malformed diagnostics. Legacy responses without
+            completion metadata are authoritative only when at least one symbol resolved. An explicitly
+            completed scan is authoritative even when every symbol failed or the engine is unsupported;
+            callers must honor that result instead of treating it as unknown. Caller cancellation propagates.
+            </summary>
+        </member>
+        <member name="T:FruityLink.Core.Abstractions.INativeFlControl">
+            <summary>
+            Direct native control of FL Studio via the injected DLL bridge (command-bus param protocol).
+            These operations are executed natively inside the FL process and cover the full parameter
+            surface (master, mixer, channels).
+            All values use FL's native integer scales (documented per method). Implementations are
+            best-effort and throw if the bridge isn't injected; callers surface failures to the user.
+            </summary>
+        </member>
+        <member name="M:FruityLink.Core.Abstractions.INativeFlControl.IsAvailableAsync(System.Threading.CancellationToken)">
+            <summary>True if the injected bridge is loaded in FL and responding.</summary>
+        </member>
+        <member name="M:FruityLink.Core.Abstractions.INativeFlControl.SetTempoAsync(System.Double,System.Threading.CancellationToken)">
+            <summary>Set tempo in beats per minute (10..522).</summary>
+        </member>
+        <member name="M:FruityLink.Core.Abstractions.INativeFlControl.GetTempoAsync(System.Threading.CancellationToken)">
+            <summary>Read tempo in beats per minute.</summary>
+        </member>
+        <member name="M:FruityLink.Core.Abstractions.INativeFlControl.SetMasterVolumeAsync(System.Int32,System.Threading.CancellationToken)">
+            <summary>Master volume, 0..12800 (≈7624 ≈ 0 dB).</summary>
+        </member>
+        <member name="M:FruityLink.Core.Abstractions.INativeFlControl.GetMasterVolumeAsync(System.Threading.CancellationToken)">
+            <summary>Read master volume, 0..12800 (symmetric with <see cref="M:FruityLink.Core.Abstractions.INativeFlControl.SetMasterVolumeAsync(System.Int32,System.Threading.CancellationToken)"/>).</summary>
+        </member>
+        <member name="M:FruityLink.Core.Abstractions.INativeFlControl.SetMasterPitchAsync(System.Int32,System.Threading.CancellationToken)">
+            <summary>Master pitch in cents, -1200..+1200.</summary>
+        </member>
+        <member name="M:FruityLink.Core.Abstractions.INativeFlControl.GetMasterPitchAsync(System.Threading.CancellationToken)">
+            <summary>Read master pitch in cents (symmetric with <see cref="M:FruityLink.Core.Abstractions.INativeFlControl.SetMasterPitchAsync(System.Int32,System.Threading.CancellationToken)"/>).</summary>
+        </member>
+        <member name="M:FruityLink.Core.Abstractions.INativeFlControl.SetShuffleAsync(System.Int32,System.Threading.CancellationToken)">
+            <summary>Global shuffle/swing, 0..128.</summary>
+        </member>
+        <member name="M:FruityLink.Core.Abstractions.INativeFlControl.GetShuffleAsync(System.Threading.CancellationToken)">
+            <summary>Read global shuffle/swing, 0..128 (symmetric with <see cref="M:FruityLink.Core.Abstractions.INativeFlControl.SetShuffleAsync(System.Int32,System.Threading.CancellationToken)"/>).</summary>
+        </member>
+        <member name="M:FruityLink.Core.Abstractions.INativeFlControl.SetMixerVolumeAsync(System.Int32,System.Int32,System.Threading.CancellationToken)">
+            <summary>Mixer track volume 0..12800 (track 0 = master).</summary>
+        </member>
+        <member name="M:FruityLink.Core.Abstractions.INativeFlControl.GetMixerVolumeAsync(System.Int32,System.Threading.CancellationToken)">
+            <summary>Read a mixer track volume 0..12800 (symmetric with <see cref="M:FruityLink.Core.Abstractions.INativeFlControl.SetMixerVolumeAsync(System.Int32,System.Int32,System.Threading.CancellationToken)"/>).</summary>
+        </member>
+        <member name="M:FruityLink.Core.Abstractions.INativeFlControl.SetMixerPanAsync(System.Int32,System.Int32,System.Threading.CancellationToken)">
+            <summary>Mixer track pan 0..12800 (6400 = center).</summary>
+        </member>
+        <member name="M:FruityLink.Core.Abstractions.INativeFlControl.GetMixerPanAsync(System.Int32,System.Threading.CancellationToken)">
+            <summary>Read a mixer track pan 0..12800 (symmetric with <see cref="M:FruityLink.Core.Abstractions.INativeFlControl.SetMixerPanAsync(System.Int32,System.Int32,System.Threading.CancellationToken)"/>).</summary>
+        </member>
+        <member name="M:FruityLink.Core.Abstractions.INativeFlControl.SetMixerTrackMutedAsync(System.Int32,System.Boolean,System.Threading.CancellationToken)">
+            <summary>Mute/unmute a mixer track (the enabled flag; solo state untouched).</summary>
+        </member>
+        <member name="M:FruityLink.Core.Abstractions.INativeFlControl.GetMixerTrackMutedAsync(System.Int32,System.Threading.CancellationToken)">
+            <summary>Read a mixer track's mute state (symmetric with <see cref="M:FruityLink.Core.Abstractions.INativeFlControl.SetMixerTrackMutedAsync(System.Int32,System.Boolean,System.Threading.CancellationToken)"/>).</summary>
+        </member>
+        <member name="M:FruityLink.Core.Abstractions.INativeFlControl.SetMixerFxParamAsync(System.Int32,System.Int32,System.Int32,System.Int64,System.Threading.CancellationToken)">
+            <summary>A mixer FX-slot plugin parameter (normalized fixed-point value).</summary>
+        </member>
+        <member name="M:FruityLink.Core.Abstractions.INativeFlControl.SetChannelVolumeAsync(System.Int32,System.Int32,System.Threading.CancellationToken)">
+            <summary>Channel volume 0..12800 (10000 = default 78%).</summary>
+        </member>
+        <member name="M:FruityLink.Core.Abstractions.INativeFlControl.GetChannelVolumeAsync(System.Int32,System.Threading.CancellationToken)">
+            <summary>Read channel volume 0..12800 (symmetric with <see cref="M:FruityLink.Core.Abstractions.INativeFlControl.SetChannelVolumeAsync(System.Int32,System.Int32,System.Threading.CancellationToken)"/>).</summary>
+        </member>
+        <member name="M:FruityLink.Core.Abstractions.INativeFlControl.SetChannelPanAsync(System.Int32,System.Int32,System.Threading.CancellationToken)">
+            <summary>Channel pan 0..12800 (6400 = center).</summary>
+        </member>
+        <member name="M:FruityLink.Core.Abstractions.INativeFlControl.GetChannelPanAsync(System.Int32,System.Threading.CancellationToken)">
+            <summary>Read channel pan 0..12800 (symmetric with <see cref="M:FruityLink.Core.Abstractions.INativeFlControl.SetChannelPanAsync(System.Int32,System.Int32,System.Threading.CancellationToken)"/>).</summary>
+        </member>
+        <member name="M:FruityLink.Core.Abstractions.INativeFlControl.SetChannelPitchAsync(System.Int32,System.Int32,System.Threading.CancellationToken)">
+            <summary>Channel pitch in cents (0 = center).</summary>
+        </member>
+        <member name="M:FruityLink.Core.Abstractions.INativeFlControl.GetChannelPitchAsync(System.Int32,System.Threading.CancellationToken)">
+            <summary>Read channel pitch in cents (symmetric with <see cref="M:FruityLink.Core.Abstractions.INativeFlControl.SetChannelPitchAsync(System.Int32,System.Int32,System.Threading.CancellationToken)"/>).</summary>
+        </member>
+        <member name="M:FruityLink.Core.Abstractions.INativeFlControl.SetChannelMutedAsync(System.Int32,System.Boolean,System.Threading.CancellationToken)">
+            <summary>Mute/unmute a channel.</summary>
+        </member>
+        <member name="M:FruityLink.Core.Abstractions.INativeFlControl.GetChannelMutedAsync(System.Int32,System.Threading.CancellationToken)">
+            <summary>Read a channel's mute state (symmetric with <see cref="M:FruityLink.Core.Abstractions.INativeFlControl.SetChannelMutedAsync(System.Int32,System.Boolean,System.Threading.CancellationToken)"/>).</summary>
+        </member>
+        <member name="M:FruityLink.Core.Abstractions.INativeFlControl.SetChannelFxRouteAsync(System.Int32,System.Int32,System.Threading.CancellationToken)">
+            <summary>Route a channel to a mixer track (0..125).</summary>
+        </member>
+        <member name="M:FruityLink.Core.Abstractions.INativeFlControl.GetChannelFxRouteAsync(System.Int32,System.Threading.CancellationToken)">
+            <summary>Read a channel's mixer-track route (symmetric with <see cref="M:FruityLink.Core.Abstractions.INativeFlControl.SetChannelFxRouteAsync(System.Int32,System.Int32,System.Threading.CancellationToken)"/>).</summary>
+        </member>
+        <member name="M:FruityLink.Core.Abstractions.INativeFlControl.AddNoteAsync(System.Int32,System.Int32,System.Int32,System.Int32,System.Int32,System.Int32,System.Threading.CancellationToken)">
+            <summary>Add a note to a pattern's piano roll for a channel (pattern: 1-based, or &lt;=0 = current).
+            key = MIDI 0..131 (60 = middle C), startTick/lengthTick in PPQ ticks, velocity 0..127.</summary>
+        </member>
+        <member name="M:FruityLink.Core.Abstractions.INativeFlControl.AddNotesAsync(System.Int32,System.Collections.Generic.IReadOnlyList{FruityLink.Core.Abstractions.NoteSpec},System.Threading.CancellationToken)">
+            <summary>Add many notes to a pattern's piano roll in one batch — resolves the pattern and refreshes
+            the editor once for the whole set, far faster than repeated <see cref="M:FruityLink.Core.Abstractions.INativeFlControl.AddNoteAsync(System.Int32,System.Int32,System.Int32,System.Int32,System.Int32,System.Int32,System.Threading.CancellationToken)"/>. Each note
+            carries its own channel, so a single call can author chords, melodies, or multi-channel drum grids.</summary>
+        </member>
+        <member name="M:FruityLink.Core.Abstractions.INativeFlControl.GetPpqAsync(System.Threading.CancellationToken)">
+            <summary>Project timebase: ticks per quarter note (PPQ).</summary>
+        </member>
+        <member name="M:FruityLink.Core.Abstractions.INativeFlControl.GetCurrentPatternAsync(System.Threading.CancellationToken)">
+            <summary>Read the selected one-based pattern index.</summary>
+        </member>
+        <member name="M:FruityLink.Core.Abstractions.INativeFlControl.SelectPatternAsync(System.Int32,System.Threading.CancellationToken)">
+            <summary>Select a one-based pattern index.</summary>
+        </member>
+        <member name="M:FruityLink.Core.Abstractions.INativeFlControl.CreatePatternAsync(System.Threading.CancellationToken)">
+            <summary>Selects the first empty pattern; returns its index.</summary>
+        </member>
+        <member name="M:FruityLink.Core.Abstractions.INativeFlControl.ClearPatternAsync(System.Int32,System.Threading.CancellationToken)">
+            <summary>Remove all notes from the specified one-based pattern.</summary>
+        </member>
+        <member name="M:FruityLink.Core.Abstractions.INativeFlControl.GetPatternNameAsync(System.Int32,System.Threading.CancellationToken)">
+            <summary>Read the name of a one-based pattern.</summary>
+        </member>
+        <member name="M:FruityLink.Core.Abstractions.INativeFlControl.ListPatternsAsync(System.Threading.CancellationToken)">
+            <summary>List patterns and their names.</summary>
+        </member>
+        <member name="M:FruityLink.Core.Abstractions.INativeFlControl.GetChannelCountAsync(System.Threading.CancellationToken)">
+            <summary>Read the number of channels in the rack.</summary>
+        </member>
+        <member name="M:FruityLink.Core.Abstractions.INativeFlControl.SelectChannelAsync(System.Int32,System.Threading.CancellationToken)">
+            <summary>Exclusively select a channel (so the piano roll edits it).</summary>
+        </member>
+        <member name="M:FruityLink.Core.Abstractions.INativeFlControl.GetChannelNameAsync(System.Int32,System.Threading.CancellationToken)">
+            <summary>Read the name of a zero-based channel.</summary>
+        </member>
+        <member name="M:FruityLink.Core.Abstractions.INativeFlControl.ListChannelsAsync(System.Threading.CancellationToken)">
+            <summary>List channel indices and names.</summary>
+        </member>
+        <member name="M:FruityLink.Core.Abstractions.INativeFlControl.SetChannelNameAsync(System.Int32,System.String,System.Threading.CancellationToken)">
+            <summary>Rename a channel (persists across save/reload) so the model's own name→index lookups keep
+            working on channels it created.</summary>
+        </member>
+        <member name="M:FruityLink.Core.Abstractions.INativeFlControl.SetChannelSoloAsync(System.Int32,System.Threading.CancellationToken)">
+            <summary>Toggle exclusive SOLO on a channel (solo again = un-solo) — hear one part without muting
+            every other channel by hand.</summary>
+        </member>
+        <member name="M:FruityLink.Core.Abstractions.INativeFlControl.GetMixerTrackCountAsync(System.Threading.CancellationToken)">
+            <summary>Number of mixer tracks (127 at rest: master + 125 inserts + current).</summary>
+        </member>
+        <member name="M:FruityLink.Core.Abstractions.INativeFlControl.GetMixerTrackNameAsync(System.Int32,System.Threading.CancellationToken)">
+            <summary>Effective mixer track name (custom if set, else default by type: Master/Insert n/Current).</summary>
+        </member>
+        <member name="M:FruityLink.Core.Abstractions.INativeFlControl.ListMixerTracksAsync(System.Threading.CancellationToken)">
+            <summary>Custom-named mixer tracks (+ Master) as "index: name", for name→index resolution.</summary>
+        </member>
+        <member name="M:FruityLink.Core.Abstractions.INativeFlControl.SetMixerTrackNameAsync(System.Int32,System.String,System.Threading.CancellationToken)">
+            <summary>Rename a mixer track/bus (persists) so a bus the model creates is resolvable by name later.</summary>
+        </member>
+        <member name="M:FruityLink.Core.Abstractions.INativeFlControl.SetMixerSendAsync(System.Int32,System.Int32,System.Double,System.Threading.CancellationToken)">
+            <summary>Set a mixer send srcTrack-&gt;dstTrack at level (1.0 ≈ unity).</summary>
+        </member>
+        <member name="M:FruityLink.Core.Abstractions.INativeFlControl.SetMixerEqGainAsync(System.Int32,System.Int32,System.Int32,System.Threading.CancellationToken)">
+            <summary>Mixer track EQ band gain (band 0=low,1=mid,2=high; value 0..0x40000000, ~0x20000000 = 0 dB).</summary>
+        </member>
+        <member name="M:FruityLink.Core.Abstractions.INativeFlControl.TransportPlayAsync(System.Threading.CancellationToken)">
+            <summary>Start playback.</summary>
+        </member>
+        <member name="M:FruityLink.Core.Abstractions.INativeFlControl.TransportStopAsync(System.Threading.CancellationToken)">
+            <summary>Stop playback.</summary>
+        </member>
+        <member name="M:FruityLink.Core.Abstractions.INativeFlControl.TransportToggleRecordAsync(System.Threading.CancellationToken)">
+            <summary>Toggle recording.</summary>
+        </member>
+        <member name="M:FruityLink.Core.Abstractions.INativeFlControl.SetLoopRegionAsync(System.Int32,System.Int32,System.Threading.CancellationToken)">
+            <summary>Set the song loop / time-selection region to [startTick, endTick] so the transport loops just
+            that span (e.g. loop the drop while working on it). endTick &lt; 0 (or &lt;= startTick) CLEARS the loop.</summary>
+        </member>
+        <member name="M:FruityLink.Core.Abstractions.INativeFlControl.ListAvailablePluginsAsync(System.Boolean,System.Threading.CancellationToken)">
+            <summary>List installed plugins of a kind (effects=true → mixer effects, false → channel generators).</summary>
+        </member>
+        <member name="M:FruityLink.Core.Abstractions.INativeFlControl.GetChannelPluginAsync(System.Int32,System.Threading.CancellationToken)">
+            <summary>Describe a channel's loaded generator plugin.</summary>
+        </member>
+        <member name="M:FruityLink.Core.Abstractions.INativeFlControl.AddChannelAsync(System.String,System.Threading.CancellationToken)">
+            <summary>Add a new channel hosting the named generator plugin; returns its index.</summary>
+        </member>
+        <member name="M:FruityLink.Core.Abstractions.INativeFlControl.ListMixerEffectsAsync(System.Int32,System.Threading.CancellationToken)">
+            <summary>List the effects loaded in a mixer track's FX slots.</summary>
+        </member>
+        <member name="M:FruityLink.Core.Abstractions.INativeFlControl.AddMixerEffectAsync(System.Int32,System.Int32,System.String,System.Threading.CancellationToken)">
+            <summary>Load/replace the named effect into a mixer track's FX slot (0-9).</summary>
+        </member>
+        <member name="M:FruityLink.Core.Abstractions.INativeFlControl.RemoveMixerEffectAsync(System.Int32,System.Int32,System.Threading.CancellationToken)">
+            <summary>Clear a mixer track's FX slot.</summary>
+        </member>
+        <member name="M:FruityLink.Core.Abstractions.INativeFlControl.CloneMixerEffectAsync(System.Int32,System.Int32,System.Int32,System.Threading.CancellationToken)">
+            <summary>Copy the effect type from one FX slot to another (type only, not parameter state).</summary>
+        </member>
+        <member name="M:FruityLink.Core.Abstractions.INativeFlControl.ListPluginParamsAsync(System.Int32,System.Int32,System.String,System.Threading.CancellationToken)">
+            <summary>List a plugin's parameters ("index: name"). slot &lt; 0 = channel generator; else mixer track+slot. Optional name filter.</summary>
+        </member>
+        <member name="M:FruityLink.Core.Abstractions.INativeFlControl.SetPluginParamAsync(System.Int32,System.Int32,System.Int32,System.Double,System.Threading.CancellationToken)">
+            <summary>Set a plugin parameter to a normalized value 0..1. slot &lt; 0 = channel generator; else mixer track+slot.</summary>
+        </member>
+        <member name="M:FruityLink.Core.Abstractions.INativeFlControl.ListSamplesAsync(System.String,System.Threading.CancellationToken)">
+            <summary>List available audio samples (factory packs + user content), optionally filtered by name.</summary>
+        </member>
+        <member name="M:FruityLink.Core.Abstractions.INativeFlControl.AddSampleChannelAsync(System.String,System.Threading.CancellationToken)">
+            <summary>Add a new channel that plays the given audio sample file (drum/one-shot/loop); returns its index.</summary>
+        </member>
+        <member name="M:FruityLink.Core.Abstractions.INativeFlControl.ReplaceChannelSampleAsync(System.Int32,System.String,System.Threading.CancellationToken)">
+            <summary>Replace an existing channel's sample with a new audio file.</summary>
+        </member>
+        <member name="M:FruityLink.Core.Abstractions.INativeFlControl.GetNotesAsync(System.Int32,System.Int32,System.Int32,System.Threading.CancellationToken)">
+            <summary>Read piano-roll notes of a pattern (1-based, or &lt;=0 = current); channel&lt;0 = all.
+            Paged: offset skips the first N notes (raw index); the output's continuation hint feeds it back in.</summary>
+        </member>
+        <member name="M:FruityLink.Core.Abstractions.INativeFlControl.EditNotesAsync(System.Int32,System.Collections.Generic.IReadOnlyList{FruityLink.Core.Abstractions.NoteEdit},System.Threading.CancellationToken)">
+            <summary>Edit EXISTING piano-roll notes in place, WITHOUT clearing the pattern (every other note is
+            untouched, including fields the read tool doesn't surface — pan, fine pitch, release, cut, res). Each
+            <see cref="T:FruityLink.Core.Abstractions.NoteEdit"/> identifies a note by the (channel, key, startTick) triple <see cref="M:FruityLink.Core.Abstractions.INativeFlControl.GetNotesAsync(System.Int32,System.Int32,System.Int32,System.Threading.CancellationToken)"/>
+            shows and applies whichever new fields it carries. Returns the number of notes changed.</summary>
+        </member>
+        <member name="M:FruityLink.Core.Abstractions.INativeFlControl.DeleteNotesAsync(System.Int32,System.Collections.Generic.IReadOnlyList{FruityLink.Core.Abstractions.NoteRef},System.Threading.CancellationToken)">
+            <summary>Delete SPECIFIC existing piano-roll notes (matched by the (channel, key, startTick) triple),
+            leaving the rest of the pattern intact — the surgical counterpart to <see cref="M:FruityLink.Core.Abstractions.INativeFlControl.ClearPatternAsync(System.Int32,System.Threading.CancellationToken)"/>.
+            Returns the number of notes deleted.</summary>
+        </member>
+        <member name="M:FruityLink.Core.Abstractions.INativeFlControl.ClonePatternAsync(System.Int32,System.Threading.CancellationToken)">
+            <summary>Duplicate a pattern's notes into a new empty pattern; returns the new pattern's 1-based index
+            (0 if the source has nothing to clone). The full 24-byte note structs are copied, so pan/fine-pitch/
+            mute/etc. survive — a "make a variation of this part" without hand-recreating every note.</summary>
+        </member>
+        <member name="M:FruityLink.Core.Abstractions.INativeFlControl.SetPatternNameAsync(System.Int32,System.String,System.Threading.CancellationToken)">
+            <summary>Rename a pattern (1-based; persists across save/reload) so the model can label its verse/
+            chorus/drop parts instead of leaving "Pattern N" — which its own list_patterns navigation relies on.</summary>
+        </member>
+        <member name="M:FruityLink.Core.Abstractions.INativeFlControl.ListPlaylistTracksAsync(System.Threading.CancellationToken)">
+            <summary>List customized playlist tracks and summarize default tracks.</summary>
+        </member>
+        <member name="M:FruityLink.Core.Abstractions.INativeFlControl.SetTrackNameAsync(System.Int32,System.String,System.Threading.CancellationToken)">
+            <summary>Rename a one-based playlist track.</summary>
+        </member>
+        <member name="M:FruityLink.Core.Abstractions.INativeFlControl.GetTrackNameAsync(System.Int32,System.Threading.CancellationToken)">
+            <summary>Read a playlist track's name ("" when default; symmetric with <see cref="M:FruityLink.Core.Abstractions.INativeFlControl.SetTrackNameAsync(System.Int32,System.String,System.Threading.CancellationToken)"/>).</summary>
+        </member>
+        <member name="M:FruityLink.Core.Abstractions.INativeFlControl.SetTrackColorAsync(System.Int32,System.Int32,System.Threading.CancellationToken)">
+            <summary>Set a playlist track color as packed RGB.</summary>
+        </member>
+        <member name="M:FruityLink.Core.Abstractions.INativeFlControl.GetTrackColorAsync(System.Int32,System.Threading.CancellationToken)">
+            <summary>Read a playlist track's RGB color (symmetric with <see cref="M:FruityLink.Core.Abstractions.INativeFlControl.SetTrackColorAsync(System.Int32,System.Int32,System.Threading.CancellationToken)"/>).</summary>
+        </member>
+        <member name="M:FruityLink.Core.Abstractions.INativeFlControl.SetTrackMuteAsync(System.Int32,System.Boolean,System.Threading.CancellationToken)">
+            <summary>Mute or unmute a playlist track.</summary>
+        </member>
+        <member name="M:FruityLink.Core.Abstractions.INativeFlControl.GetTrackMuteAsync(System.Int32,System.Threading.CancellationToken)">
+            <summary>Read a playlist track's mute state (symmetric with <see cref="M:FruityLink.Core.Abstractions.INativeFlControl.SetTrackMuteAsync(System.Int32,System.Boolean,System.Threading.CancellationToken)"/>).</summary>
+        </member>
+        <member name="M:FruityLink.Core.Abstractions.INativeFlControl.SetTrackSoloAsync(System.Int32,System.Threading.CancellationToken)">
+            <summary>Toggle exclusive SOLO on a playlist track (solo again = un-solo).</summary>
+        </member>
+        <member name="M:FruityLink.Core.Abstractions.INativeFlControl.SetTrackCollapsedAsync(System.Int32,System.Boolean,System.Threading.CancellationToken)">
+            <summary>Collapse or expand a playlist track.</summary>
+        </member>
+        <member name="M:FruityLink.Core.Abstractions.INativeFlControl.GetTrackCollapsedAsync(System.Int32,System.Threading.CancellationToken)">
+            <summary>Read a playlist track's collapsed state (symmetric with <see cref="M:FruityLink.Core.Abstractions.INativeFlControl.SetTrackCollapsedAsync(System.Int32,System.Boolean,System.Threading.CancellationToken)"/>).</summary>
+        </member>
+        <member name="M:FruityLink.Core.Abstractions.INativeFlControl.SelectTrackAsync(System.Int32,System.Threading.CancellationToken)">
+            <summary>Select a playlist track.</summary>
+        </member>
+        <member name="M:FruityLink.Core.Abstractions.INativeFlControl.ListClipsAsync(System.Int32,System.Int32,System.Threading.CancellationToken)">
+            <summary>List active playlist clips, paged: offset skips the first N matching clips;
+            track&gt;0 filters to one playlist track (&lt;=0 = all).</summary>
+        </member>
+        <member name="M:FruityLink.Core.Abstractions.INativeFlControl.AddPatternClipAsync(System.Int32,System.Int32,System.Int32,System.Int32,System.Threading.CancellationToken)">
+            <summary>Add a pattern clip (pattern 1-based, matching notes/patterns; 0 or out-of-range throws) to a track at startTick; lengthTick&lt;=0 = pattern length.</summary>
+        </member>
+        <member name="M:FruityLink.Core.Abstractions.INativeFlControl.MoveClipAsync(System.Int32,System.Int32,System.Int32,System.Threading.CancellationToken)">
+            <summary>Move a playlist clip to a tick position and track.</summary>
+        </member>
+        <member name="M:FruityLink.Core.Abstractions.INativeFlControl.ResizeClipAsync(System.Int32,System.Int32,System.Threading.CancellationToken)">
+            <summary>Set a playlist clip duration in ticks.</summary>
+        </member>
+        <member name="M:FruityLink.Core.Abstractions.INativeFlControl.DeleteClipAsync(System.Int32,System.Threading.CancellationToken)">
+            <summary>Remove a playlist clip by its collection index.</summary>
+        </member>
+        <member name="M:FruityLink.Core.Abstractions.INativeFlControl.SetClipMutedAsync(System.Int32,System.Boolean,System.Threading.CancellationToken)">
+            <summary>Mute/unmute a playlist clip.</summary>
+        </member>
+        <member name="M:FruityLink.Core.Abstractions.INativeFlControl.GetClipMutedAsync(System.Int32,System.Threading.CancellationToken)">
+            <summary>Read a playlist clip's mute state (clip+0x13 bit 0x20), symmetric with
+            <see cref="M:FruityLink.Core.Abstractions.INativeFlControl.SetClipMutedAsync(System.Int32,System.Boolean,System.Threading.CancellationToken)"/> — the read-before-write for granular clip-mute undo.</summary>
+        </member>
+        <member name="M:FruityLink.Core.Abstractions.INativeFlControl.DeleteClipsAsync(System.Collections.Generic.IReadOnlyList{System.Int32},System.Threading.CancellationToken)">
+            <summary>Delete many playlist clips in one pass. Indices are DEDUPED and removed high→low so the
+            TList shift from an earlier removal never invalidates a later index; one recount + one repaint.</summary>
+        </member>
+        <member name="M:FruityLink.Core.Abstractions.INativeFlControl.MoveClipsAsync(System.Collections.Generic.IReadOnlyList{FruityLink.Core.Abstractions.ClipMove},System.Threading.CancellationToken)">
+            <summary>Move many playlist clips in one pass (per-clip start/track poke), then one repaint. Moves
+            don't reorder the collection, so all indices stay valid within the call.</summary>
+        </member>
+        <member name="M:FruityLink.Core.Abstractions.INativeFlControl.AddPatternClipsAsync(System.Collections.Generic.IReadOnlyList{FruityLink.Core.Abstractions.PatternClipSpec},System.Threading.CancellationToken)">
+            <summary>Place many pattern clips in one pass (each realized + inserted atomically), then one
+            refresh/repaint. Clips are addressed by (pattern,track,start), so add-order index shifts don't matter.</summary>
+        </member>
+        <member name="M:FruityLink.Core.Abstractions.INativeFlControl.ResizeClipsAsync(System.Collections.Generic.IReadOnlyList{FruityLink.Core.Abstractions.ClipResize},System.Threading.CancellationToken)">
+            <summary>Resize many playlist clips in one pass (per-clip length poke), then one repaint.</summary>
+        </member>
+        <member name="M:FruityLink.Core.Abstractions.INativeFlControl.SetClipsMutedAsync(System.Collections.Generic.IReadOnlyList{System.Int32},System.Boolean,System.Threading.CancellationToken)">
+            <summary>Mute/unmute many playlist clips in one pass, then one repaint.</summary>
+        </member>
+        <member name="M:FruityLink.Core.Abstractions.INativeFlControl.SliceClipAsync(System.Int32,System.Int32,System.Threading.CancellationToken)">
+            <summary>Slice/chop a clip into two at an absolute tick (audio stays continuous).</summary>
+        </member>
+        <member name="M:FruityLink.Core.Abstractions.INativeFlControl.DuplicateClipAsync(System.Int32,System.Threading.CancellationToken)">
+            <summary>Duplicate a clip right after itself on the same track.</summary>
+        </member>
+        <member name="M:FruityLink.Core.Abstractions.INativeFlControl.GetSongStateAsync(System.Threading.CancellationToken)">
+            <summary>Describe playback state, mode, and song position.</summary>
+        </member>
+        <member name="M:FruityLink.Core.Abstractions.INativeFlControl.GetSongModeAsync(System.Threading.CancellationToken)">
+            <summary>Read song mode (true) vs pattern mode (false) — symmetric with <see cref="M:FruityLink.Core.Abstractions.INativeFlControl.SetSongModeAsync(System.Boolean,System.Threading.CancellationToken)"/>.</summary>
+        </member>
+        <member name="M:FruityLink.Core.Abstractions.INativeFlControl.GetStatusAsync(System.Threading.CancellationToken)">
+            <summary>
+            FL's current status/hint bar text (the name/tooltip of whatever is under the mouse + current-operation
+            messages, e.g. "Opening: Fruity Wrapper" at load), cleaned of FL's internal "tooltip|status" split and
+            '^' markup. Empty when there is no active hint. Read-only; safe to poll.
+            </summary>
+        </member>
+        <member name="M:FruityLink.Core.Abstractions.INativeFlControl.SetSongModeAsync(System.Boolean,System.Threading.CancellationToken)">
+            <summary>Select song playback when true, or pattern playback when false.</summary>
+        </member>
+        <member name="M:FruityLink.Core.Abstractions.INativeFlControl.SeekAsync(System.Int32,System.Threading.CancellationToken)">
+            <summary>Move the song playhead to an absolute tick (PPQ).</summary>
+        </member>
+        <member name="M:FruityLink.Core.Abstractions.INativeFlControl.ListMarkersAsync(System.Threading.CancellationToken)">
+            <summary>List song time markers.</summary>
+        </member>
+        <member name="M:FruityLink.Core.Abstractions.INativeFlControl.AddMarkerAsync(System.Int32,System.String,System.Threading.CancellationToken)">
+            <summary>Add a named song marker at a tick position.</summary>
+        </member>
+        <member name="M:FruityLink.Core.Abstractions.INativeFlControl.OpenProjectAsync(System.String,System.Threading.CancellationToken)">
+            <summary>Open the project at the specified path.</summary>
+        </member>
+        <member name="M:FruityLink.Core.Abstractions.INativeFlControl.SaveProjectAsync(System.String,System.Threading.CancellationToken)">
+            <summary>Save the project using the specified path.</summary>
+        </member>
+        <member name="M:FruityLink.Core.Abstractions.INativeFlControl.NewProjectAsync(System.Threading.CancellationToken)">
+            <summary>Create a new project through FL Studio.</summary>
+        </member>
+        <member name="M:FruityLink.Core.Abstractions.INativeFlControl.GetProjectInfoAsync(System.Threading.CancellationToken)">
+            <summary>Read project identity and metadata.</summary>
+        </member>
+        <member name="M:FruityLink.Core.Abstractions.INativeFlControl.SaveProjectAsAsync(System.String,System.Threading.CancellationToken)">
+            <summary>Save As: write to a new path and make it the current project (updates title + recent files).</summary>
+        </member>
+        <member name="M:FruityLink.Core.Abstractions.INativeFlControl.SaveCopyAsync(System.String,System.Threading.CancellationToken)">
+            <summary>Save a full <c>.flp</c> copy of the live project to a path WITHOUT changing the current
+            project path/title. Modal-free and safe on UNTITLED projects too (uses FL's low-level direct
+            writer, not the save wrapper that pops a blocking dialog on untitled projects).</summary>
+        </member>
+        <member name="M:FruityLink.Core.Abstractions.INativeFlControl.SaveNewVersionAsync(System.Threading.CancellationToken)">
+            <summary>Save an auto-incremented new version and make it current.</summary>
+        </member>
+        <member name="M:FruityLink.Core.Abstractions.INativeFlControl.ListRecentProjectsAsync(System.Threading.CancellationToken)">
+            <summary>List recently opened project paths.</summary>
+        </member>
+        <member name="M:FruityLink.Core.Abstractions.INativeFlControl.ListArrangementsAsync(System.Threading.CancellationToken)">
+            <summary>List arrangement indices and names.</summary>
+        </member>
+        <member name="M:FruityLink.Core.Abstractions.INativeFlControl.AddArrangementAsync(System.String,System.Threading.CancellationToken)">
+            <summary>Add a new (empty) arrangement and switch to it; returns its index.</summary>
+        </member>
+        <member name="M:FruityLink.Core.Abstractions.INativeFlControl.CloneArrangementAsync(System.Int32,System.String,System.Threading.CancellationToken)">
+            <summary>Clone an arrangement (deep copy incl. clips); srcIdx&lt;0 = current. Returns the new index.</summary>
+        </member>
+        <member name="M:FruityLink.Core.Abstractions.INativeFlControl.RenameArrangementAsync(System.Int32,System.String,System.Threading.CancellationToken)">
+            <summary>Rename an arrangement by index.</summary>
+        </member>
+        <member name="M:FruityLink.Core.Abstractions.INativeFlControl.GetArrangementNameAsync(System.Int32,System.Threading.CancellationToken)">
+            <summary>Read an arrangement's name ("" when unnamed; symmetric with <see cref="M:FruityLink.Core.Abstractions.INativeFlControl.RenameArrangementAsync(System.Int32,System.String,System.Threading.CancellationToken)"/>).</summary>
+        </member>
+        <member name="M:FruityLink.Core.Abstractions.INativeFlControl.DeleteArrangementAsync(System.Int32,System.Threading.CancellationToken)">
+            <summary>Delete an arrangement by index.</summary>
+        </member>
+        <member name="M:FruityLink.Core.Abstractions.INativeFlControl.SelectArrangementAsync(System.Int32,System.Threading.CancellationToken)">
+            <summary>Switch to an arrangement by index.</summary>
+        </member>
+        <member name="M:FruityLink.Core.Abstractions.INativeFlControl.ListAutomationPointsAsync(System.Int32,System.Threading.CancellationToken)">
+            <summary>List an automation channel curve with times, values, and tension.</summary>
+        </member>
+        <member name="M:FruityLink.Core.Abstractions.INativeFlControl.AddAutomationPointAsync(System.Int32,System.Double,System.Double,System.Double,System.Threading.CancellationToken)">
+            <summary>Add an automation point: time in beats, value 0..1, tension -1..1 (inserts in time order).</summary>
+        </member>
+        <member name="M:FruityLink.Core.Abstractions.INativeFlControl.DeleteAutomationPointAsync(System.Int32,System.Int32,System.Threading.CancellationToken)">
+            <summary>Delete an automation point by index and recompute its curve.</summary>
+        </member>
+        <member name="M:FruityLink.Core.Abstractions.INativeFlControl.OpenExportDialogAsync(System.Int32,System.Threading.CancellationToken)">
+            <summary>Opens FL's audio Export dialog for the user to finish (format/path/Render).</summary>
+        </member>
+        <member name="M:FruityLink.Core.Abstractions.INativeFlControl.OpenChatTabAsync(System.Threading.CancellationToken)">
+            <summary>Open (or focus) the native "FruityLink AI" chat tab in FL's browser.</summary>
+        </member>
+        <member name="M:FruityLink.Core.Abstractions.INativeFlControl.CloseChatTabAsync(System.Threading.CancellationToken)">
+            <summary>Hide the chat tab and restore the browser content hook.</summary>
+        </member>
+        <member name="M:FruityLink.Core.Abstractions.INativeFlControl.ChatPollAsync(System.Threading.CancellationToken)">
+            <summary>Return + clear the user's submitted chat message (empty if none pending).</summary>
+        </member>
+        <member name="M:FruityLink.Core.Abstractions.INativeFlControl.ChatSayAsync(System.String,System.Threading.CancellationToken)">
+            <summary>Append a line to the chat display (runs on FL's main thread).</summary>
+        </member>
+        <member name="T:FruityLink.Core.Abstractions.NoteSpec">
+            <summary>One piano-roll note for batch authoring. key = MIDI 0..131 (60 = middle C),
+            startTick/lengthTick in PPQ ticks, velocity 0..127.</summary>
+        </member>
+        <member name="M:FruityLink.Core.Abstractions.NoteSpec.#ctor(System.Int32,System.Int32,System.Int32,System.Int32,System.Int32)">
+            <summary>One piano-roll note for batch authoring. key = MIDI 0..131 (60 = middle C),
+            startTick/lengthTick in PPQ ticks, velocity 0..127.</summary>
+        </member>
+        <member name="T:FruityLink.Core.Abstractions.NoteRef">
+            <summary>Identifies ONE existing note by the (Channel, Key, StartTick) triple that
+            <see cref="M:FruityLink.Core.Abstractions.INativeFlControl.GetNotesAsync(System.Int32,System.Int32,System.Int32,System.Threading.CancellationToken)"/> reports — stable (two notes can't share all three on one
+            channel), so the model can target a note without a fragile array index.</summary>
+        </member>
+        <member name="M:FruityLink.Core.Abstractions.NoteRef.#ctor(System.Int32,System.Int32,System.Int32)">
+            <summary>Identifies ONE existing note by the (Channel, Key, StartTick) triple that
+            <see cref="M:FruityLink.Core.Abstractions.INativeFlControl.GetNotesAsync(System.Int32,System.Int32,System.Int32,System.Threading.CancellationToken)"/> reports — stable (two notes can't share all three on one
+            channel), so the model can target a note without a fragile array index.</summary>
+        </member>
+        <member name="T:FruityLink.Core.Abstractions.NoteEdit">
+            <summary>An edit to ONE existing note: <see cref="P:FruityLink.Core.Abstractions.NoteEdit.Channel"/>/<see cref="P:FruityLink.Core.Abstractions.NoteEdit.Key"/>/<see cref="P:FruityLink.Core.Abstractions.NoteEdit.StartTick"/>
+            locate it (original values), and each nullable field, when set, is the note's NEW value (null = leave
+            unchanged). Changing <see cref="P:FruityLink.Core.Abstractions.NoteEdit.NewKey"/>/<see cref="P:FruityLink.Core.Abstractions.NoteEdit.NewStartTick"/> moves the note; the others don't.</summary>
+        </member>
+        <member name="M:FruityLink.Core.Abstractions.NoteEdit.#ctor(System.Int32,System.Int32,System.Int32,System.Nullable{System.Int32},System.Nullable{System.Int32},System.Nullable{System.Int32},System.Nullable{System.Int32},System.Nullable{System.Boolean})">
+            <summary>An edit to ONE existing note: <see cref="P:FruityLink.Core.Abstractions.NoteEdit.Channel"/>/<see cref="P:FruityLink.Core.Abstractions.NoteEdit.Key"/>/<see cref="P:FruityLink.Core.Abstractions.NoteEdit.StartTick"/>
+            locate it (original values), and each nullable field, when set, is the note's NEW value (null = leave
+            unchanged). Changing <see cref="P:FruityLink.Core.Abstractions.NoteEdit.NewKey"/>/<see cref="P:FruityLink.Core.Abstractions.NoteEdit.NewStartTick"/> moves the note; the others don't.</summary>
+        </member>
+        <member name="T:FruityLink.Core.Music.ChordQuality">
+            <summary>The tertian quality of a chord, inferred from its stacked intervals.</summary>
+        </member>
+        <member name="F:FruityLink.Core.Music.ChordQuality.Major">
+            <summary>Major triad.</summary>
+        </member>
+        <member name="F:FruityLink.Core.Music.ChordQuality.Minor">
+            <summary>Minor triad.</summary>
+        </member>
+        <member name="F:FruityLink.Core.Music.ChordQuality.Diminished">
+            <summary>Diminished triad.</summary>
+        </member>
+        <member name="F:FruityLink.Core.Music.ChordQuality.Augmented">
+            <summary>Augmented triad.</summary>
+        </member>
+        <member name="F:FruityLink.Core.Music.ChordQuality.MajorSeventh">
+            <summary>Major triad with a major seventh.</summary>
+        </member>
+        <member name="F:FruityLink.Core.Music.ChordQuality.MinorSeventh">
+            <summary>Minor triad with a minor seventh.</summary>
+        </member>
+        <member name="F:FruityLink.Core.Music.ChordQuality.DominantSeventh">
+            <summary>Major triad with a minor seventh.</summary>
+        </member>
+        <member name="F:FruityLink.Core.Music.ChordQuality.MinorSeventhFlatFive">
+            <summary>Half-diminished seventh chord.</summary>
+        </member>
+        <member name="F:FruityLink.Core.Music.ChordQuality.DiminishedSeventh">
+            <summary>Diminished triad with a diminished seventh.</summary>
+        </member>
+        <member name="F:FruityLink.Core.Music.ChordQuality.MinorMajorSeventh">
+            <summary>Minor triad with a major seventh.</summary>
+        </member>
+        <member name="F:FruityLink.Core.Music.ChordQuality.AugmentedSeventh">
+            <summary>Augmented triad with a minor seventh.</summary>
+        </member>
+        <member name="F:FruityLink.Core.Music.ChordQuality.Unknown">
+            <summary>Intervals do not match a named quality.</summary>
+        </member>
+        <member name="T:FruityLink.Core.Music.Chord">
+            <summary>
+            A chord produced for one step of a progression: its degree within the scale,
+            its labels, and the concrete MIDI notes plus placement in ticks.
+            </summary>
+            <param name="Degree">1-based scale degree the chord is built on.</param>
+            <param name="Roman">Roman-numeral label (e.g. "ii", "V7", "vii°").</param>
+            <param name="Symbol">Lead-sheet symbol (e.g. "Dm", "G7", "Bdim").</param>
+            <param name="RootMidi">MIDI note of the chord root.</param>
+            <param name="Quality">Inferred tertian quality.</param>
+            <param name="NoteNumbers">MIDI note numbers, lowest first.</param>
+            <param name="StartTicks">Start position of the chord in ticks.</param>
+            <param name="LengthTicks">Duration of the chord in ticks.</param>
+        </member>
+        <member name="M:FruityLink.Core.Music.Chord.#ctor(System.Int32,System.String,System.String,System.Int32,FruityLink.Core.Music.ChordQuality,System.Collections.Generic.IReadOnlyList{System.Int32},System.Int32,System.Int32)">
+            <summary>
+            A chord produced for one step of a progression: its degree within the scale,
+            its labels, and the concrete MIDI notes plus placement in ticks.
+            </summary>
+            <param name="Degree">1-based scale degree the chord is built on.</param>
+            <param name="Roman">Roman-numeral label (e.g. "ii", "V7", "vii°").</param>
+            <param name="Symbol">Lead-sheet symbol (e.g. "Dm", "G7", "Bdim").</param>
+            <param name="RootMidi">MIDI note of the chord root.</param>
+            <param name="Quality">Inferred tertian quality.</param>
+            <param name="NoteNumbers">MIDI note numbers, lowest first.</param>
+            <param name="StartTicks">Start position of the chord in ticks.</param>
+            <param name="LengthTicks">Duration of the chord in ticks.</param>
+        </member>
+        <member name="P:FruityLink.Core.Music.Chord.Degree">
+            <summary>1-based scale degree the chord is built on.</summary>
+        </member>
+        <member name="P:FruityLink.Core.Music.Chord.Roman">
+            <summary>Roman-numeral label (e.g. "ii", "V7", "vii°").</summary>
+        </member>
+        <member name="P:FruityLink.Core.Music.Chord.Symbol">
+            <summary>Lead-sheet symbol (e.g. "Dm", "G7", "Bdim").</summary>
+        </member>
+        <member name="P:FruityLink.Core.Music.Chord.RootMidi">
+            <summary>MIDI note of the chord root.</summary>
+        </member>
+        <member name="P:FruityLink.Core.Music.Chord.Quality">
+            <summary>Inferred tertian quality.</summary>
+        </member>
+        <member name="P:FruityLink.Core.Music.Chord.NoteNumbers">
+            <summary>MIDI note numbers, lowest first.</summary>
+        </member>
+        <member name="P:FruityLink.Core.Music.Chord.StartTicks">
+            <summary>Start position of the chord in ticks.</summary>
+        </member>
+        <member name="P:FruityLink.Core.Music.Chord.LengthTicks">
+            <summary>Duration of the chord in ticks.</summary>
+        </member>
+        <member name="M:FruityLink.Core.Music.Chord.ToNoteEvents(System.Int32)">
+            <summary>Expands the chord into individual <see cref="T:FruityLink.Core.Music.NoteEvent"/>s at a velocity.</summary>
+        </member>
+        <member name="T:FruityLink.Core.Music.ChordProgressionComposer">
+            <summary>
+            Builds diatonic chord progressions by stacking thirds within a scale. For
+            heptatonic scales this yields conventional tertian chords with correct qualities;
+            for pentatonic/blues scales it stacks the available scale tones.
+            </summary>
+        </member>
+        <member name="M:FruityLink.Core.Music.ChordProgressionComposer.Compose(FruityLink.Core.Music.ProgressionRequest)">
+            <summary>Compose timed, voiced chords from the requested key, scale, and degrees.</summary>
+        </member>
+        <member name="T:FruityLink.Core.Music.NoteEvent">
+            <summary>
+            A single placed note in MIDI terms, independent of any FL Studio transport.
+            Time is expressed in ticks relative to a stated pulses-per-quarter resolution.
+            </summary>
+            <param name="Number">MIDI note number 0-127 (60 = middle C).</param>
+            <param name="StartTicks">Start position in ticks from the pattern origin.</param>
+            <param name="LengthTicks">Duration in ticks.</param>
+            <param name="Velocity">MIDI velocity 1-127.</param>
+        </member>
+        <member name="M:FruityLink.Core.Music.NoteEvent.#ctor(System.Int32,System.Int32,System.Int32,System.Int32)">
+            <summary>
+            A single placed note in MIDI terms, independent of any FL Studio transport.
+            Time is expressed in ticks relative to a stated pulses-per-quarter resolution.
+            </summary>
+            <param name="Number">MIDI note number 0-127 (60 = middle C).</param>
+            <param name="StartTicks">Start position in ticks from the pattern origin.</param>
+            <param name="LengthTicks">Duration in ticks.</param>
+            <param name="Velocity">MIDI velocity 1-127.</param>
+        </member>
+        <member name="P:FruityLink.Core.Music.NoteEvent.Number">
+            <summary>MIDI note number 0-127 (60 = middle C).</summary>
+        </member>
+        <member name="P:FruityLink.Core.Music.NoteEvent.StartTicks">
+            <summary>Start position in ticks from the pattern origin.</summary>
+        </member>
+        <member name="P:FruityLink.Core.Music.NoteEvent.LengthTicks">
+            <summary>Duration in ticks.</summary>
+        </member>
+        <member name="P:FruityLink.Core.Music.NoteEvent.Velocity">
+            <summary>MIDI velocity 1-127.</summary>
+        </member>
+        <member name="T:FruityLink.Core.Music.NoteName">
+            <summary>
+            Helpers for converting between note names, pitch classes (0-11), and MIDI note
+            numbers. Uses scientific pitch notation where middle C (C4) is MIDI note 60,
+            i.e. <c>midi = (octave + 1) * 12 + pitchClass</c>.
+            </summary>
+        </member>
+        <member name="F:FruityLink.Core.Music.NoteName.SharpNames">
+            <summary>Sharp spelling for each pitch class 0-11.</summary>
+        </member>
+        <member name="M:FruityLink.Core.Music.NoteName.PitchClass(System.Int32)">
+            <summary>Normalizes a semitone offset to a pitch class 0-11 (handles negatives).</summary>
+        </member>
+        <member name="M:FruityLink.Core.Music.NoteName.ParsePitchClass(System.String)">
+            <summary>
+            Parses a note-letter (optionally with one or more accidentals) into a pitch
+            class 0-11. Accepts ASCII '#'/'b' as well as the unicode sharp/flat glyphs.
+            Throws <see cref="T:System.FormatException"/> for invalid input.
+            </summary>
+        </member>
+        <member name="M:FruityLink.Core.Music.NoteName.ToMidi(System.Int32,System.Int32)">
+            <summary>MIDI note number for a pitch class in a given octave (C4 = 60).</summary>
+        </member>
+        <member name="M:FruityLink.Core.Music.NoteName.ToMidi(System.String,System.Int32)">
+            <summary>MIDI note number for a named root in a given octave, e.g. ("C", 4) =&gt; 60.</summary>
+        </member>
+        <member name="M:FruityLink.Core.Music.NoteName.ToName(System.Int32)">
+            <summary>Sharp-spelled name with octave for a MIDI number, e.g. 60 =&gt; "C4".</summary>
+        </member>
+        <member name="T:FruityLink.Core.Music.ProgressionRequest">
+            <summary>
+            A request to build a diatonic chord progression from scale degrees, e.g.
+            degrees [1,6,4,3] in C Major produces I–vi–IV–iii.
+            </summary>
+            <param name="Root">Tonic note name, e.g. "C", "F#", "Bb".</param>
+            <param name="Scale">Scale/mode the progression is diatonic to.</param>
+            <param name="Degrees">1-based scale degrees, in order.</param>
+            <param name="SeventhChords">When true, builds four-note seventh chords instead of triads.</param>
+            <param name="Octave">Octave of the tonic (C4 = MIDI 60).</param>
+            <param name="BeatsPerChord">Quarter-note beats each chord sustains (4 = one 4/4 bar).</param>
+            <param name="Velocity">MIDI velocity 1-127 for the generated notes.</param>
+            <param name="Ppq">Pulses-per-quarter resolution for tick math (FL default is 96).</param>
+        </member>
+        <member name="M:FruityLink.Core.Music.ProgressionRequest.#ctor(System.String,FruityLink.Core.Music.ScaleType,System.Collections.Generic.IReadOnlyList{System.Int32},System.Boolean,System.Int32,System.Int32,System.Int32,System.Int32)">
+            <summary>
+            A request to build a diatonic chord progression from scale degrees, e.g.
+            degrees [1,6,4,3] in C Major produces I–vi–IV–iii.
+            </summary>
+            <param name="Root">Tonic note name, e.g. "C", "F#", "Bb".</param>
+            <param name="Scale">Scale/mode the progression is diatonic to.</param>
+            <param name="Degrees">1-based scale degrees, in order.</param>
+            <param name="SeventhChords">When true, builds four-note seventh chords instead of triads.</param>
+            <param name="Octave">Octave of the tonic (C4 = MIDI 60).</param>
+            <param name="BeatsPerChord">Quarter-note beats each chord sustains (4 = one 4/4 bar).</param>
+            <param name="Velocity">MIDI velocity 1-127 for the generated notes.</param>
+            <param name="Ppq">Pulses-per-quarter resolution for tick math (FL default is 96).</param>
+        </member>
+        <member name="P:FruityLink.Core.Music.ProgressionRequest.Root">
+            <summary>Tonic note name, e.g. "C", "F#", "Bb".</summary>
+        </member>
+        <member name="P:FruityLink.Core.Music.ProgressionRequest.Scale">
+            <summary>Scale/mode the progression is diatonic to.</summary>
+        </member>
+        <member name="P:FruityLink.Core.Music.ProgressionRequest.Degrees">
+            <summary>1-based scale degrees, in order.</summary>
+        </member>
+        <member name="P:FruityLink.Core.Music.ProgressionRequest.SeventhChords">
+            <summary>When true, builds four-note seventh chords instead of triads.</summary>
+        </member>
+        <member name="P:FruityLink.Core.Music.ProgressionRequest.Octave">
+            <summary>Octave of the tonic (C4 = MIDI 60).</summary>
+        </member>
+        <member name="P:FruityLink.Core.Music.ProgressionRequest.BeatsPerChord">
+            <summary>Quarter-note beats each chord sustains (4 = one 4/4 bar).</summary>
+        </member>
+        <member name="P:FruityLink.Core.Music.ProgressionRequest.Velocity">
+            <summary>MIDI velocity 1-127 for the generated notes.</summary>
+        </member>
+        <member name="P:FruityLink.Core.Music.ProgressionRequest.Ppq">
+            <summary>Pulses-per-quarter resolution for tick math (FL default is 96).</summary>
+        </member>
+        <member name="T:FruityLink.Core.Music.ProgressionResult">
+            <summary>The result of composing a progression: labelled chords and flattened notes.</summary>
+        </member>
+        <member name="M:FruityLink.Core.Music.ProgressionResult.#ctor(FruityLink.Core.Music.ProgressionRequest,FruityLink.Core.Music.Scale,System.Collections.Generic.IReadOnlyList{FruityLink.Core.Music.Chord},System.Collections.Generic.IReadOnlyList{FruityLink.Core.Music.NoteEvent},System.Int32)">
+            <summary>The result of composing a progression: labelled chords and flattened notes.</summary>
+        </member>
+        <member name="P:FruityLink.Core.Music.ProgressionResult.Summary">
+            <summary>Compact human/LLM-readable summary, e.g. "C Major: I – vi – IV – V".</summary>
+        </member>
+        <member name="T:FruityLink.Core.Music.Scale">
+            <summary>
+            A scale defined by its semitone intervals from the root (within one octave).
+            </summary>
+            <param name="Type">The scale identity.</param>
+            <param name="DisplayName">Human-friendly name for prompts/UI.</param>
+            <param name="Intervals">Ascending semitone offsets from the root, e.g. major = 0,2,4,5,7,9,11.</param>
+        </member>
+        <member name="M:FruityLink.Core.Music.Scale.#ctor(FruityLink.Core.Music.ScaleType,System.String,System.Collections.Generic.IReadOnlyList{System.Int32})">
+            <summary>
+            A scale defined by its semitone intervals from the root (within one octave).
+            </summary>
+            <param name="Type">The scale identity.</param>
+            <param name="DisplayName">Human-friendly name for prompts/UI.</param>
+            <param name="Intervals">Ascending semitone offsets from the root, e.g. major = 0,2,4,5,7,9,11.</param>
+        </member>
+        <member name="P:FruityLink.Core.Music.Scale.Type">
+            <summary>The scale identity.</summary>
+        </member>
+        <member name="P:FruityLink.Core.Music.Scale.DisplayName">
+            <summary>Human-friendly name for prompts/UI.</summary>
+        </member>
+        <member name="P:FruityLink.Core.Music.Scale.Intervals">
+            <summary>Ascending semitone offsets from the root, e.g. major = 0,2,4,5,7,9,11.</summary>
+        </member>
+        <member name="P:FruityLink.Core.Music.Scale.Count">
+            <summary>Number of notes per octave (7 for diatonic, 5 for pentatonic, 6 for blues).</summary>
+        </member>
+        <member name="M:FruityLink.Core.Music.Scale.DegreeToMidi(System.Int32,System.Int32)">
+            <summary>
+            Returns the MIDI note for a 0-based scale degree relative to <paramref name="rootMidi"/>,
+            wrapping across octaves so indices beyond the scale length keep ascending.
+            </summary>
+        </member>
+        <member name="T:FruityLink.Core.Music.Scales">
+            <summary>Catalog of the supported scales.</summary>
+        </member>
+        <member name="P:FruityLink.Core.Music.Scales.All">
+            <summary>All supported scales.</summary>
+        </member>
+        <member name="M:FruityLink.Core.Music.Scales.Get(FruityLink.Core.Music.ScaleType)">
+            <summary>Looks up a scale by type.</summary>
+        </member>
+        <member name="M:FruityLink.Core.Music.Scales.TryParse(System.String,FruityLink.Core.Music.ScaleType@)">
+            <summary>
+            Resolves a scale from a free-text name (case/space/punctuation insensitive),
+            understanding common aliases such as "minor", "ionian", "aeolian".
+            </summary>
+        </member>
+        <member name="T:FruityLink.Core.Music.ScaleType">
+            <summary>
+            The scales/modes the engine understands. The seven diatonic modes plus harmonic
+            and melodic minor are heptatonic (7 notes) and support standard tertian chord
+            building; the pentatonic and blues scales are included for melodic generation.
+            </summary>
+        </member>
+        <member name="F:FruityLink.Core.Music.ScaleType.Major">
+            <summary>Ionian mode.</summary>
+        </member>
+        <member name="F:FruityLink.Core.Music.ScaleType.NaturalMinor">
+            <summary>Aeolian mode.</summary>
+        </member>
+        <member name="F:FruityLink.Core.Music.ScaleType.Dorian">
+            <summary>Minor mode with a raised sixth.</summary>
+        </member>
+        <member name="F:FruityLink.Core.Music.ScaleType.Phrygian">
+            <summary>Minor mode with a lowered second.</summary>
+        </member>
+        <member name="F:FruityLink.Core.Music.ScaleType.Lydian">
+            <summary>Major mode with a raised fourth.</summary>
+        </member>
+        <member name="F:FruityLink.Core.Music.ScaleType.Mixolydian">
+            <summary>Major mode with a lowered seventh.</summary>
+        </member>
+        <member name="F:FruityLink.Core.Music.ScaleType.Locrian">
+            <summary>Minor mode with a lowered second and fifth.</summary>
+        </member>
+        <member name="F:FruityLink.Core.Music.ScaleType.HarmonicMinor">
+            <summary>Natural minor with a raised seventh.</summary>
+        </member>
+        <member name="F:FruityLink.Core.Music.ScaleType.MelodicMinor">
+            <summary>Ascending melodic minor (jazz minor).</summary>
+        </member>
+        <member name="F:FruityLink.Core.Music.ScaleType.MajorPentatonic">
+            <summary>Five-note major scale.</summary>
+        </member>
+        <member name="F:FruityLink.Core.Music.ScaleType.MinorPentatonic">
+            <summary>Five-note minor scale.</summary>
+        </member>
+        <member name="F:FruityLink.Core.Music.ScaleType.Blues">
+            <summary>Six-note minor blues scale.</summary>
+        </member>
+    </members>
+</doc>

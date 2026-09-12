@@ -28,9 +28,16 @@ public sealed class ToolDescriptionBudgetTests
     /// (list_versions + get_version_changes), then by 2 more for the plugin "man db" on Knowledge
     /// (list_plugin_manuals + get_plugin_manual), then by 2 more (2026-07-07): Knowledge search_manual
     /// (FL Studio manual RAG) + NativeControl native_list_mixer_tracks (resolve a mixer bus NAME to
-    /// its index instead of scanning). The ratchet only stops growth — shrinking the surface is always
-    /// welcome; if a new tool is genuinely needed, raise this literal in the same change that adds it.</summary>
-    private const int MaxAdvertisedToolCount = 88;
+    /// its index instead of scanning), then by 1 (2026-07-07): native_set_mixer_track_muted (mixer
+    /// mute had NO tool at all — the model muted via volume=0, which lost the prior level), then by 9
+    /// more (2026-07-07 tool-surface gap-fill): surgical piano-roll editing native_edit_notes/
+    /// native_delete_notes (was: clear the whole pattern + rebuild) + native_clone_pattern; the rename
+    /// family native_set_pattern_name/native_set_channel_name/native_set_mixer_track_name (labels the
+    /// model creates, which its own name→index lookups then rely on); native_solo_channel/
+    /// native_solo_track; native_set_loop_region. The ratchet only stops growth — shrinking the surface
+    /// is always welcome; if a new tool is genuinely needed, raise this literal in the same change that
+    /// adds it.</summary>
+    private const int MaxAdvertisedToolCount = 98;
 
     /// <summary>Every plugin type whose [KernelFunction] methods reach the model.</summary>
     private static readonly Type[] AdvertisedPluginTypes =

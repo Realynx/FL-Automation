@@ -56,16 +56,10 @@ public sealed class FlCompatibilityList
     /// <summary>The packed list next to the installer EXE.</summary>
     public static string DefaultPath => Path.Combine(AppContext.BaseDirectory, FileName);
 
-    private static readonly JsonSerializerOptions JsonOpts = new()
-    {
-        WriteIndented = true,
-        DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
-    };
-
-    public string ToJson() => JsonSerializer.Serialize(this, JsonOpts);
+    public string ToJson() => JsonSerializer.Serialize(this, InstallerJson.Default);
 
     public static FlCompatibilityList FromJson(string json) =>
-        JsonSerializer.Deserialize<FlCompatibilityList>(json, JsonOpts)
+        JsonSerializer.Deserialize<FlCompatibilityList>(json, InstallerJson.Default)
         ?? throw new InvalidDataException("Compatibility JSON deserialized to null.");
 
     public static FlCompatibilityList Load(string path) => FromJson(File.ReadAllText(path));
@@ -76,17 +70,27 @@ public sealed class FlCompatibilityList
 }
 
 /// <summary>Outcome of the pre-install compatibility + integrity check.</summary>
+/// <param name="GateBypassed">True when the check WOULD have blocked but the gate is currently
+/// disabled (see <see cref="FlIntegrity.GateEnforced"/>), so <see cref="Ok"/> was forced true and
+/// <see cref="BlockReason"/>/<see cref="Problems"/> describe what would have blocked — for logging
+/// and future drip-release data, never to stop the install.</param>
 public sealed record CompatCheckResult(
     bool Ok,
     string? FlVersion,
     string? BlockReason,
-    IReadOnlyList<string> Problems)
+    IReadOnlyList<string> Problems,
+    bool GateBypassed = false)
 {
     public static CompatCheckResult Pass(string version) =>
         new(true, version, null, Array.Empty<string>());
 
     public static CompatCheckResult Block(string? version, string reason, IReadOnlyList<string>? problems = null) =>
         new(false, version, reason, problems ?? Array.Empty<string>());
+
+    /// <summary>A would-be block downgraded to a non-blocking pass because the gate is disabled.
+    /// Carries the reason/problems so callers can log what would have been refused.</summary>
+    public static CompatCheckResult Bypass(string? version, string reason, IReadOnlyList<string>? problems = null) =>
+        new(true, version, reason, problems ?? Array.Empty<string>(), GateBypassed: true);
 }
 
 /// <summary>
@@ -96,6 +100,21 @@ public sealed record CompatCheckResult(
 /// </summary>
 public static class FlIntegrity
 {
+    /// <summary>
+    /// MASTER SWITCH for the pre-install gates (build-verify AND SHA-256 integrity).
+    /// <para><b>TEMPORARILY <c>false</c> for launch.</b> During onboarding a verified-build or
+    /// hash-mismatch refusal is a worse look than letting an unusual install through, and it was
+    /// causing intermittent "can't install" reports. While this is false, <see cref="Check"/> still
+    /// runs the full evaluation and reports (via <see cref="CompatCheckResult.GateBypassed"/> + the
+    /// installer log) what it WOULD have blocked — so we collect field data — but it never stops an
+    /// install.</para>
+    /// <para>Flip this ONE line back to <c>true</c> to re-arm anti-piracy + build-stability
+    /// enforcement once a customer base is onboarded (the planned "drip release"), then ship a new
+    /// installer. It is a compile-time const on purpose: an end user must not be able to toggle an
+    /// anti-piracy gate at runtime.</para>
+    /// </summary>
+    public const bool GateEnforced = false;
+
     /// <summary>Extensions covered by the integrity hash list.</summary>
     private static readonly string[] BinaryExtensions = { ".exe", ".dll" };
 
@@ -171,33 +190,46 @@ public static class FlIntegrity
     /// <summary>
     /// The full pre-install gate: load the packed list, match the FL build, verify the hashes.
     /// Fails CLOSED when the list is missing/corrupt — a broken package must not skip the gates.
+    /// <para>When enforcement is off (<see cref="GateEnforced"/> false, overridable via
+    /// <paramref name="enforce"/> for tests) every would-be block is downgraded to a non-blocking
+    /// <see cref="CompatCheckResult.Bypass"/> that still carries the reason — the install proceeds
+    /// but the log records what would have been refused.</para>
     /// </summary>
-    public static CompatCheckResult Check(string flDir, string? listPath = null)
+    public static CompatCheckResult Check(string flDir, string? listPath = null, bool? enforce = null)
     {
+        bool enforced = enforce ?? GateEnforced;
+
+        // When the gate is disabled, a would-be block becomes a Bypass (Ok=true) instead of a Block,
+        // so a single site here controls both the CLI and GUI. The reason still rides along for the log.
+        CompatCheckResult Refuse(string? version, string reason, IReadOnlyList<string>? problems = null) =>
+            enforced
+                ? CompatCheckResult.Block(version, reason, problems)
+                : CompatCheckResult.Bypass(version, reason, problems);
+
         FlCompatibilityList list;
         var path = listPath ?? FlCompatibilityList.DefaultPath;
         try
         {
             if (!File.Exists(path))
-                return CompatCheckResult.Block(null,
+                return Refuse(null,
                     $"compatibility list not found ({path}) — this installer package is incomplete.");
             list = FlCompatibilityList.Load(path);
         }
         catch (Exception ex)
         {
-            return CompatCheckResult.Block(null, $"compatibility list unreadable: {ex.Message}");
+            return Refuse(null, $"compatibility list unreadable: {ex.Message}");
         }
 
         var version = GetFlVersion(flDir);
         if (version is null)
-            return CompatCheckResult.Block(null,
+            return Refuse(null,
                 $"could not read the FL Studio version from {FlStudioLocator.ExeName}.");
 
         var build = list.FindByVersion(version);
         if (build is null)
         {
             var known = string.Join(", ", list.VerifiedBuilds.Select(b => b.Version));
-            return CompatCheckResult.Block(version,
+            return Refuse(version,
                 $"FL Studio {version} has not been verified with FL Automate yet. " +
                 $"Verified build(s): {(known.Length > 0 ? known : "none")}. " +
                 "An update is usually verified within days of an FL release — please wait for it rather than risk an unstable install.");
@@ -205,7 +237,7 @@ public static class FlIntegrity
 
         var problems = Verify(flDir, build);
         if (problems.Count > 0)
-            return CompatCheckResult.Block(version,
+            return Refuse(version,
                 $"FL Studio {version} does not match the official verified build — " +
                 $"{problems.Count} file(s) are modified or missing. FL Automate only installs on unmodified, " +
                 "genuine FL Studio installs.", problems);
@@ -230,5 +262,40 @@ public static class FlIntegrity
     {
         using var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read, 1 << 20);
         return Convert.ToHexString(SHA256.HashData(stream)).ToLowerInvariant();
+    }
+}
+
+/// <summary>
+/// Front-end plumbing shared by the CLI and GUI pre-install gates: runs
+/// <see cref="FlIntegrity.Check"/> and logs the shared lines (the verified-build success line, and
+/// each per-file problem on failure). Callers decide what a failure means (abort, dry-run warning,
+/// or the CLI's --force override) and log the block reason in their own words.
+/// </summary>
+public static class FlIntegrityGate
+{
+    public static CompatCheckResult CheckAndLog(string flPath, IProgressLog log)
+    {
+        var check = FlIntegrity.Check(flPath);
+        if (check.Ok)
+        {
+            if (check.GateBypassed)
+            {
+                // Gate disabled for launch: proceed, but leave a clear trail of what it WOULD have
+                // refused (each per-file problem too), so we can size the impact before re-arming.
+                log.Warn("Compatibility/integrity checks are currently DISABLED — installing anyway.");
+                log.Warn($"  would have blocked: {check.BlockReason}");
+                foreach (var p in check.Problems)
+                    log.Warn("    " + p);
+            }
+            else
+            {
+                log.Success($"FL Studio {check.FlVersion} is a verified build; all binaries match.");
+            }
+            return check;
+        }
+
+        foreach (var p in check.Problems)
+            log.Error("  " + p);
+        return check;
     }
 }

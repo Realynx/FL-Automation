@@ -4,7 +4,7 @@ using System.Collections.ObjectModel;
 using System.Linq;
 using System.Threading.Tasks;
 using System.Windows.Input;
-using Avalonia.Threading;
+using FruityLink.Ui.Avalonia.Hosting;
 using FruityLink.Ui.Avalonia.Services;
 
 namespace FruityLink.Ui.Avalonia.ViewModels;
@@ -50,7 +50,6 @@ public sealed class VersionControlViewModel : ViewModelBase
     public ICommand DismissRecoveryCommand => _dismissRecovery;
     public ICommand RefreshCommand => _refresh;
 
-    public bool HasCommits => Commits.Count > 0;
     public bool IsEmpty => Commits.Count == 0;
 
     public CommitVm? Current { get => _current; private set => SetProperty(ref _current, value); }
@@ -78,18 +77,11 @@ public sealed class VersionControlViewModel : ViewModelBase
         Rebuild();
     }
 
-    /// <summary>Drop the backend subscription (call on teardown to avoid a dangling handler).</summary>
-    public void Detach() => Unsubscribe();
-
     private void Subscribe() => _vc.Changed += OnBackendChanged;
     private void Unsubscribe() => _vc.Changed -= OnBackendChanged;
 
     // Fires off-thread → marshal onto the UI thread before touching the ObservableCollection.
-    private void OnBackendChanged()
-    {
-        if (Dispatcher.UIThread.CheckAccess()) Rebuild();
-        else Dispatcher.UIThread.Post(Rebuild);
-    }
+    private void OnBackendChanged() => UiThread.RunOrPost(Rebuild);
 
     /// <summary>Rebuild the row list from backend History (newest first) + recompute current/ahead flags.</summary>
     public void Rebuild()
@@ -110,7 +102,6 @@ public sealed class VersionControlViewModel : ViewModelBase
         Current = Commits.FirstOrDefault(c => c.IsCurrent);
         _pendingJump = null;
 
-        OnPropertyChanged(nameof(HasCommits));
         OnPropertyChanged(nameof(IsEmpty));
         OnPropertyChanged(nameof(Summary));
         OnPropertyChanged(nameof(CanUndo));

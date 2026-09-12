@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
+using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 using Avalonia.Controls;
@@ -25,7 +26,13 @@ public partial class MainWindow : Window
 {
     private readonly InstallManifest _manifest;
     private readonly string _payloadRoot;
+    private readonly bool _isPackaged;
+    private readonly List<(CheckBox Box, CommunityPlugin Plugin)> _communityRows = new();
+    private CheckBox? _mcpSelection;
     private bool _busy;
+
+    /// <summary>What we call the thing being installed: the sold product vs the open-source system.</summary>
+    private string ProductName => _isPackaged ? "FL Automate" : "FruityLink";
 
     /// <summary>Completes the pending ConfirmAsync when the overlay's OK/Cancel is clicked.</summary>
     private TaskCompletionSource<bool>? _confirmTcs;
@@ -40,18 +47,106 @@ public partial class MainWindow : Window
         InitializeComponent();
 
         _manifest = InstallManifest.Default();
-        _payloadRoot = InstallerInfo.ResolvePayloadRoot(null);
+        _payloadRoot = InstallerInfo.ResolvePayloadRoot(InstallerApp.InitialPayloadRoot);
+        _isPackaged = InstallerInfo.IsPackagedEdition(_payloadRoot);
 
         var path = initialFlPath
                    ?? FlStudioLocator.DetectBest()
                    ?? FlStudioLocator.DefaultPath;
         PathBox.Text = path;
 
-        AppendLine(LogLevel.Info, $"FL Automate installer {InstallerInfo.Version}");
+        ApplyEdition();
+        AddBundledPlugins();
+
+        AppendLine(LogLevel.Info, $"FL Automate installer {InstallerInfo.Version} ({(_isPackaged ? "packaged" : "community")} edition)");
         AppendLine(LogLevel.Info, $"Payload root: {_payloadRoot}");
         if (!Directory.Exists(_payloadRoot))
             AppendLine(LogLevel.Warn, "Payload folder not found next to the installer — Install will fail until the payload is present (Dry run still works).");
         AppendLine(LogLevel.Info, "Choose a folder, then Install or Uninstall. Use Dry run to preview.");
+
+        _ = LoadCommunityPluginsAsync(InstallerApp.InitialCommunityPlugins);
+    }
+
+    // ------------------------------------------------------------ editions & plugins ----
+
+    /// <summary>
+    /// Packaged edition (sold on fl-automate.com): the FL Automate plugin ships in the payload and
+    /// is always installed — shown as a permanently checked, read-only row. Community edition
+    /// (open-source GitHub artifact): omits the sold plugin. Both editions offer bundled FLMCP.
+    /// </summary>
+    private void ApplyEdition()
+    {
+        if (_isPackaged)
+        {
+            var soldRow = new CheckBox
+            {
+                IsChecked = true,
+                IsEnabled = false,
+                Content = "FL Automate — AI assistant (included with your purchase)",
+            };
+            PluginList.Children.Insert(0, soldRow);
+        }
+        else
+        {
+            HeadlineProduct.Text = "FruityLink";
+            SubtitleText.Text =
+                "FruityLink is the open-source C# plugin system for FL Studio. Installs the FruityLink " +
+                "bridge and plugin host into the FL Studio folder — the original version.dll is backed " +
+                "up, and uninstalling restores it.";
+        }
+    }
+
+    /// <summary>
+    /// Fetches the community plugin catalog from the open-source repo and renders one optional
+    /// checkbox per plugin. Fully best-effort: offline or an empty catalog never blocks the
+    /// base install.
+    /// </summary>
+    private async Task LoadCommunityPluginsAsync(IReadOnlyList<string> precheckIds)
+    {
+        try
+        {
+            var plugins = (await CommunityPluginCatalog.FetchAsync())
+                .Where(plugin => _mcpSelection is null || !plugin.Id.Equals(BundledMcp.Id, StringComparison.OrdinalIgnoreCase))
+                .ToList();
+            if (plugins.Count == 0)
+            {
+                CommunityStatus.Text = "No additional community plugins are available.";
+                return;
+            }
+
+            CommunityStatus.Text = "Additional community plugins (download required):";
+            foreach (var plugin in plugins)
+            {
+                var box = new CheckBox
+                {
+                    IsChecked = precheckIds.Contains(plugin.Id, StringComparer.OrdinalIgnoreCase),
+                    Content = string.IsNullOrWhiteSpace(plugin.Description)
+                        ? plugin.Name
+                        : $"{plugin.Name} — {plugin.Description}",
+                };
+                _communityRows.Add((box, plugin));
+                PluginList.Children.Add(box);
+            }
+        }
+        catch (Exception ex)
+        {
+            CommunityStatus.Text = "Additional plugin catalog unavailable. Included plugins can still be installed offline.";
+            AppendLine(LogLevel.Warn, "Community plugin catalog unavailable: " + ex.Message);
+        }
+    }
+
+    private List<CommunityPlugin> SelectedCommunityPlugins() =>
+        _communityRows.Where(r => r.Box.IsChecked == true).Select(r => r.Plugin).ToList();
+
+    private void AddBundledPlugins()
+    {
+        if (!BundledMcp.IsAvailable(_payloadRoot)) return;
+        _mcpSelection = new CheckBox
+        {
+            Content = BundledMcp.SelectionLabel,
+            IsChecked = !InstallerApp.WithoutMcp,
+        };
+        PluginList.Children.Insert(_isPackaged ? 1 : 0, _mcpSelection);
     }
 
     // ------------------------------------------------------------ custom chrome ----
@@ -178,73 +273,35 @@ public partial class MainWindow : Window
         }
 
         // Verified-build + integrity gates before any install (uninstall is never gated so FL can
-        // always be restored to stock). Hashing ~1 GB of binaries takes a moment — run it off the
-        // UI thread behind the busy state. Dry run downgrades a failure to a log warning; the GUI
-        // has no override on purpose (CLI --force is the unsupported dev escape hatch).
-        if (install && validation.IsValid)
-        {
-            SetBusy(true);
-            AppendLine(LogLevel.Info, "Checking FL Studio build + file integrity against the verified list…");
-            CompatCheckResult check;
-            try { check = await Task.Run(() => FlIntegrity.Check(flPath)); }
-            finally { SetBusy(false); }
+        // always be restored to stock).
+        if (install && validation.IsValid && !await PassesCompatGateAsync(flPath, dryRun))
+            return;
 
-            if (check.Ok)
+        if (!dryRun && !await ConfirmAndCheckElevationAsync(flPath, install))
+            return;
+
+        // Selected community plugins download + stage BEFORE the engine runs, so the install
+        // plan already contains them (and the install record covers them for uninstall).
+        var manifest = BundledMcp.Select(_manifest, _payloadRoot, include: _mcpSelection?.IsChecked == true);
+        string? stagingRoot = null;
+        if (install)
+        {
+            var selected = SelectedCommunityPlugins();
+            if (selected.Count > 0)
             {
-                AppendLine(LogLevel.Success, $"FL Studio {check.FlVersion} is a verified build; all binaries match.");
-            }
-            else
-            {
-                foreach (var p in check.Problems) AppendLine(LogLevel.Error, "  " + p);
-                AppendLine(LogLevel.Error, "Compatibility check failed: " + check.BlockReason);
                 if (dryRun)
                 {
-                    AppendLine(LogLevel.Warn, "Continuing dry-run preview despite the failed check (nothing will be written).");
+                    foreach (var plugin in selected)
+                        AppendLine(LogLevel.Info, $"[dry run] would download and install community plugin: {plugin.Name}");
                 }
                 else
                 {
-                    var title = check.Problems.Count > 0
-                        ? "FL Studio install doesn't match the official build"
-                        : "This FL Studio build isn't verified yet";
-                    await AlertAsync(title, check.BlockReason ?? "Compatibility check failed.", "Close");
-                    return;
+                    var staged = await StageCommunityPluginsAsync(selected, manifest);
+                    if (staged is null)
+                        return; // a download failed; the user was told — let them retry/uncheck
+                    stagingRoot = staged.Value.Root;
+                    manifest = staged.Value.Manifest;
                 }
-            }
-        }
-
-        if (!dryRun)
-        {
-            var confirmed = await ConfirmAsync(
-                $"Confirm {verbName.ToLowerInvariant()}",
-                install
-                    ? $"Install FL Automate into:\n{flPath}\n\nFL Studio's version.dll will be backed up first.\n\nAny running FL Studio instances will be closed first (its files are locked while it runs)."
-                    : $"Uninstall FL Automate from:\n{flPath}\n\nThe original version.dll will be restored.\n\nAny running FL Studio instances will be closed first (its files are locked while it runs).",
-                verbName);
-            if (!confirmed) return;
-
-            // Program Files needs admin: offer to relaunch elevated.
-            var writableCheck = new RealFileSystem();
-            if (!writableCheck.IsDirectoryWritable(flPath) && !Elevation.IsAdministrator())
-            {
-                var elevate = await ConfirmAsync(
-                    "Administrator required",
-                    $"'{flPath}' requires administrator rights to modify.\n\nRelaunch the installer as administrator?",
-                    "Relaunch as admin");
-                if (elevate)
-                {
-                    var args = new List<string>
-                    {
-                        install ? "--install" : "--uninstall",
-                        "--gui", "--fl-path", flPath,
-                    };
-                    if (Elevation.RelaunchAsAdmin(args.ToArray()))
-                    {
-                        ShutdownApp();
-                        return;
-                    }
-                    AppendLine(LogLevel.Error, "Elevation was declined; cannot modify the FL Studio folder.");
-                }
-                return;
             }
         }
 
@@ -256,36 +313,14 @@ public partial class MainWindow : Window
         OperationResult result;
         try
         {
+            // No beforeExecute gate, so the pipeline never returns null (hence the !).
             result = await Task.Run(() =>
-            {
-                var fs = new RealFileSystem();
-                var engine = new InstallEngine(fs, InstallerInfo.Version, new RealProcessManager());
-                if (install)
-                {
-                    var plan = engine.PlanInstall(flPath, _manifest, _payloadRoot, out var errors);
-                    foreach (var err in errors) log.Error("payload problem: " + err);
-                    if (errors.Count > 0 && !dryRun)
-                    {
-                        log.Error("Aborting: required payload files are missing.");
-                        // Populate Errors so the finish page reports FAILED (not a false success).
-                        var aborted = new OperationResult { Success = false, DryRun = dryRun };
-                        foreach (var err in errors) aborted.Errors.Add(err);
-                        return aborted;
-                    }
-                    return engine.ExecuteInstall(plan, flPath, dryRun, log);
-                }
-                else
-                {
-                    var record = engine.TryLoadRecord(flPath, _manifest);
-                    var plan = engine.PlanUninstall(flPath, _manifest, record, log);
-                    if (plan.Count == 0)
-                    {
-                        log.Warn("Nothing to uninstall (no FruityLink files found).");
-                        return new OperationResult { Success = true, DryRun = dryRun };
-                    }
-                    return engine.ExecuteUninstall(plan, dryRun, log);
-                }
-            });
+                install
+                    ? InstallerOperations.RunInstall(
+                          flPath, manifest, _payloadRoot, dryRun, log,
+                          "Aborting: required payload files are missing.",
+                          missingPayloadDryRunWarning: null, out _)!
+                    : InstallerOperations.RunUninstall(flPath, manifest, dryRun, log, out _)!);
         }
         catch (Exception ex)
         {
@@ -293,9 +328,145 @@ public partial class MainWindow : Window
             SetBusy(false);
             return;
         }
+        finally
+        {
+            CleanUpStaging(stagingRoot);
+        }
 
         SetBusy(false);
         ShowFinish(result, install, dryRun, flPath);
+    }
+
+    /// <summary>
+    /// Downloads the selected community plugins into a temp staging dir and returns the base
+    /// manifest extended with one directory item per plugin. Null when a download fails (the
+    /// user gets an alert and stays on the start page — nothing has touched FL Studio yet).
+    /// </summary>
+    private async Task<(string Root, InstallManifest Manifest)?> StageCommunityPluginsAsync(
+        List<CommunityPlugin> selected, InstallManifest manifest)
+    {
+        var root = Path.Combine(Path.GetTempPath(), "FLAutomateInstaller",
+            Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        SetBusy(true);
+        try
+        {
+            foreach (var plugin in selected)
+            {
+                AppendLine(LogLevel.Info, $"Downloading community plugin: {plugin.Name}…");
+                var stagedDir = await CommunityPluginStager(plugin, root);
+                manifest.Items.Add(CommunityPluginCatalog.ToPayloadItem(plugin, stagedDir));
+                AppendLine(LogLevel.Success, $"Ready to install: {plugin.Name}");
+            }
+            return (root, manifest);
+        }
+        catch (Exception ex)
+        {
+            AppendLine(LogLevel.Error, "Community plugin download failed: " + ex.Message);
+            CleanUpStaging(root);
+            await AlertAsync(
+                "Community plugin download failed",
+                $"{ex.Message}\n\nCheck your connection, or uncheck the plugin and install without it. Nothing was changed.",
+                "Close");
+            return null;
+        }
+        finally
+        {
+            SetBusy(false);
+        }
+    }
+
+    private static Task<string> CommunityPluginStager(CommunityPlugin plugin, string root) =>
+        CommunityPluginCatalog.StageAsync(plugin, root);
+
+    private static void CleanUpStaging(string? stagingRoot)
+    {
+        if (stagingRoot is null) return;
+        try { Directory.Delete(stagingRoot, recursive: true); }
+        catch { /* best-effort temp cleanup */ }
+    }
+
+    /// <summary>
+    /// Verified-build + integrity gate. Hashing ~1 GB of binaries takes a moment — run it off the
+    /// UI thread behind the busy state. Dry run downgrades a failure to a log warning; the GUI has
+    /// no override on purpose (CLI --force is the unsupported dev escape hatch). True = proceed.
+    /// </summary>
+    private async Task<bool> PassesCompatGateAsync(string flPath, bool dryRun)
+    {
+        SetBusy(true);
+        AppendLine(LogLevel.Info, "Checking FL Studio build + file integrity against the verified list…");
+        var log = new UiThreadLog(this);
+        CompatCheckResult check;
+        try { check = await Task.Run(() => FlIntegrityGate.CheckAndLog(flPath, log)); }
+        finally { SetBusy(false); }
+
+        if (check.Ok)
+            return true;
+
+        AppendLine(LogLevel.Error, "Compatibility check failed: " + check.BlockReason);
+        if (dryRun)
+        {
+            AppendLine(LogLevel.Warn, "Continuing dry-run preview despite the failed check (nothing will be written).");
+            return true;
+        }
+
+        var title = check.Problems.Count > 0
+            ? "FL Studio install doesn't match the official build"
+            : "This FL Studio build isn't verified yet";
+        await AlertAsync(title, check.BlockReason ?? "Compatibility check failed.", "Close");
+        return false;
+    }
+
+    /// <summary>
+    /// The operation confirm dialog plus Program Files elevation handling (offer to relaunch as
+    /// admin). True = proceed with the operation in this process.
+    /// </summary>
+    private async Task<bool> ConfirmAndCheckElevationAsync(string flPath, bool install)
+    {
+        var verbName = install ? "Install" : "Uninstall";
+        var confirmed = await ConfirmAsync(
+            $"Confirm {verbName.ToLowerInvariant()}",
+            install
+                ? $"Install {ProductName} into:\n{flPath}\n\nFL Studio's version.dll will be backed up first.\n\nAny running FL Studio instances will be closed first (its files are locked while it runs)."
+                : $"Uninstall {ProductName} from:\n{flPath}\n\nThe original version.dll will be restored.\n\nAny running FL Studio instances will be closed first (its files are locked while it runs).",
+            verbName);
+        if (!confirmed) return false;
+
+        // Program Files needs admin: offer to relaunch elevated.
+        var writableCheck = new RealFileSystem();
+        if (!writableCheck.IsDirectoryWritable(flPath) && !Elevation.IsAdministrator())
+        {
+            var elevate = await ConfirmAsync(
+                "Administrator required",
+                $"'{flPath}' requires administrator rights to modify.\n\nRelaunch the installer as administrator?",
+                "Relaunch as admin");
+            if (elevate)
+            {
+                var args = new List<string>
+                {
+                    install ? "--install" : "--uninstall",
+                    "--gui", "--fl-path", flPath,
+                    "--payload-root", _payloadRoot,
+                };
+                if (_mcpSelection?.IsChecked != true) args.Add("--without-mcp");
+                var selectedIds = SelectedCommunityPlugins().Select(p => p.Id).ToList();
+                if (selectedIds.Count > 0)
+                {
+                    args.Add("--community-plugins");
+                    args.Add(string.Join(',', selectedIds));
+                }
+                if (Elevation.RelaunchAsAdmin(args.ToArray()))
+                {
+                    ShutdownApp();
+                    return false;
+                }
+                AppendLine(LogLevel.Error, "Elevation was declined; cannot modify the FL Studio folder.");
+            }
+            return false;
+        }
+
+        return true;
     }
 
     // ------------------------------------------------------------- finish page ----
@@ -320,7 +491,7 @@ public partial class MainWindow : Window
                 case OperationOutcome.Success:
                     if (install)
                     {
-                        headline = "✓ FL Automate is installed";
+                        headline = $"✓ {ProductName} is installed";
                         offerLaunch = true; // ONLY after a successful real install
                     }
                     else
@@ -463,6 +634,9 @@ public partial class MainWindow : Window
         DetectBtn.IsEnabled = !busy;
         PathBox.IsEnabled = !busy;
         DryRunCheck.IsEnabled = !busy;
+        if (_mcpSelection is not null) _mcpSelection.IsEnabled = !busy;
+        foreach (var (box, _) in _communityRows)
+            box.IsEnabled = !busy;
     }
 
     private void AppendLine(LogLevel level, string message)

@@ -16,8 +16,6 @@ namespace FruityLink.Llm;
 /// </summary>
 public sealed class OpenAiCompatibleEmbeddingClient : IEmbeddingClient
 {
-    private static readonly JsonSerializerOptions SerializerOptions = new(JsonSerializerDefaults.Web);
-
     private readonly HttpClient _http;
     private readonly string _embeddingsUrl;
     private readonly string _model;
@@ -72,7 +70,7 @@ public sealed class OpenAiCompatibleEmbeddingClient : IEmbeddingClient
         using var httpRequest = new HttpRequestMessage(HttpMethod.Post, _embeddingsUrl)
         {
             Content = new StringContent(
-                JsonSerializer.Serialize(request, SerializerOptions), Encoding.UTF8, "application/json"),
+                JsonSerializer.Serialize(request, LlmJson.Web), Encoding.UTF8, "application/json"),
         };
         if (_apiKey is not null)
         {
@@ -93,7 +91,7 @@ public sealed class OpenAiCompatibleEmbeddingClient : IEmbeddingClient
         }
 
         string payload = await response.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
-        EmbeddingResponse? parsed = JsonSerializer.Deserialize<EmbeddingResponse>(payload, SerializerOptions);
+        EmbeddingResponse? parsed = JsonSerializer.Deserialize<EmbeddingResponse>(payload, LlmJson.Web);
 
         if (parsed?.Data is null)
         {

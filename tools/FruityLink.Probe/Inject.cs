@@ -87,8 +87,7 @@ internal static class Inject
 
     public static int Reload(List<string> pos)
     {
-        int rc = Eject();
-        if (rc != 0 && rc != 0) { /* eject prints its own status; continue to inject regardless */ }
+        Eject(); // prints its own status; continue to inject regardless of the outcome.
         return Run(pos);
     }
 

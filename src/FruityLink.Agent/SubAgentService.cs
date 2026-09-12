@@ -27,8 +27,10 @@ public sealed class SubAgentService(
     private readonly AgentTurnRunner _runner = new();
     private readonly AgentPromptOptions _promptOptions = promptOptions ?? new();
 
-    /// <summary>Runs one task to completion (auto-invoking tools) and returns the sub-agent's summary.</summary>
-    public async Task<string> RunTaskAsync(string task, CancellationToken ct = default)
+    /// <summary>Runs one task to completion (auto-invoking tools) and returns the sub-agent's summary.
+    /// <paramref name="sharedContext"/> (optional) is the parent's already-fetched project state, prepended
+    /// so this sub-agent doesn't re-survey PPQ/channels/patterns the orchestrator already read once.</summary>
+    public async Task<string> RunTaskAsync(string task, string? sharedContext = null, CancellationToken ct = default)
     {
         // Fresh kernel + history per call: parallel sub-agents must not share mutable turn state.
         // toolFilter is shared on purpose so sub-agent tool calls surface in the UI too.
@@ -39,8 +41,14 @@ public sealed class SubAgentService(
         var history = new ChatHistory();
         history.AddSystemMessage(SystemPrompts.BuildSubAgent(_promptOptions));
 
+        string input = string.IsNullOrWhiteSpace(sharedContext)
+            ? task
+            : $"CURRENT PROJECT STATE (already fetched for you — use these values directly; do NOT call " +
+              $"native_get_ppq / native_list_channels / native_list_patterns to re-read them):\n{sharedContext}\n\n" +
+              $"YOUR TASK: {task}";
+
         TurnResult result = await _runner
-            .RunTurnAsync(agentKernel.Kernel, agentKernel.Chat, history, task, agentKernel.Settings, ct: ct)
+            .RunTurnAsync(agentKernel.Kernel, agentKernel.Chat, history, input, agentKernel.Settings, ct: ct)
             .ConfigureAwait(false);
 
         // A sub-agent that ends on a tool call with empty content (common with weak models) would

@@ -27,16 +27,22 @@ public sealed class ChatKernelFactory : IChatKernelFactory
 
     private readonly HttpClient _httpClient;
 
-    public ChatKernelFactory(ILlmDiagnostics diagnostics, IAccountAuth auth)
+    public ChatKernelFactory(
+        ILlmDiagnostics diagnostics,
+        IAccountAuth auth,
+        Action<LlmModelFallback>? onModelFallback = null)
     {
         ArgumentNullException.ThrowIfNull(auth);
 
         // Chain (outermost first): gateway auth (stamp the Bearer token; one refresh+retry on 401;
         // map 402/403 quota/subscription statuses onto readable errors — outermost so its retry
-        // re-enters the whole pipeline as an ordinary request) → enforce the per-turn request
-        // budget (a runaway auto-invoke loop whose rounds all fail tool validation bypasses the
-        // round-cap filter — the budget is the layer that sees EVERY round) → retry transient
-        // failures → log every attempt → repair malformed tool-call argument JSON → the network.
+        // re-enters the whole pipeline as an ordinary request) → fall back to the plan-default
+        // model when the gateway rejects a stale saved model (a plan change would otherwise brick
+        // every turn with 400; inside auth so the resend reuses the stamped token, outside the
+        // budget so the resend is counted) → enforce the per-turn request budget (a runaway
+        // auto-invoke loop whose rounds all fail tool validation bypasses the round-cap filter —
+        // the budget is the layer that sees EVERY round) → retry transient failures → log every
+        // attempt → repair malformed tool-call argument JSON → the network.
         // The agent runs non-streaming, so responses are a single JSON body the repair handler can
         // sanitize before Semantic Kernel parses them.
         // Decompress at the transport so the repair handler always sees plaintext JSON — a gateway
@@ -46,16 +52,19 @@ public sealed class ChatKernelFactory : IChatKernelFactory
         {
             AutomaticDecompression = System.Net.DecompressionMethods.All,
         };
-        // Both inner handlers receive the diagnostics sink: the logger records every attempt (and
-        // usage telemetry on success), the repair handler records what it had to fix — repairs and
-        // repair failures must never be silent.
+        // The inner handlers receive the diagnostics sink: the logger records every attempt (and
+        // usage telemetry on success), the repair and fallback handlers record what they had to
+        // fix — repairs, fallbacks, and their failures must never be silent.
         var handler = new GatewayAuthHandler(auth,
-            new LlmTurnBudgetHandler(
-                new LlmRetryHandler(
-                    new LlmLoggingHandler(
-                        new LlmToolCallRepairHandler(transport, diagnostics),
-                        diagnostics)),
-                diagnostics));
+            new LlmModelFallbackHandler(
+                new LlmTurnBudgetHandler(
+                    new LlmRetryHandler(
+                        new LlmLoggingHandler(
+                            new LlmToolCallRepairHandler(transport, diagnostics),
+                            diagnostics)),
+                    diagnostics),
+                diagnostics,
+                onModelFallback));
         _httpClient = new HttpClient(handler, disposeHandler: true) { Timeout = TimeSpan.FromMinutes(10) };
     }
 

@@ -44,6 +44,14 @@
   </ItemGroup>
 
   <ItemGroup>
+    <!-- SDK: the generic Avalonia-in-FL hosting layer (EmbeddedAvaloniaHost STA thread +
+         EmbeddedAvaloniaView embed mechanics), split out of this project's Hosting folder.
+         AvaloniaChatView builds on it; the product supplies its App via an AppBuilder factory
+         on the first EmbeddedAvaloniaHost.EnsureStarted call (see App.BuildEmbeddedAppBuilder). -->
+    <ProjectReference Include="..\..\sdk\src\FruityLink.Ui.Avalonia.Hosting\FruityLink.Ui.Avalonia.Hosting.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
     <!-- Bundle the brand fonts (Space Grotesk + Inter) as app assets so the product
          matches the marketing hero regardless of what's installed on the machine. -->
     <AvaloniaResource Include="Assets\**" />

@@ -1,7 +1,5 @@
 using System;
 using System.IO;
-using System.Linq;
-using System.Reflection;
 using FruityLink.Installer.Core;
 
 namespace FruityLink.Installer.Cli;
@@ -91,27 +89,21 @@ public static class CliRunner
         if (GateOnCompatibility(flPath, opts, log) is int blocked)
             return blocked;
 
-        var fs = new RealFileSystem();
-        var engine = new InstallEngine(fs, InstallerInfo.Version, new RealProcessManager());
-        var plan = engine.PlanInstall(flPath, manifest, payloadRoot, out var planErrors);
+        var elevationCode = ExitCodes.Success;
+        var result = InstallerOperations.RunInstall(
+            flPath, manifest, payloadRoot, opts.DryRun, log,
+            "Aborting: required payload files are missing. (Use --dry-run to preview anyway.)",
+            "Continuing dry-run despite missing payload (nothing will be written).",
+            out var abortedOnMissingPayload,
+            beforeExecute: () => opts.DryRun || EnsureWritable(flPath, opts, log, install: true, out elevationCode));
 
-        if (planErrors.Count > 0)
-        {
-            foreach (var e in planErrors) log.Error("payload problem: " + e);
-            if (!opts.DryRun)
-            {
-                log.Error("Aborting: required payload files are missing. (Use --dry-run to preview anyway.)");
-                return ExitCodes.PayloadMissing;
-            }
-            log.Warn("Continuing dry-run despite missing payload (nothing will be written).");
-        }
-
-        if (!opts.DryRun && !EnsureWritable(flPath, opts, log, install: true, out var elevationCode))
+        if (abortedOnMissingPayload)
+            return ExitCodes.PayloadMissing;
+        if (result is null)
             return elevationCode;
 
-        var result = engine.ExecuteInstall(plan, flPath, opts.DryRun, log);
         log.Info("");
-        return Report(result, log, "Install", flPath);
+        return Report(result, log, install: true, flPath);
     }
 
     private static int RunUninstall(CliOptions opts, IProgressLog log)
@@ -125,23 +117,19 @@ public static class CliRunner
         log.Info($"Mode:      {(opts.DryRun ? "DRY RUN (no changes)" : "UNINSTALL")}");
         log.Info("");
 
-        var fs = new RealFileSystem();
-        var engine = new InstallEngine(fs, InstallerInfo.Version, new RealProcessManager());
-        var record = engine.TryLoadRecord(flPath, manifest);
-        var plan = engine.PlanUninstall(flPath, manifest, record, log);
+        var elevationCode = ExitCodes.Success;
+        var result = InstallerOperations.RunUninstall(
+            flPath, manifest, opts.DryRun, log,
+            out var nothingToUninstall,
+            beforeExecute: () => opts.DryRun || EnsureWritable(flPath, opts, log, install: false, out elevationCode));
 
-        if (plan.Count == 0)
-        {
-            log.Warn("Nothing to uninstall (no FruityLink files found).");
+        if (nothingToUninstall)
             return ExitCodes.Success;
-        }
-
-        if (!opts.DryRun && !EnsureWritable(flPath, opts, log, install: false, out var elevationCode))
+        if (result is null)
             return elevationCode;
 
-        var result = engine.ExecuteUninstall(plan, opts.DryRun, log);
         log.Info("");
-        return Report(result, log, "Uninstall", flPath);
+        return Report(result, log, install: false, flPath);
     }
 
     // ------------------------------------------------- compatibility / integrity ----
@@ -154,14 +142,10 @@ public static class CliRunner
     private static int? GateOnCompatibility(string flPath, CliOptions opts, IProgressLog log)
     {
         log.Info("Checking FL Studio build + file integrity against the verified list...");
-        var check = FlIntegrity.Check(flPath);
+        var check = FlIntegrityGate.CheckAndLog(flPath, log);
         if (check.Ok)
-        {
-            log.Success($"FL Studio {check.FlVersion} is a verified build; all binaries match.");
             return null;
-        }
 
-        foreach (var p in check.Problems) log.Error("  " + p);
         var code = check.Problems.Count > 0 ? ExitCodes.IntegrityFailed : ExitCodes.BuildNotVerified;
 
         if (opts.DryRun || opts.Force)
@@ -226,7 +210,8 @@ public static class CliRunner
             }
         }
 
-        return InstallManifest.Default();
+        return BundledMcp.Select(InstallManifest.Default(),
+            InstallerInfo.ResolvePayloadRoot(opts.PayloadRoot), include: !opts.WithoutMcp);
     }
 
     /// <summary>Resolves FL path: flag, else auto-detect, else default. Validates the result.</summary>
@@ -300,14 +285,16 @@ public static class CliRunner
     {
         var args = new System.Collections.Generic.List<string> { verb, "--silent", "--fl-path", flPath };
         if (opts.DryRun) args.Add("--dry-run");
+        if (opts.WithoutMcp) args.Add("--without-mcp");
         if (!string.IsNullOrWhiteSpace(opts.ManifestPath)) { args.Add("--manifest"); args.Add(opts.ManifestPath!); }
         if (!string.IsNullOrWhiteSpace(opts.PayloadRoot)) { args.Add("--payload-root"); args.Add(opts.PayloadRoot!); }
         return args.ToArray();
     }
 
-    private static int Report(OperationResult result, IProgressLog log, string verb, string flPath)
+    private static int Report(OperationResult result, IProgressLog log, bool install, string flPath)
     {
-        var isUninstall = verb.Equals("Uninstall", StringComparison.OrdinalIgnoreCase);
+        var verb = install ? "Install" : "Uninstall";
+        var isUninstall = !install;
         var tag = result.DryRun ? $"{verb} (dry-run)" : verb;
         var noun = isUninstall ? "removed" : "copied";
 
@@ -342,16 +329,4 @@ public static class CliRunner
                 return ExitCodes.Error;
         }
     }
-}
-
-/// <summary>Version + payload-root resolution shared by CLI and GUI.</summary>
-public static class InstallerInfo
-{
-    public static string Version =>
-        Assembly.GetExecutingAssembly().GetName().Version?.ToString(3) ?? "0.0.0";
-
-    public static string ResolvePayloadRoot(string? overrideRoot) =>
-        string.IsNullOrWhiteSpace(overrideRoot)
-            ? Path.Combine(AppContext.BaseDirectory, "payload")
-            : overrideRoot;
 }

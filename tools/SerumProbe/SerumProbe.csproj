@@ -7,6 +7,6 @@
     <AssemblyName>serumprobe</AssemblyName>
   </PropertyGroup>
   <ItemGroup>
-    <ProjectReference Include="..\..\src\FruityLink.FlStudio\FruityLink.FlStudio.csproj" />
+    <ProjectReference Include="..\..\sdk\src\FruityLink.FlStudio\FruityLink.FlStudio.csproj" />
   </ItemGroup>
 </Project>

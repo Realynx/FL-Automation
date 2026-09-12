@@ -116,36 +116,75 @@ internal sealed class AgentTurnRunner
         // tool calls arrive corrupted.
         bool stream = onDelta is not null && (llm?.StreamResponses ?? true);
 
-        if (stream)
+        // Structured per-turn transcript: opened HERE so both attempts, every tool call, and every
+        // HTTP request on this async flow attribute to this turn (same AsyncLocal-flow trick as
+        // LlmTurnBudget). Disposal writes the one JSONL line; the try/catch seals the footer first.
+        var scope = new TurnScope(
+            SessionTranscript.SessionId, llm?.ModelOrDefault ?? string.Empty, userInput, subset?.Count ?? -1, stream);
+        using IDisposable transcript = SessionTranscript.Begin(scope);
+        try
         {
-            var sink = new DeltaSink(onDelta!);
-            try
+            TurnResult result;
+            if (stream)
             {
-                capFilter?.BeginTurn();
-                return await RunStreamedAttemptAsync(
-                        kernel, chat, history, historyMark, capFilter, settings, sink, ct)
-                    .ConfigureAwait(false);
+                var sink = new DeltaSink(onDelta!);
+                try
+                {
+                    capFilter?.BeginTurn();
+                    result = await RunStreamedAttemptAsync(
+                            kernel, chat, history, historyMark, capFilter, settings, sink, ct)
+                        .ConfigureAwait(false);
+                    scope.Finish(result.WasCapped ? "capped" : "ok", result.WasCapped, result.Thought, result.Text, null);
+                    return result;
+                }
+                catch (Exception ex) when (!ct.IsCancellationRequested
+                                           && !sink.AnyText
+                                           && LooksLikeStreamedToolCallCorruption(ex))
+                {
+                    // The wire-layer repair handler CANNOT fix streamed bodies (it hard-skips
+                    // text/event-stream), so a proxy that resends/corrupts streamed tool-call
+                    // arguments fails here in a JSON-parse shape. Retry ONCE in buffered mode, where
+                    // the repair works — but only while nothing visible has streamed out, or the
+                    // retry's answer would duplicate text already in the user's bubble. The streamed
+                    // attempt already rolled its edits back; drop any recorded sub-visible partial
+                    // too, so the retry starts from a clean lone user message.
+                    TruncateHistoryTo(history, historyMark + 1);
+                    // Discard the aborted streamed attempt's transcript telemetry too, so the record
+                    // reflects only the buffered retry (else its tool calls double-count).
+                    scope.ResetForRetry();
+                }
             }
-            catch (Exception ex) when (!ct.IsCancellationRequested
-                                       && !sink.AnyText
-                                       && LooksLikeStreamedToolCallCorruption(ex))
-            {
-                // The wire-layer repair handler CANNOT fix streamed bodies (it hard-skips
-                // text/event-stream), so a proxy that resends/corrupts streamed tool-call
-                // arguments fails here in a JSON-parse shape. Retry ONCE in buffered mode, where
-                // the repair works — but only while nothing visible has streamed out, or the
-                // retry's answer would duplicate text already in the user's bubble. The streamed
-                // attempt already rolled its edits back; drop any recorded sub-visible partial
-                // too, so the retry starts from a clean lone user message.
-                TruncateHistoryTo(history, historyMark + 1);
-            }
-        }
 
-        capFilter?.BeginTurn();
-        return await RunBufferedAttemptAsync(
-                kernel, chat, history, historyMark, capFilter, settings, onDelta, ct)
-            .ConfigureAwait(false);
+            capFilter?.BeginTurn();
+            result = await RunBufferedAttemptAsync(
+                    kernel, chat, history, historyMark, capFilter, settings, onDelta, ct)
+                .ConfigureAwait(false);
+            scope.Finish(result.WasCapped ? "capped" : "ok", result.WasCapped, result.Thought, result.Text, null);
+            return result;
+        }
+        catch (OperationCanceledException)
+        {
+            scope.Finish("cancelled", false, string.Empty, string.Empty, "cancelled");
+            throw;
+        }
+        catch (Exception ex)
+        {
+            scope.Finish("error", false, string.Empty, string.Empty, $"{ex.GetType().Name}: {ex.Message}");
+            throw;
+        }
     }
+
+    /// <summary>
+    /// Opens one attempt's HTTP request budget: the round cap plus <see cref="RequestBudgetSlack"/>.
+    /// This budgets the attempt's HTTP round-trips as a backstop for the filter-blind runaway:
+    /// rounds whose tool calls ALL fail validation ("wasn't defined") bypass the cap filter
+    /// entirely, so without this the loop only stops at SK's internal 128-attempt limit — one
+    /// growing-history request per round. The scope is ambient (AsyncLocal): it covers SK's
+    /// internal loop for THAT attempt only, and a sub-agent turn spawned inside a tool call opens
+    /// its own scope.
+    /// </summary>
+    private static IDisposable BeginAttemptBudget(AutoInvokeIterationFilter? capFilter) =>
+        LlmTurnBudget.Begin((capFilter?.MaxRounds ?? DefaultMaxRounds) + RequestBudgetSlack);
 
     /// <summary>
     /// One buffered (non-streaming) send: the backend returns complete tool-call arguments in a
@@ -166,15 +205,9 @@ internal sealed class AgentTurnRunner
         Action<AgentDelta>? onDelta,
         CancellationToken ct)
     {
-        // Budget the attempt's HTTP round-trips as a backstop for the filter-blind runaway: rounds
-        // whose tool calls ALL fail validation ("wasn't defined") bypass the cap filter entirely,
-        // so without this the loop only stops at SK's internal 128-attempt limit — one
-        // growing-history request per round. The scope is ambient (AsyncLocal): it covers SK's
-        // internal loop for THIS attempt only, and a sub-agent turn spawned inside a tool call
-        // opens its own scope. Tripping it throws from the HTTP layer → the catch below rolls the
-        // whole turn back, so no orphaned tool_call ids survive.
-        using IDisposable requestBudget =
-            LlmTurnBudget.Begin((capFilter?.MaxRounds ?? DefaultMaxRounds) + RequestBudgetSlack);
+        // Runaway backstop (see BeginAttemptBudget): tripping it throws from the HTTP layer → the
+        // catch below rolls the whole turn back, so no orphaned tool_call ids survive.
+        using IDisposable requestBudget = BeginAttemptBudget(capFilter);
 
         ChatMessageContent reply;
         try
@@ -182,6 +215,15 @@ internal sealed class AgentTurnRunner
             reply = await chat
                 .GetChatMessageContentAsync(history, settings, kernel, ct)
                 .ConfigureAwait(false);
+            SessionTranscript.Current?.SetModelUsed(reply.ModelId);
+
+            // CANCELLATION (Stop button): SK ABSORBS a cancel that lands during the tool loop — its
+            // function-calls processor swallows the OCE into an error result, and once the
+            // cancellation filter sets Terminate it returns NORMALLY with a reply that still carries
+            // the round's tool calls. Re-assert cancellation here so a Stop takes the same rollback
+            // path as any other failure (below) and surfaces as OperationCanceledException, instead
+            // of FinishTurn mislabeling that reply as a tool-round cap.
+            ct.ThrowIfCancellationRequested();
         }
         catch
         {
@@ -248,11 +290,10 @@ internal sealed class AgentTurnRunner
         DeltaSink sink,
         CancellationToken ct)
     {
-        // Same runaway backstop as the buffered attempt (see RunBufferedAttemptAsync): the scope
+        // Same runaway backstop as the buffered attempt (see BeginAttemptBudget): the scope
         // is per-attempt so a fallback retry starts with a fresh budget instead of the streamed
         // attempt's leftovers.
-        using IDisposable requestBudget =
-            LlmTurnBudget.Begin((capFilter?.MaxRounds ?? DefaultMaxRounds) + RequestBudgetSlack);
+        using IDisposable requestBudget = BeginAttemptBudget(capFilter);
 
         var content = new StringBuilder();                  // current round's raw content
         var callBuilder = new FunctionCallContentBuilder(); // current round's tool-call updates
@@ -271,6 +312,13 @@ internal sealed class AgentTurnRunner
                 // marker after all) and start clean accumulators for this round.
                 if (history.Count != lastHistoryCount)
                 {
+                    // CANCELLATION (Stop button) — loop-boundary guard: a new tool round is about to
+                    // stream. If the user hit Stop, throw here so no further round streams or runs.
+                    // Cancellation-only and deliberately independent of the tool-round CAP, so a
+                    // separate change making rounds unlimited merges cleanly. Lands in the catch
+                    // below (rollback + keep partial) and surfaces as OperationCanceledException.
+                    ct.ThrowIfCancellationRequested();
+
                     lastHistoryCount = history.Count;
                     EmitParsed(sink, parser.Flush());
                     sink.RoundBreak();
@@ -280,6 +328,8 @@ internal sealed class AgentTurnRunner
                 }
 
                 role ??= chunk.Role;
+                if (SessionTranscript.Current is { ModelUsed: null } ts && chunk.ModelId is { Length: > 0 } mid)
+                    ts.SetModelUsed(mid);
                 callBuilder.Append(chunk);
                 if (chunk.Content is { Length: > 0 } piece)
                 {
@@ -287,6 +337,14 @@ internal sealed class AgentTurnRunner
                     EmitParsed(sink, parser.Push(piece));
                 }
             }
+
+            // CANCELLATION (Stop button): the loop can also end WITHOUT an exception because the
+            // cancellation filter set Terminate mid-round (SK absorbs the cancel and returns
+            // normally). Re-assert cancellation here — inside the try — so a Stop takes the same
+            // rollback + keep-partial path as a mid-stream cancel and surfaces as
+            // OperationCanceledException, instead of FinishTurn mislabeling the terminated round's
+            // still-present tool calls as a tool-round cap notice.
+            ct.ThrowIfCancellationRequested();
         }
         catch
         {
@@ -342,6 +400,9 @@ internal sealed class AgentTurnRunner
         (string thought, string text) = ThinkTagParser.Split(reply.Content ?? string.Empty);
 
         EnsureInHistory(history, reply, text);
+        // Capture per-round reasoning for the transcript BEFORE StripThinkFromTurn wipes it below
+        // (the final round's reasoning is carried separately as the TurnResult thought).
+        SessionTranscript.Current?.SetReasonings(CollectRoundReasonings(history, historyMark));
         StripThinkFromTurn(history, historyMark);
 
         // A reply still CARRYING FunctionCallContent means the loop ended WITHOUT invoking those
@@ -553,6 +614,28 @@ internal sealed class AgentTurnRunner
             if (!ThinkTagParser.ContainsMarker(content)) continue;
             m.Content = ThinkTagParser.Split(content).Text;
         }
+    }
+
+    /// <summary>
+    /// Collects the intermediate rounds' <c>&lt;think&gt;</c> reasoning still present in this turn's
+    /// assistant messages — best-effort input to the session transcript. Called from
+    /// <see cref="FinishTurn"/> just before <see cref="StripThinkFromTurn"/> removes the markers; the
+    /// FINAL round's reasoning is already split out as the TurnResult thought, so only the messages
+    /// that STILL carry a marker (the auto-invoked tool rounds) contribute here.
+    /// </summary>
+    private static List<string> CollectRoundReasonings(ChatHistory history, int fromIndex)
+    {
+        var reasonings = new List<string>();
+        for (int i = Math.Max(fromIndex, 0); i < history.Count; i++)
+        {
+            ChatMessageContent m = history[i];
+            if (m.Role != AuthorRole.Assistant) continue;
+            string content = m.Content ?? string.Empty;
+            if (!ThinkTagParser.ContainsMarker(content)) continue;
+            string thought = ThinkTagParser.Split(content).Thought;
+            if (!string.IsNullOrWhiteSpace(thought)) reasonings.Add(thought);
+        }
+        return reasonings;
     }
 
     /// <summary>

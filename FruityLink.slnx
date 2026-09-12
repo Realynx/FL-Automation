@@ -1,19 +1,22 @@
 <Solution>
+  <Folder Name="/sdk/">
+    <Project Path="sdk/src/FruityLink.Core/FruityLink.Core.csproj" />
+    <Project Path="sdk/src/FruityLink.FlStudio/FruityLink.FlStudio.csproj" />
+    <Project Path="sdk/src/FruityLink.Host/FruityLink.Host.csproj" />
+    <Project Path="sdk/src/FruityLink.Plugins.Abstractions/FruityLink.Plugins.Abstractions.csproj" />
+    <Project Path="sdk/src/FruityLink.Plugins.Host/FruityLink.Plugins.Host.csproj" />
+    <Project Path="sdk/src/FruityLink.Ui.Avalonia.Hosting/FruityLink.Ui.Avalonia.Hosting.csproj" />
+  </Folder>
   <Folder Name="/src/">
     <Project Path="src/FruityLink.Agent/FruityLink.Agent.csproj" />
-    <Project Path="src/FruityLink.Core/FruityLink.Core.csproj" />
-    <Project Path="src/FruityLink.FlStudio/FruityLink.FlStudio.csproj" />
-    <Project Path="src/FruityLink.Host/FruityLink.Host.csproj" />
+    <Project Path="src/FruityLink.AppCore/FruityLink.AppCore.csproj" />
     <Project Path="src/FruityLink.Knowledge/FruityLink.Knowledge.csproj" />
     <Project Path="src/FruityLink.Llm/FruityLink.Llm.csproj" />
-    <Project Path="src/FruityLink.Mcp/FruityLink.Mcp.csproj" />
     <Project Path="src/FruityLink.Persistence/FruityLink.Persistence.csproj" />
     <Project Path="src/FruityLink.Speech/FruityLink.Speech.csproj" />
     <Project Path="src/FruityLink.Ui.Avalonia/FruityLink.Ui.Avalonia.csproj" />
   </Folder>
   <Folder Name="/plugins/">
-    <Project Path="src/FruityLink.Plugins.Abstractions/FruityLink.Plugins.Abstractions.csproj" />
-    <Project Path="src/FruityLink.Plugins.Host/FruityLink.Plugins.Host.csproj" />
     <Project Path="src/FruityLink.Plugins.FlAgent/FruityLink.Plugins.FlAgent.csproj" />
   </Folder>
   <Folder Name="/installer/">

@@ -28,14 +28,6 @@ public sealed class FlPluginSet(
                 : new[] { ("Versioning", (object)versioning) })
             .ToArray();
 
-    /// <summary>
-    /// The sub-agent view: everything except <see cref="OrchestrationPlugin"/>, because sub-agents
-    /// must never spawn further sub-agents. Keeping this as a second LIST makes the main-agent /
-    /// sub-agent difference data handed to <see cref="AgentKernelBuilder"/>, not a divergent code path.
-    /// </summary>
-    public IReadOnlyList<(string Name, object Instance)> WithoutOrchestration { get; } =
-        SubAgentPlugins(musicTheory, nativeControl, knowledge);
-
     /// <summary>Late-binds the project version store into the Versioning tools (list_versions /
     /// get_version_changes). Late because the store is composed after the plugin set — it needs the
     /// live bridge. No-op when the set was built without a Versioning plugin.</summary>

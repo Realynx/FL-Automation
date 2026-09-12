@@ -46,16 +46,16 @@
             <Panel Margin="30,8,30,26">
 
                 <!-- ============================ START PAGE ============================ -->
-                <Grid x:Name="StartPanel" RowDefinitions="Auto,Auto,Auto,Auto,*,Auto">
+                <Grid x:Name="StartPanel" RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,*,Auto">
 
                     <!-- Headline: white + hero gradient span, Space Grotesk. -->
                     <StackPanel Grid.Row="0" Margin="0,4,0,18">
                         <StackPanel Orientation="Horizontal" Spacing="9">
                             <TextBlock Classes="h" FontSize="30" Text="Install" />
-                            <TextBlock Classes="h" FontSize="30" Text="FL Automate"
+                            <TextBlock x:Name="HeadlineProduct" Classes="h" FontSize="30" Text="FL Automate"
                                        Foreground="{StaticResource HeadlineGradientBrush}" />
                         </StackPanel>
-                        <TextBlock Margin="0,7,0,0" FontSize="13" TextWrapping="Wrap"
+                        <TextBlock x:Name="SubtitleText" Margin="0,7,0,0" FontSize="13" TextWrapping="Wrap"
                                    Foreground="{StaticResource MutedTextBrush}"
                                    Text="Your AI assistant inside FL Studio. Installs the FruityLink bridge into the FL Studio folder — the original version.dll is backed up, and uninstalling restores it." />
                     </StackPanel>
@@ -74,15 +74,30 @@
                     <TextBlock x:Name="PathStatus" Grid.Row="3" FontSize="12" Margin="2,0,0,16"
                                Foreground="{StaticResource MutedTextBrush}" TextWrapping="Wrap" />
 
+                    <!-- Plugin selection -->
+                    <TextBlock Grid.Row="4" Classes="meta" LetterSpacing="1.1" FontWeight="Medium"
+                               Text="PLUGINS TO INSTALL" Margin="2,0,0,7" />
+                    <Border Grid.Row="5" CornerRadius="12" Margin="0,0,0,14"
+                            Background="{StaticResource Glass05Brush}"
+                            BorderBrush="{StaticResource BorderWhite10Brush}" BorderThickness="1">
+                        <ScrollViewer MaxHeight="150" VerticalScrollBarVisibility="Auto">
+                            <StackPanel x:Name="PluginList" Spacing="6" Margin="14,11">
+                                <TextBlock x:Name="CommunityStatus" FontSize="12" TextWrapping="Wrap"
+                                           Foreground="{StaticResource MutedTextBrush}"
+                                           Text="Checking for community plugins…" />
+                            </StackPanel>
+                        </ScrollViewer>
+                    </Border>
+
                     <!-- Log well (glass) -->
-                    <Border Grid.Row="4" CornerRadius="12"
+                    <Border Grid.Row="6" CornerRadius="12"
                             Background="{StaticResource SurfaceTranslucentBrush}"
                             BorderBrush="{StaticResource BorderWhite10Brush}" BorderThickness="1">
                         <TextBox x:Name="LogBox" Classes="log" />
                     </Border>
 
                     <!-- Footer / actions -->
-                    <Grid Grid.Row="5" ColumnDefinitions="Auto,*,Auto,Auto" Margin="0,18,0,0">
+                    <Grid Grid.Row="7" ColumnDefinitions="Auto,*,Auto,Auto" Margin="0,18,0,0">
                         <CheckBox x:Name="DryRunCheck" Grid.Column="0" VerticalAlignment="Center"
                                   Content="Dry run (preview only)" />
                         <ProgressBar x:Name="Progress" Grid.Column="1" Height="5" Margin="18,0"

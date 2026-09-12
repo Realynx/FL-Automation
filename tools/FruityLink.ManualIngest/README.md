@@ -1,7 +1,7 @@
 # FruityLink.ManualIngest
 
 Offline data-prep that turns the **FL Studio online manual** into the RAG vector database the
-FL Agent plugin searches at runtime (`search_manual` tool).
+FL Automate plugin searches at runtime (`search_manual` tool).
 
 Pipeline (three stages, each independently runnable and idempotent):
 

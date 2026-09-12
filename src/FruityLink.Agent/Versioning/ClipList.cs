@@ -10,9 +10,9 @@ namespace FruityLink.Agent.Versioning;
 public readonly record struct ClipInfo(int Slot, int Track, int Start, int Length, int Pattern, bool Muted = false);
 
 /// <summary>
-/// Parses the <c>ListClipsAsync</c> string ("<c>[i] track T start=S len=L pattern N</c>") so clip moves/
-/// resizes can be addressed by STABLE IDENTITY (pattern+track+start) instead of a volatile slot index:
-/// the slot is resolved from the identity against LIVE state at capture and again at replay.
+/// Parses the <c>ListClipsAsync</c> string ("<c>[i] track T start=S len=L pattern N 'name'</c>") so clip
+/// moves/resizes can be addressed by STABLE IDENTITY (pattern+track+start) instead of a volatile slot
+/// index: the slot is resolved from the identity against LIVE state at capture and again at replay.
 /// </summary>
 public static class ClipList
 {
@@ -28,11 +28,15 @@ public static class ClipList
             int close = raw.IndexOf(']');
             if (close < 2 || !int.TryParse(raw.AsSpan(1, close - 1), out int slot)) continue;
 
-            int? track = FieldAfter(raw, "track ");
-            int? start = FieldAfter(raw, "start=");
-            int? len = FieldAfter(raw, "len=");
-            int? pattern = FieldAfter(raw, "pattern ");   // absent for channel/audio clips
-            bool muted = raw.Contains("muted", StringComparison.Ordinal);   // trailing marker (clip+0x13 bit 0x20)
+            // Numeric fields live BEFORE the optional quoted source name, so a user name that happens
+            // to contain "pattern 4" or "muted" can never spoof a field — parse only the pre-quote head.
+            int quote = raw.IndexOf('\'');
+            string head = quote >= 0 ? raw[..quote] : raw;
+            int? track = FieldAfter(head, "track ");
+            int? start = FieldAfter(head, "start=");
+            int? len = FieldAfter(head, "len=");
+            int? pattern = FieldAfter(head, "pattern ");   // absent for channel/audio clips
+            bool muted = raw.EndsWith(" muted", StringComparison.Ordinal);   // trailing marker (clip+0x13 bit 0x20)
             if (track is null || start is null || len is null) continue;
             result.Add(new ClipInfo(slot, track.Value, start.Value, len.Value, pattern ?? -1, muted));
         }

@@ -171,6 +171,114 @@ public class InstallEngineTests
         copy.Items.ShouldContain(i => i.Kind == PayloadKind.ManagedDir && i.IsDirectory);
     }
 
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void InjectedMirror_IsUsedForInstallFallbackAndUninstall_WithoutTouchingUserRecord(bool useRecordedUninstall)
+    {
+        var fs = MakeFlAndPayload(out var manifest);
+        const string userRecord = "EXISTING-USER-INSTALL-RECORD";
+        const string isolatedMirror = @"C:\self-test-workspace\install-record-mirror.json";
+        fs.WriteAllText(InstallRecord.LocalAppDataRecordPath, userRecord);
+        var engine = new InstallEngine(fs, "test", mirrorRecordPath: isolatedMirror);
+
+        var plan = engine.PlanInstall(FlPath, manifest, PayloadRoot, out var errors);
+        errors.ShouldBeEmpty();
+        engine.ExecuteInstall(plan, FlPath, dryRun: false, new NullLog()).Success.ShouldBeTrue();
+        fs.ReadAllText(InstallRecord.LocalAppDataRecordPath).ShouldBe(userRecord);
+        fs.FileExists(isolatedMirror).ShouldBeTrue();
+
+        // Force the fallback load path: only the injected mirror contains this install's record.
+        fs.DeleteFile(Path.Combine(FlPath, manifest.RecordFileName));
+        var record = engine.TryLoadRecord(FlPath, manifest);
+        record.ShouldNotBeNull();
+        record.FlPath.ShouldBe(FlPath);
+        var uninstall = engine.PlanUninstall(FlPath, manifest,
+            useRecordedUninstall ? record : null, new NullLog());
+        uninstall.ShouldContain(action => action.Target == isolatedMirror);
+        uninstall.ShouldNotContain(action => action.Target == InstallRecord.LocalAppDataRecordPath);
+        engine.ExecuteUninstall(uninstall, dryRun: false, new NullLog()).Success.ShouldBeTrue();
+
+        fs.FileExists(isolatedMirror).ShouldBeFalse();
+        fs.ReadAllText(InstallRecord.LocalAppDataRecordPath).ShouldBe(userRecord);
+        fs.ReadAllText(Path.Combine(FlPath, "version.dll")).ShouldBe("ORIGINAL");
+    }
+
+    [Fact]
+    public void InjectedMirror_DoesNotLoadTheUsersDefaultFallbackRecord()
+    {
+        var fs = MakeFlAndPayload(out var manifest);
+        var userRecord = new InstallRecord { FlPath = @"C:\UsersInstallation\FL Studio 2025" }.ToJson();
+        fs.WriteAllText(InstallRecord.LocalAppDataRecordPath, userRecord);
+        var engine = new InstallEngine(fs, "test", mirrorRecordPath: @"C:\self-test-workspace\missing-mirror.json");
+
+        engine.TryLoadRecord(FlPath, manifest).ShouldBeNull();
+
+        fs.ReadAllText(InstallRecord.LocalAppDataRecordPath).ShouldBe(userRecord);
+    }
+
+    [Theory]
+    [InlineData(false, false)]
+    [InlineData(false, true)]
+    [InlineData(true, false)]
+    public void Uninstall_LeavesAnotherFlInstallAndItsMirrorUntouched(bool keepPrimary, bool supplyForeignRecord)
+    {
+        const string otherFl = @"C:\Program Files\Image-Line\FL Studio 2026";
+        var fs = MakeFlAndPayload(out var manifest);
+        fs.WriteAllText(Path.Combine(otherFl, "FL64.exe"), "OTHER FL");
+        fs.WriteAllText(Path.Combine(otherFl, "version.dll"), "OTHER ORIGINAL");
+        var engine = new InstallEngine(fs, "test");
+        InstallAt(engine, FlPath, manifest);
+        InstallAt(engine, otherFl, manifest);
+        var foreignRecord = engine.TryLoadRecord(otherFl, manifest);
+        foreignRecord.ShouldNotBeNull();
+        var otherFiles = fs.EnumerateFiles(otherFl, recursive: true).ToDictionary(path => path, fs.ReadAllText);
+        var mirror = fs.ReadAllText(InstallRecord.LocalAppDataRecordPath);
+        if (!keepPrimary) fs.DeleteFile(Path.Combine(FlPath, manifest.RecordFileName));
+
+        var targetRecord = engine.TryLoadRecord(FlPath, manifest);
+        (targetRecord is not null).ShouldBe(keepPrimary);
+        var suppliedRecord = supplyForeignRecord ? foreignRecord : targetRecord;
+        var plan = engine.PlanUninstall(FlPath, manifest, suppliedRecord, new NullLog());
+        plan.ShouldNotContain(action => action.Target == InstallRecord.LocalAppDataRecordPath);
+        engine.ExecuteUninstall(plan, dryRun: false, new NullLog()).Success.ShouldBeTrue();
+
+        fs.ReadAllText(Path.Combine(FlPath, "version.dll")).ShouldBe("ORIGINAL");
+        fs.FileExists(Installed("FlBridge.dll")).ShouldBeFalse();
+        fs.ReadAllText(InstallRecord.LocalAppDataRecordPath).ShouldBe(mirror);
+        foreach (var file in otherFiles) fs.ReadAllText(file.Key).ShouldBe(file.Value);
+    }
+
+    [Fact]
+    public void PrimaryRecordForAnotherInstallation_IsIgnoredInFavorOfMatchingMirror()
+    {
+        var fs = MakeFlAndPayload(out var manifest);
+        var matching = new InstallRecord { FlPath = FlPath, InstallerVersion = "correct" };
+        var foreign = new InstallRecord { FlPath = @"C:\Other FL", InstallerVersion = "wrong" };
+        fs.WriteAllText(Path.Combine(FlPath, manifest.RecordFileName), foreign.ToJson());
+        fs.WriteAllText(InstallRecord.LocalAppDataRecordPath, matching.ToJson());
+
+        new InstallEngine(fs, "test").TryLoadRecord(FlPath, manifest)!.InstallerVersion.ShouldBe("correct");
+    }
+
+    [Theory]
+    [InlineData(@"c:\program files\image-line\fl studio 2025\")]
+    [InlineData("C:/Program Files/Image-Line/FL Studio 2025/./")]
+    public void RecordIdentity_NormalizesCaseAndDirectorySeparators(string recordedPath)
+    {
+        var fs = MakeFlAndPayload(out var manifest);
+        fs.WriteAllText(InstallRecord.LocalAppDataRecordPath, new InstallRecord { FlPath = recordedPath }.ToJson());
+
+        new InstallEngine(fs, "test").TryLoadRecord(FlPath, manifest).ShouldNotBeNull();
+    }
+
+    private static void InstallAt(InstallEngine engine, string flPath, InstallManifest manifest)
+    {
+        var plan = engine.PlanInstall(flPath, manifest, PayloadRoot, out var errors);
+        errors.ShouldBeEmpty();
+        engine.ExecuteInstall(plan, flPath, dryRun: false, new NullLog()).Success.ShouldBeTrue();
+    }
+
     [Fact]
     public void SelfTest_RoundTrips()
     {

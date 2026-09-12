@@ -18,7 +18,7 @@ public static class SelfTest
         var root = Path.Combine(Path.GetTempPath(), "FruityLink.Installer.selftest-" + Guid.NewGuid().ToString("N"));
         var flDir = Path.Combine(root, "FL Studio 2025");
         var payloadDir = Path.Combine(root, "payload");
-        var localAppRecord = InstallRecord.LocalAppDataRecordPath;
+        var mirrorRecord = Path.Combine(root, "install-record-mirror.json");
 
         var failures = new List<string>();
         var checks = 0;
@@ -61,7 +61,7 @@ public static class SelfTest
             File.WriteAllText(Path.Combine(managed, "plugins", "fl-agent", "plugin.json"), "{}");
 
             var fs = new RealFileSystem();
-            var engine = new InstallEngine(fs, installerVersion);
+            var engine = new InstallEngine(fs, installerVersion, mirrorRecordPath: mirrorRecord);
             var manifest = InstallManifest.Default();
 
             // --- Act 1: install. ---
@@ -86,6 +86,7 @@ public static class SelfTest
             Check(File.Exists(Path.Combine(flDir, "FruityLink", "plugins", "fl-agent", "plugin.json")),
                 "nested managed file present");
             Check(File.Exists(Path.Combine(flDir, manifest.RecordFileName)), "install record written");
+            Check(File.Exists(mirrorRecord), "isolated install record mirror written");
 
             // --- Act 2: uninstall. ---
             log.Info("");
@@ -101,6 +102,7 @@ public static class SelfTest
             Check(!File.Exists(Path.Combine(flDir, "FruityLink", "FlBridge.dll")), "native bridge removed");
             Check(!Directory.Exists(Path.Combine(flDir, "FruityLink")), "managed sub-folder removed");
             Check(!File.Exists(Path.Combine(flDir, manifest.RecordFileName)), "install record removed");
+            Check(!File.Exists(mirrorRecord), "isolated install record mirror removed");
             Check(File.Exists(Path.Combine(flDir, "version.dll")), "version.dll exists again");
             Check(File.ReadAllText(Path.Combine(flDir, "version.dll")) == originalVersionDll,
                 "version.dll restored to the original bytes");
@@ -125,8 +127,6 @@ public static class SelfTest
         finally
         {
             TryDelete(root);
-            // The self-test mirrors a record into LocalAppData; clean it so we leave nothing behind.
-            try { if (File.Exists(localAppRecord)) File.Delete(localAppRecord); } catch { /* ignore */ }
         }
     }
 

@@ -76,14 +76,13 @@ public sealed class LlmToolCallRepairHandler : DelegatingHandler
         HttpResponseMessage response = await base.SendAsync(request, cancellationToken).ConfigureAwait(false);
 
         if (!response.IsSuccessStatusCode) return response;
-        if (request.RequestUri?.AbsolutePath.EndsWith("chat/completions", StringComparison.OrdinalIgnoreCase) != true)
+        if (!LlmHttp.IsChatCompletions(request))
             return response;
 
         // Only hard-skip a real streaming (SSE) body — buffering that would break the stream. For
         // everything else (application/json, text/json, text/plain, or a server that omits the type)
         // we attempt repair; RepairBody fails safe and returns the body unchanged if it isn't JSON.
-        string? mediaType = response.Content.Headers.ContentType?.MediaType;
-        if (string.Equals(mediaType, "text/event-stream", StringComparison.OrdinalIgnoreCase))
+        if (LlmHttp.IsEventStream(response))
             return response;
 
         string body = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
@@ -131,6 +130,17 @@ public sealed class LlmToolCallRepairHandler : DelegatingHandler
         HttpRequestMessage request, HttpResponseMessage response, RepairReport report, string originalBody)
     {
         if (!report.HasAnything) return;
+
+        // Per-turn transcript (best-effort): which wire-repairs this response needed — a per-backend
+        // tool-call-quality signal for the review (e.g. a model that constantly needs ArgsCoerce).
+        var repairKinds = new List<KeyValuePair<string, int>>(6);
+        if (report.IdSynths > 0) repairKinds.Add(new(nameof(LlmRepairKind.IdSynth), report.IdSynths));
+        if (report.NameResolves > 0) repairKinds.Add(new(nameof(LlmRepairKind.NameResolve), report.NameResolves));
+        if (report.ArgsCoerces > 0) repairKinds.Add(new(nameof(LlmRepairKind.ArgsCoerce), report.ArgsCoerces));
+        if (report.ReasoningFolds > 0) repairKinds.Add(new(nameof(LlmRepairKind.ReasoningFold), report.ReasoningFolds));
+        if (report.EmptyArgsFallbacks > 0) repairKinds.Add(new(nameof(LlmRepairKind.EmptyArgsFallback), report.EmptyArgsFallbacks));
+        if (report.ParseFailure is not null) repairKinds.Add(new(nameof(LlmRepairKind.ParseFailure), 1));
+        if (repairKinds.Count > 0) SessionTranscript.Current?.AddRepairs(repairKinds);
 
         if (_telemetry is not null)
         {

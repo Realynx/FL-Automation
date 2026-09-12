@@ -39,6 +39,14 @@ public sealed class ChatViewModel : ViewModelBase
     private string _statusText = string.Empty;
     private string? _transientStatus;
 
+    // ---- update notice (dismissible banner above the transcript) -----------------------------
+    // Plain view-model state the host presenter drives via ShowUpdateNotice; this project stays
+    // backend-agnostic (no updater/gateway reference). Dismissal is per-SESSION: once the user
+    // closes the banner, later ShowUpdateNotice calls are ignored until the next process run.
+    private string? _updateNoticeText;
+    private string? _updateDownloadUrl;
+    private bool _updateNoticeDismissed;
+
     // ---- dictation state machine (Idle → Recording → Finalizing → text-ready) --------------------
     // IsRecording (capturing audio) is driven by the host; IsFinalizing (running the FINAL Whisper
     // render after the mic stops) is a distinct busy phase that lights the mic spinner. _sendInFlight
@@ -76,6 +84,9 @@ public sealed class ChatViewModel : ViewModelBase
         ToggleSettingsCommand = new RelayCommand(() => IsSettingsOpen = !IsSettingsOpen);
         CloseSettingsCommand = new RelayCommand(() => IsSettingsOpen = false);
         ToggleVersionsCommand = new RelayCommand(() => IsVersionsOpen = !IsVersionsOpen);
+        DismissUpdateCommand = new RelayCommand(DismissUpdateNotice);
+        OpenUpdateCommand = new RelayCommand(OpenUpdateDownload);
+        OpenDiscordCommand = new RelayCommand(OpenDiscord);
 
         Messages.CollectionChanged += (_, _) => OnPropertyChanged(nameof(HasMessages));
 
@@ -134,6 +145,9 @@ public sealed class ChatViewModel : ViewModelBase
     /// <summary>Show/hide the in-place Version-history panel (history button in the header).</summary>
     public ICommand ToggleVersionsCommand { get; }
 
+    /// <summary>Opens the FL Automate community Discord in the system browser (Settings panel).</summary>
+    public ICommand OpenDiscordCommand { get; }
+
     public bool HasMessages => Messages.Count > 0;
 
     /// <summary>The FL Automate ACCOUNT card shown in the Settings panel (sign in/out, plan display,
@@ -191,6 +205,81 @@ public sealed class ChatViewModel : ViewModelBase
     /// <summary>The pending crash-recovery label, or null.</summary>
     public string? RecoveryLabel => Versions.RecoveryLabel;
 
+    // ---- update notice ------------------------------------------------------
+
+    /// <summary>The update banner's text (e.g. "Update 1.4.0 is available"), or null when hidden.</summary>
+    public string? UpdateNoticeText => _updateNoticeText;
+
+    /// <summary>True while the update banner should show (drives its IsVisible binding).</summary>
+    public bool HasUpdateNotice => _updateNoticeText is not null;
+
+    /// <summary>Hides the update banner for the rest of the session (the ✕ button).</summary>
+    public ICommand DismissUpdateCommand { get; }
+
+    /// <summary>Opens the update's download page in the system browser (the "Download" link).</summary>
+    public ICommand OpenUpdateCommand { get; }
+
+    /// <summary>
+    /// Show the "update available" banner (called by the host presenter on the UI thread when the
+    /// gateway reports a newer build). Calling again before a dismissal just refreshes the text +
+    /// url; once the user has dismissed a notice this session, further calls are no-ops — the
+    /// user's "not now" wins until the next run.
+    /// </summary>
+    public void ShowUpdateNotice(string version, string downloadUrl)
+    {
+        if (_updateNoticeDismissed) return;
+        _updateDownloadUrl = downloadUrl;
+        _updateNoticeText = $"Update {version} is available";
+        OnPropertyChanged(nameof(UpdateNoticeText));
+        OnPropertyChanged(nameof(HasUpdateNotice));
+    }
+
+    private void DismissUpdateNotice()
+    {
+        _updateNoticeDismissed = true;   // remember even if the banner is already hidden
+        if (_updateNoticeText is null) return;
+        _updateNoticeText = null;
+        _updateDownloadUrl = null;
+        OnPropertyChanged(nameof(UpdateNoticeText));
+        OnPropertyChanged(nameof(HasUpdateNotice));
+    }
+
+    private void OpenDiscord()
+    {
+        try
+        {
+            // UseShellExecute hands the URL to the OS's default browser — required inside the
+            // embedded FL host, where there is no Avalonia TopLevel launcher to ask.
+            System.Diagnostics.Process.Start(
+                new System.Diagnostics.ProcessStartInfo("https://discord.fl-automate.com")
+                {
+                    UseShellExecute = true,
+                });
+        }
+        catch (Exception ex)
+        {
+            FlashStatus("Couldn't open the browser: " + ex.Message, 2200);
+        }
+    }
+
+    private void OpenUpdateDownload()
+    {
+        string? url = _updateDownloadUrl;
+        if (string.IsNullOrWhiteSpace(url)) return;
+        try
+        {
+            // UseShellExecute hands the URL to the OS's default browser — required inside the
+            // embedded FL host, where there is no Avalonia TopLevel launcher to ask (same pattern
+            // as AccountSettingsViewModel.OpenAccountPage).
+            System.Diagnostics.Process.Start(
+                new System.Diagnostics.ProcessStartInfo(url) { UseShellExecute = true });
+        }
+        catch (Exception ex)
+        {
+            FlashStatus("Couldn't open the browser: " + ex.Message, 2200);
+        }
+    }
+
     /// <summary>Attach the real account gateway (called by the FL Agent plugin's presenter on the
     /// UI thread once the agent is composed). Until then the card shows in-memory defaults.</summary>
     public void AttachAccountGateway(IAccountGateway gateway) => _account.AttachGateway(gateway);
@@ -235,8 +324,9 @@ public sealed class ChatViewModel : ViewModelBase
     /// <summary>Send is enabled with text to send — or always while busy, when the button is Cancel.</summary>
     public bool CanSend => _isBusy || !string.IsNullOrWhiteSpace(_inputText);
 
-    /// <summary>The Send button doubles as Cancel while a turn is streaming.</summary>
-    public string SendButtonText => _isBusy ? "Cancel" : "Send";
+    /// <summary>The Send button doubles as Stop for the WHOLE turn — it stays live through every tool
+    /// round, and clicking it cancels the turn (halting the model and any further tool calls).</summary>
+    public string SendButtonText => _isBusy ? "Stop" : "Send";
 
     public bool IsRecording
     {
@@ -462,34 +552,39 @@ public sealed class ChatViewModel : ViewModelBase
             Action<string>? handler = MessageSubmitted;
             handler?.Invoke(text);
 
-            // Standalone dev run (no agent host): keep the shell visibly interactive, and
-            // exercise the real turn UX — thinking indicator, then token-by-token streaming —
-            // so the dev head demos exactly what a live turn looks like.
             if (handler is null)
-            {
-                ChatMessage m = StartAssistantMessage();
-                IsBusy = true;
-                try
-                {
-                    await Task.Delay(1400);   // "Thinking…" (animated dots) shows here
-                    const string canned =
-                        "This is the themed UI shell — no agent is wired in standalone mode. "
-                        + "Inside FL Studio your message streams back here with reasoning and tool calls.";
-                    foreach (string word in canned.Split(' '))
-                    {
-                        m.Text += m.Text.Length == 0 ? word : " " + word;
-                        await Task.Delay(30);
-                    }
-                }
-                finally
-                {
-                    IsBusy = false;
-                }
-            }
+                await RunStandaloneDemoTurnAsync();
         }
         finally
         {
             _sendInFlight = false;
+        }
+    }
+
+    /// <summary>
+    /// Standalone dev run (no agent host): keep the shell visibly interactive, and exercise the
+    /// real turn UX — thinking indicator, then token-by-token streaming — so the dev head demos
+    /// exactly what a live turn looks like.
+    /// </summary>
+    private async Task RunStandaloneDemoTurnAsync()
+    {
+        ChatMessage m = StartAssistantMessage();
+        IsBusy = true;
+        try
+        {
+            await Task.Delay(1400);   // "Thinking…" (animated dots) shows here
+            const string canned =
+                "This is the themed UI shell — no agent is wired in standalone mode. "
+                + "Inside FL Studio your message streams back here with reasoning and tool calls.";
+            foreach (string word in canned.Split(' '))
+            {
+                m.Text += m.Text.Length == 0 ? word : " " + word;
+                await Task.Delay(30);
+            }
+        }
+        finally
+        {
+            IsBusy = false;
         }
     }
 

@@ -1,5 +1,4 @@
 using System.Net;
-using System.Net.Http.Headers;
 
 namespace FruityLink.Llm.Diagnostics;
 
@@ -40,7 +39,9 @@ public sealed class LlmRetryHandler : DelegatingHandler
 
         for (int attempt = 1; ; attempt++)
         {
-            using HttpRequestMessage clone = Clone(request, body, attempt);
+            // Clone preserves any options the OpenAI SDK set; then stamp the attempt number for the logger.
+            using HttpRequestMessage clone = HttpRequestCloner.Clone(request, body);
+            clone.Options.Set(LlmLoggingHandler.AttemptKey, attempt);
 
             try
             {
@@ -116,29 +117,5 @@ public sealed class LlmRetryHandler : DelegatingHandler
         double baseMs = 2000 * Math.Pow(2.4, attempt - 1); // 2000, 4800, 11520, 27648(→cap)…
         int ms = (int)Math.Min(baseMs, MaxBackoffMs) + Random.Shared.Next(0, 500);
         return TimeSpan.FromMilliseconds(ms);
-    }
-
-    private static HttpRequestMessage Clone(HttpRequestMessage request, byte[]? body, int attempt)
-    {
-        var clone = new HttpRequestMessage(request.Method, request.RequestUri) { Version = request.Version };
-
-        if (body is not null)
-        {
-            var content = new ByteArrayContent(body);
-            if (request.Content is not null)
-                foreach (KeyValuePair<string, IEnumerable<string>> header in request.Content.Headers)
-                    content.Headers.TryAddWithoutValidation(header.Key, header.Value);
-            clone.Content = content;
-        }
-
-        foreach (KeyValuePair<string, IEnumerable<string>> header in request.Headers)
-            clone.Headers.TryAddWithoutValidation(header.Key, header.Value);
-
-        // Preserve any options the OpenAI SDK set, then stamp the attempt number for the logger.
-        foreach (KeyValuePair<string, object?> option in (IEnumerable<KeyValuePair<string, object?>>)request.Options)
-            ((IDictionary<string, object?>)clone.Options)[option.Key] = option.Value;
-        clone.Options.Set(LlmLoggingHandler.AttemptKey, attempt);
-
-        return clone;
     }
 }

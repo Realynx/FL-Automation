@@ -39,8 +39,6 @@ public sealed class InstallAction
     /// </summary>
     public bool RecordOnly { get; init; }
 
-    public PayloadKind Payload { get; init; } = PayloadKind.Other;
-
     /// <summary>Short one-line form used in dry-run / progress output.</summary>
     public string Format(bool dryRun)
     {

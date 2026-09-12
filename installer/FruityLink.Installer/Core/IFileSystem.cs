@@ -25,7 +25,6 @@ public interface IFileSystem
     IEnumerable<string> EnumerateFiles(string directory, bool recursive);
     string ReadAllText(string path);
     void WriteAllText(string path, string content);
-    long GetFileSize(string path);
     /// <summary>True if a probe file can be created in <paramref name="directory"/>.</summary>
     bool IsDirectoryWritable(string directory);
 
@@ -102,8 +101,6 @@ public sealed class RealFileSystem : IFileSystem
             Directory.CreateDirectory(dir);
         File.WriteAllText(path, content);
     }
-
-    public long GetFileSize(string path) => new FileInfo(path).Length;
 
     public bool IsDirectoryWritable(string directory)
     {
@@ -276,9 +273,6 @@ public sealed class InMemoryFileSystem : IFileSystem
         EnsureParentDirs(p);
         _files[p] = content;
     }
-
-    public long GetFileSize(string path) =>
-        _files.TryGetValue(Norm(path), out var v) ? v.Length : 0;
 
     public bool IsDirectoryWritable(string directory) => true;
 

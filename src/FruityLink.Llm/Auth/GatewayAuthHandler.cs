@@ -2,6 +2,7 @@ using System.Net;
 using System.Net.Http;
 using System.Net.Http.Headers;
 using System.Text.Json;
+using FruityLink.Llm.Diagnostics;
 
 namespace FruityLink.Llm.Auth;
 
@@ -58,7 +59,8 @@ public sealed class GatewayAuthHandler : DelegatingHandler
             if (fresh is not null && fresh != token)
             {
                 response.Dispose();
-                using HttpRequestMessage retry = Clone(request, body, fresh);
+                using HttpRequestMessage retry = HttpRequestCloner.Clone(request, body);
+                retry.Headers.Authorization = new AuthenticationHeaderValue("Bearer", fresh);
                 response = await base.SendAsync(retry, cancellationToken).ConfigureAwait(false);
             }
         }
@@ -117,29 +119,5 @@ public sealed class GatewayAuthHandler : DelegatingHandler
     {
         response.Dispose();
         return new HttpRequestException(message);
-    }
-
-    private static HttpRequestMessage Clone(HttpRequestMessage request, byte[]? body, string token)
-    {
-        var clone = new HttpRequestMessage(request.Method, request.RequestUri) { Version = request.Version };
-
-        if (body is not null)
-        {
-            var content = new ByteArrayContent(body);
-            if (request.Content is not null)
-            {
-                foreach (KeyValuePair<string, IEnumerable<string>> header in request.Content.Headers)
-                    content.Headers.TryAddWithoutValidation(header.Key, header.Value);
-            }
-            clone.Content = content;
-        }
-
-        foreach (KeyValuePair<string, IEnumerable<string>> header in request.Headers)
-            clone.Headers.TryAddWithoutValidation(header.Key, header.Value);
-        foreach (KeyValuePair<string, object?> option in (IEnumerable<KeyValuePair<string, object?>>)request.Options)
-            ((IDictionary<string, object?>)clone.Options)[option.Key] = option.Value;
-
-        clone.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
-        return clone;
     }
 }

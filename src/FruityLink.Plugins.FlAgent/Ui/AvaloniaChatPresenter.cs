@@ -31,9 +31,10 @@ internal sealed class AvaloniaChatPresenter : IDisposable
     private readonly FruityLink.Agent.ProjectVersionCoordinator? _versionCoordinator;
     private readonly FruityLink.Llm.Auth.BugReportClient? _bugReports;
 
+    private readonly DictationController? _dictationCtl;
+
     private CancellationTokenSource? _turnCts;
     private ChatMessage? _current;
-    private string _dictationPrefix = string.Empty;
     private bool _disposed;
 
     public AvaloniaChatPresenter(
@@ -46,7 +47,9 @@ internal sealed class AvaloniaChatPresenter : IDisposable
         IAccountGateway? accountGateway = null,
         FruityLink.Ui.Avalonia.Services.IProjectVersionControl? versionControl = null,
         FruityLink.Agent.ProjectVersionCoordinator? versionCoordinator = null,
-        FruityLink.Llm.Auth.BugReportClient? bugReports = null)
+        FruityLink.Llm.Auth.BugReportClient? bugReports = null,
+        FruityLink.Llm.Auth.UpdateCheckClient? updateCheck = null,
+        string? clientVersion = null)
     {
         _host = host;
         _vm = vm;
@@ -56,6 +59,19 @@ internal sealed class AvaloniaChatPresenter : IDisposable
         _ownsDictation = ownsDictation;
         _versionCoordinator = versionCoordinator;
         _bugReports = bugReports;
+
+        if (dictation is not null)
+            _dictationCtl = new DictationController(
+                dictation,
+                isBusy: () => _vm.IsBusy,
+                setStatus: s => _host.Post(() => _vm.SetTransientStatus(s)),
+                // Route the FINAL transcript through the VM race guard (drops a late transcript if a send
+                // already consumed the box) and AWAIT the apply so a caller awaiting the finalize (the Send
+                // finalizer) sees the populated composer.
+                applyFinalText: t => PostAwait(() => _vm.ApplyDictatedText(t)),
+                applyPartialText: t => _vm.ApplyDictatedText(t),
+                readComposer: () => _vm.InputText,
+                marshalToUi: _host.Post);
 
         _host.Post(() =>
         {
@@ -75,6 +91,13 @@ internal sealed class AvaloniaChatPresenter : IDisposable
         // When null, the panel keeps its in-memory stub (inert but interactive).
         if (versionControl is not null)
             _host.Post(() => _vm.AttachVersionControl(versionControl));
+
+        // Once-per-run update check: ask the gateway whether a newer installer exists and, if so,
+        // surface the dismissible banner. Deliberately fire-and-forget with a settling delay so it
+        // never competes with the pre-warm/first-paint path, and quiet on every failure — an update
+        // notice must never cost a user anything.
+        if (updateCheck is not null && !string.IsNullOrWhiteSpace(clientVersion))
+            _ = NotifyIfUpdateAvailableAsync(updateCheck, clientVersion);
 
         _vm.MessageSubmitted += OnMessageSubmitted;
         _vm.CancelRequested += OnCancel;
@@ -120,13 +143,13 @@ internal sealed class AvaloniaChatPresenter : IDisposable
             {
                 if (msg.Text.Length == 0)
                     msg.Text = msg.HasToolCalls || msg.HasThoughts
-                        ? "Done."
-                        : "(The model returned no text. If it never calls tools, try a tool-capable model.)";
+                        ? ChatTurnText.DoneFallback
+                        : ChatTurnText.NoTextFallback;
             });
         }
         catch (OperationCanceledException)
         {
-            _host.Post(() => msg.Text += msg.Text.Length > 0 ? "\n\n(cancelled)" : "(cancelled)");
+            _host.Post(() => msg.Text += msg.Text.Length > 0 ? "\n\n" + ChatTurnText.Cancelled : ChatTurnText.Cancelled);
             _log("[fl-agent] turn cancelled by user.");
         }
         catch (Exception ex)
@@ -147,7 +170,7 @@ internal sealed class AvaloniaChatPresenter : IDisposable
                     // partial as the assistant turn in history, so "continue" picks up from it.
                     // Not flagged IsError: the partial is real answer content, and the error-style
                     // retry affordance would misrepresent a half-delivered reply as a total loss.
-                    msg.Text += PartialKeptNotice;
+                    msg.Text += ChatTurnText.PartialKeptNotice;
                 }
                 else
                 {
@@ -173,12 +196,6 @@ internal sealed class AvaloniaChatPresenter : IDisposable
         }
     }
 
-    /// <summary>Appended to a bubble whose stream died AFTER partial answer text arrived — the
-    /// partial is kept (it is also recorded in the agent's history) and the user is told how to
-    /// resume.</summary>
-    internal const string PartialKeptNotice =
-        "\n\n⚠ Connection dropped mid-reply — partial answer kept. Say \"continue\" to pick up from here.";
-
     /// <summary>
     /// Builds the user-facing text for a failed turn. Because a failed turn now KEEPS the user's
     /// message and the full prior conversation (see <c>FruityLink.Agent.AgentTurnRunner</c>), every
@@ -190,9 +207,7 @@ internal sealed class AvaloniaChatPresenter : IDisposable
     private static string BuildTurnErrorMessage(Exception ex)
     {
         int? status = ExtractHttpStatus(ex);
-        string detail = ex.Message;
-        if (ex.InnerException is not null && ex.InnerException.Message != ex.Message)
-            detail += " — " + ex.InnerException.Message;
+        string detail = ChatTurnText.BuildDetail(ex);
 
         bool transient = status is null or >= 500;   // null = network/timeout/budget abort
         string header = transient
@@ -232,6 +247,32 @@ internal sealed class AvaloniaChatPresenter : IDisposable
 
     /// <summary>How many trailing transcript turns ride along with a bug report (context for triage).</summary>
     private const int BugReportTranscriptTurns = 12;
+
+    /// <summary>
+    /// The once-per-run update check. Waits a few seconds so the boot path (pre-warm, first paint,
+    /// session restore) settles first, then asks the gateway's public <c>/v1/client-version</c>
+    /// whether a newer installer exists. On "yes" the dismissible banner appears in the chat with
+    /// a Download link (the installer handles the actual upgrade); on "no"/offline/any failure
+    /// nothing happens — the check is best-effort by contract and must never surface an error.
+    /// </summary>
+    private async Task NotifyIfUpdateAvailableAsync(
+        FruityLink.Llm.Auth.UpdateCheckClient updateCheck, string currentVersion)
+    {
+        try
+        {
+            await Task.Delay(TimeSpan.FromSeconds(8)).ConfigureAwait(false);
+            if (_disposed) return;
+            FruityLink.Llm.Auth.UpdateInfo? info =
+                await updateCheck.CheckAsync(currentVersion).ConfigureAwait(false);
+            if (info is null || _disposed) return;
+            _log($"[fl-agent] update available: {info.Value.Version} (installed {currentVersion})");
+            _host.Post(() => _vm.ShowUpdateNotice(info.Value.Version, info.Value.DownloadUrl));
+        }
+        catch (Exception ex)
+        {
+            _log("[fl-agent] update check skipped: " + ex.Message);
+        }
+    }
 
     private void OnBugReportRequested(ChatMessage failed)
     {
@@ -286,42 +327,11 @@ internal sealed class AvaloniaChatPresenter : IDisposable
         });
     }
 
-    // ---- speech-to-text (Whisper) — mirrors the WPF chat window ----
+    // ---- speech-to-text (Whisper) — the flow itself lives in the shared DictationController ----
 
-    private void OnMicToggle() => _ = ToggleMicAsync();
-
-    private async Task ToggleMicAsync()
+    private void OnMicToggle()
     {
-        if (_dictation is null || _vm.IsBusy) return;
-
-        if (_dictation.State == DictationState.Recording) { await FinalizeDictationAsync(); return; }
-        if (_dictation.State != DictationState.Idle) return;
-
-        if (!_dictation.IsModelReady)
-        {
-            _host.Post(() => _vm.SetTransientStatus("Downloading speech model (~150 MB, one time)…"));
-            var progress = new Progress<double>(p =>
-                _host.Post(() => _vm.SetTransientStatus($"Downloading speech model… {p * 100:0}%")));
-            try { await _dictation.EnsureModelAsync(progress).ConfigureAwait(false); }
-            catch (Exception ex) { _host.Post(() => _vm.SetTransientStatus("Model download failed: " + ex.Message)); return; }
-            _host.Post(() => _vm.SetTransientStatus(null));
-        }
-
-        _dictationPrefix = (_vm.InputText ?? string.Empty).TrimEnd();
-        try { _dictation.StartRecording(); }
-        catch (Exception ex) { _host.Post(() => _vm.SetTransientStatus("Microphone unavailable: " + ex.Message)); }
-    }
-
-    private async Task FinalizeDictationAsync()
-    {
-        if (_dictation is null) return;
-        string prefix = _dictationPrefix;
-        string text;
-        try { text = await _dictation.StopAndTranscribeAsync().ConfigureAwait(false); }
-        catch (Exception ex) { _host.Post(() => _vm.SetTransientStatus("Transcription failed: " + ex.Message)); return; }
-        // Route through the VM race guard (drops a late transcript if a send already consumed the box) and
-        // AWAIT the apply so a caller awaiting this method (the Send finalizer) sees the populated composer.
-        await PostAwait(() => _vm.ApplyDictatedText(Combine(prefix, text)));
+        if (_dictationCtl is not null) _ = _dictationCtl.ToggleAsync();
     }
 
     /// <summary>Awaitable "finish dictation for a Send", wired to <see cref="ChatViewModel.DictationFinalizer"/>:
@@ -330,10 +340,10 @@ internal sealed class AvaloniaChatPresenter : IDisposable
     /// sent before the "Transcribing" state was even set). Idempotent: safe when idle / already finalizing.</summary>
     private async Task FinalizeDictationForSendAsync()
     {
-        if (_dictation is null) return;
+        if (_dictation is null || _dictationCtl is null) return;
         if (_dictation.State == DictationState.Recording)
         {
-            await FinalizeDictationAsync().ConfigureAwait(false);   // stop + transcribe + (awaited) apply
+            await _dictationCtl.FinalizeAsync().ConfigureAwait(false);   // stop + transcribe + (awaited) apply
             return;
         }
         // A finalize is already running (mic toggled off just before Send): wait for it to settle to Idle,
@@ -351,20 +361,7 @@ internal sealed class AvaloniaChatPresenter : IDisposable
         return tcs.Task;
     }
 
-    private static string Combine(string prefix, string text)
-    {
-        if (string.IsNullOrEmpty(prefix)) return text;
-        return string.IsNullOrEmpty(text) ? prefix : prefix + " " + text;
-    }
-
-    private void OnPartialTranscribed(string text)
-    {
-        _host.Post(() =>
-        {
-            if (_dictation is not null && _dictation.State == DictationState.Recording)
-                _vm.ApplyDictatedText(Combine(_dictationPrefix, text));
-        });
-    }
+    private void OnPartialTranscribed(string text) => _dictationCtl?.HandlePartialTranscribed(text);
 
     private void OnDictationStateChanged(object? sender, EventArgs e)
     {

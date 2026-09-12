@@ -20,8 +20,6 @@ public readonly record struct BugReportTurn(string Role, string Content);
 /// </summary>
 public sealed class BugReportClient
 {
-    private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
-
     /// <summary>Server-side cap is ~2000 chars; trim client-side so reports never bounce on size.</summary>
     private const int MaxErrorChars = 2000;
 
@@ -63,7 +61,7 @@ public sealed class BugReportClient
             string body = JsonSerializer.Serialize(new BugReportRequest(
                 errorMessage.Length <= MaxErrorChars ? errorMessage : errorMessage[..MaxErrorChars],
                 transcript.Count == 0 ? null : transcript.Select(t => new TranscriptTurn(t.Role, t.Content)).ToArray(),
-                clientVersion), Json);
+                clientVersion), LlmJson.Web);
 
             using var request = new HttpRequestMessage(HttpMethod.Post, url)
             {

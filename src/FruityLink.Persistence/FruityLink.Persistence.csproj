@@ -10,7 +10,8 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\FruityLink.Core\FruityLink.Core.csproj" />
+    <ProjectReference Include="..\..\sdk\src\FruityLink.Core\FruityLink.Core.csproj" />
+    <ProjectReference Include="..\FruityLink.AppCore\FruityLink.AppCore.csproj" />
   </ItemGroup>
 
 </Project>

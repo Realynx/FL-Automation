@@ -23,7 +23,7 @@ public sealed class OperationResult
     /// True only for a clean run: no hard errors, nothing left behind, and nothing deferred to a
     /// reboot. Equivalent to <see cref="Outcome"/> == <see cref="OperationOutcome.Success"/>.
     /// </summary>
-    public bool Success { get; set; }
+    public bool Success => Outcome == OperationOutcome.Success;
     public bool DryRun { get; set; }
     public int ActionsPlanned { get; set; }
     public int ActionsExecuted { get; set; }
@@ -61,6 +61,7 @@ public sealed class InstallEngine
     private readonly IProcessManager _processes;
     private readonly int _deleteRetries;
     private readonly int _deleteRetryDelayMs;
+    private readonly string _mirrorRecordPath;
 
     /// <param name="processManager">
     /// Closes FL Studio before mutating its files. Defaults to <see cref="NoOpProcessManager"/> so the
@@ -69,18 +70,22 @@ public sealed class InstallEngine
     /// </param>
     /// <param name="deleteRetries">How many times to retry a locked delete/restore before scheduling it for reboot.</param>
     /// <param name="deleteRetryDelayMs">Delay between delete/restore retries (0 in tests).</param>
+    /// <param name="mirrorRecordPath">Fallback install-record location. Defaults to the user's
+    /// LocalAppData record; self-tests supply a path inside their isolated workspace.</param>
     public InstallEngine(
         IFileSystem fs,
         string installerVersion,
         IProcessManager? processManager = null,
         int deleteRetries = 5,
-        int deleteRetryDelayMs = 300)
+        int deleteRetryDelayMs = 300,
+        string? mirrorRecordPath = null)
     {
         _fs = fs;
         _installerVersion = installerVersion;
         _processes = processManager ?? new NoOpProcessManager();
         _deleteRetries = Math.Max(1, deleteRetries);
         _deleteRetryDelayMs = Math.Max(0, deleteRetryDelayMs);
+        _mirrorRecordPath = mirrorRecordPath ?? InstallRecord.LocalAppDataRecordPath;
     }
 
     // ---------------------------------------------------------------- INSTALL ----
@@ -151,7 +156,6 @@ public sealed class InstallEngine
                         Source = dest,
                         Target = backup,
                         Description = "back up existing original",
-                        Payload = item.Kind,
                     });
                 }
                 else
@@ -165,7 +169,6 @@ public sealed class InstallEngine
                         Target = backup,
                         Description = "preserve existing backup of original",
                         RecordOnly = true,
-                        Payload = item.Kind,
                     });
                 }
             }
@@ -177,7 +180,6 @@ public sealed class InstallEngine
                 Target = dest,
                 Description = item.Description ?? item.Kind.ToString(),
                 Optional = !item.Required,
-                Payload = item.Kind,
             });
         }
 
@@ -302,12 +304,10 @@ public sealed class InstallEngine
                 var msg = $"FAILED: {action.Format(dryRun)} :: {ex.Message}";
                 log.Error(msg);
                 result.Errors.Add(msg);
-                result.Success = false;
                 return result; // stop on first failure; user can uninstall to roll back partials
             }
         }
 
-        result.Success = result.Outcome == OperationOutcome.Success;
         return result;
     }
 
@@ -315,11 +315,11 @@ public sealed class InstallEngine
     {
         try
         {
-            _fs.WriteAllText(InstallRecord.LocalAppDataRecordPath, record.ToJson());
+            _fs.WriteAllText(_mirrorRecordPath, record.ToJson());
         }
         catch (Exception ex)
         {
-            log.Warn($"  could not write LocalAppData record mirror: {ex.Message}");
+            log.Warn($"  could not write install record mirror: {ex.Message}");
         }
     }
 
@@ -334,9 +334,9 @@ public sealed class InstallEngine
     {
         var actions = new List<InstallAction>();
 
-        if (record is null)
+        if (record is null || !RecordBelongsTo(record, flPath))
         {
-            log.Warn("No install record found; using manifest-derived best-effort uninstall.");
+            log.Warn("No install record for the selected FL directory; using manifest-derived best-effort uninstall.");
             return PlanUninstallFromManifest(flPath, manifest);
         }
 
@@ -368,7 +368,7 @@ public sealed class InstallEngine
                 Description = "remove created directory (if empty)",
             });
 
-        // 4. Remove the record itself + the LocalAppData mirror.
+        // 4. Remove the record itself + this engine's configured fallback mirror.
         var recordPath = Path.Combine(flPath, manifest.RecordFileName);
         actions.Add(new InstallAction
         {
@@ -376,12 +376,7 @@ public sealed class InstallEngine
             Target = recordPath,
             Description = "remove install record",
         });
-        actions.Add(new InstallAction
-        {
-            Kind = ActionKind.DeleteFile,
-            Target = InstallRecord.LocalAppDataRecordPath,
-            Description = "remove install record mirror",
-        });
+        AddMatchingMirrorRemoval(actions, flPath);
 
         return actions;
     }
@@ -437,8 +432,7 @@ public sealed class InstallEngine
         var recordPath = Path.Combine(flPath, manifest.RecordFileName);
         if (_fs.FileExists(recordPath))
             actions.Add(new InstallAction { Kind = ActionKind.DeleteFile, Target = recordPath, Description = "remove install record" });
-        if (_fs.FileExists(InstallRecord.LocalAppDataRecordPath))
-            actions.Add(new InstallAction { Kind = ActionKind.DeleteFile, Target = InstallRecord.LocalAppDataRecordPath, Description = "remove install record mirror" });
+        AddMatchingMirrorRemoval(actions, flPath);
 
         return actions;
     }
@@ -500,8 +494,6 @@ public sealed class InstallEngine
             }
         }
 
-        // Honest success: only when nothing is left behind and nothing is pending a reboot.
-        result.Success = result.Outcome == OperationOutcome.Success;
         return result;
     }
 
@@ -524,31 +516,29 @@ public sealed class InstallEngine
     /// </summary>
     private void RobustDelete(string path, OperationResult result, IProgressLog log)
     {
-        for (var attempt = 1; attempt <= _deleteRetries; attempt++)
-        {
-            try
+        var deleted = TryWithRetries(
+            () =>
             {
                 _fs.DeleteFile(path);
                 if (!_fs.FileExists(path))
                 {
                     result.FilesAffected++;
-                    return;
+                    return true;
                 }
-            }
-            catch (Exception ex) when (attempt == _deleteRetries)
-            {
-                log.Warn($"  still locked after {attempt} attempt(s) ({ex.Message}); scheduling for reboot: {path}");
-            }
-            catch
-            {
-                // transient lock — fall through to retry
-            }
+                return false;
+            },
+            (attempt, ex) => log.Warn(
+                $"  still locked after {attempt} attempt(s) ({ex.Message}); scheduling for reboot: {path}"));
+        if (deleted)
+            return;
 
-            if (attempt < _deleteRetries && _deleteRetryDelayMs > 0)
-                System.Threading.Thread.Sleep(_deleteRetryDelayMs);
-        }
-
-        ScheduleDeleteOrFail(path, result, log);
+        ScheduleOnRebootOrFail(
+            () => _fs.ScheduleDeleteOnReboot(path), path,
+            pendingWarn: $"  locked; scheduled for deletion on next reboot: {path}",
+            schedulingFailedPrefix: $"  could not schedule reboot-delete for {path}: ",
+            leftoverError: $"could not remove (file locked): {path}",
+            failedLog: $"  FAILED to remove (locked, reboot-scheduling failed): {path}",
+            result, log);
     }
 
     /// <summary>
@@ -557,16 +547,43 @@ public sealed class InstallEngine
     /// </summary>
     private void RobustRestore(string backup, string original, OperationResult result, IProgressLog log)
     {
+        var restored = TryWithRetries(
+            () =>
+            {
+                _fs.MoveFile(backup, original, overwrite: true);
+                return true;
+            },
+            (attempt, ex) => log.Warn(
+                $"  restore blocked after {attempt} attempt(s) ({ex.Message}); scheduling for reboot: {original}"));
+        if (restored)
+            return;
+
+        ScheduleOnRebootOrFail(
+            () => _fs.ScheduleMoveOnReboot(backup, original), original,
+            pendingWarn: $"  locked; the original will be restored on next reboot: {original}",
+            schedulingFailedPrefix: $"  could not schedule reboot-restore for {original}: ",
+            leftoverError: $"could not restore original (file locked): {original}",
+            failedLog: $"  FAILED to restore (locked, reboot-scheduling failed): {original}",
+            result, log);
+    }
+
+    /// <summary>
+    /// Runs <paramref name="op"/> up to the retry limit (sleeping between attempts). True as soon
+    /// as it succeeds; false when every attempt failed or threw (a locked file), after
+    /// <paramref name="onFinalFailure"/> logged the last attempt's exception.
+    /// </summary>
+    private bool TryWithRetries(Func<bool> op, Action<int, Exception> onFinalFailure)
+    {
         for (var attempt = 1; attempt <= _deleteRetries; attempt++)
         {
             try
             {
-                _fs.MoveFile(backup, original, overwrite: true);
-                return;
+                if (op())
+                    return true;
             }
             catch (Exception ex) when (attempt == _deleteRetries)
             {
-                log.Warn($"  restore blocked after {attempt} attempt(s) ({ex.Message}); scheduling for reboot: {original}");
+                onFinalFailure(attempt, ex);
             }
             catch
             {
@@ -577,44 +594,34 @@ public sealed class InstallEngine
                 System.Threading.Thread.Sleep(_deleteRetryDelayMs);
         }
 
-        try
-        {
-            if (_fs.ScheduleMoveOnReboot(backup, original))
-            {
-                result.RebootPending.Add(original);
-                log.Warn($"  locked; the original will be restored on next reboot: {original}");
-                return;
-            }
-        }
-        catch (Exception ex)
-        {
-            log.Error($"  could not schedule reboot-restore for {original}: {ex.Message}");
-        }
-
-        result.Leftover.Add(original);
-        result.Errors.Add($"could not restore original (file locked): {original}");
-        log.Error($"  FAILED to restore (locked, reboot-scheduling failed): {original}");
+        return false;
     }
 
-    private void ScheduleDeleteOrFail(string path, OperationResult result, IProgressLog log)
+    /// <summary>
+    /// Last-resort bookkeeping for a file that stayed locked: schedule the reboot-time op and track
+    /// it as pending, or record a true leftover + error, so we never falsely report success.
+    /// </summary>
+    private static void ScheduleOnRebootOrFail(
+        Func<bool> schedule, string path, string pendingWarn, string schedulingFailedPrefix,
+        string leftoverError, string failedLog, OperationResult result, IProgressLog log)
     {
         try
         {
-            if (_fs.ScheduleDeleteOnReboot(path))
+            if (schedule())
             {
                 result.RebootPending.Add(path);
-                log.Warn($"  locked; scheduled for deletion on next reboot: {path}");
+                log.Warn(pendingWarn);
                 return;
             }
         }
         catch (Exception ex)
         {
-            log.Error($"  could not schedule reboot-delete for {path}: {ex.Message}");
+            log.Error(schedulingFailedPrefix + ex.Message);
         }
 
         result.Leftover.Add(path);
-        result.Errors.Add($"could not remove (file locked): {path}");
-        log.Error($"  FAILED to remove (locked, reboot-scheduling failed): {path}");
+        result.Errors.Add(leftoverError);
+        log.Error(failedLog);
     }
 
     // ----------------------------------------------------------------- shared ----
@@ -629,22 +636,48 @@ public sealed class InstallEngine
         return Path.IsPathRooted(s) ? s : Path.Combine(payloadRoot, s);
     }
 
-    /// <summary>Loads the recorded install (FL dir first, then the LocalAppData mirror), or null.</summary>
+    /// <summary>Loads a record belonging to the selected FL directory (primary first, then the
+    /// configured fallback mirror). Records for another installation are ignored.</summary>
     public InstallRecord? TryLoadRecord(string flPath, InstallManifest manifest)
     {
         var primary = Path.Combine(flPath, manifest.RecordFileName);
-        if (_fs.FileExists(primary))
-        {
-            try { return InstallRecord.FromJson(_fs.ReadAllText(primary)); }
-            catch { /* fall through to mirror */ }
-        }
+        return TryLoadMatchingRecord(primary, flPath) ?? TryLoadMatchingRecord(_mirrorRecordPath, flPath);
+    }
 
-        if (_fs.FileExists(InstallRecord.LocalAppDataRecordPath))
+    private InstallRecord? TryLoadMatchingRecord(string path, string flPath)
+    {
+        if (!_fs.FileExists(path)) return null;
+        try
         {
-            try { return InstallRecord.FromJson(_fs.ReadAllText(InstallRecord.LocalAppDataRecordPath)); }
-            catch { /* ignore */ }
+            var record = InstallRecord.FromJson(_fs.ReadAllText(path));
+            return RecordBelongsTo(record, flPath) ? record : null;
         }
+        catch { return null; }
+    }
 
-        return null;
+    private static bool RecordBelongsTo(InstallRecord record, string flPath)
+    {
+        if (string.IsNullOrWhiteSpace(record.FlPath) || string.IsNullOrWhiteSpace(flPath)) return false;
+        try
+        {
+            var recorded = Path.TrimEndingDirectorySeparator(Path.GetFullPath(record.FlPath));
+            var selected = Path.TrimEndingDirectorySeparator(Path.GetFullPath(flPath));
+            return recorded.Equals(selected, StringComparison.OrdinalIgnoreCase);
+        }
+        catch (Exception ex) when (ex is ArgumentException or NotSupportedException or PathTooLongException)
+        {
+            return false;
+        }
+    }
+
+    private void AddMatchingMirrorRemoval(List<InstallAction> actions, string flPath)
+    {
+        if (TryLoadMatchingRecord(_mirrorRecordPath, flPath) is null) return;
+        actions.Add(new InstallAction
+        {
+            Kind = ActionKind.DeleteFile,
+            Target = _mirrorRecordPath,
+            Description = "remove install record mirror",
+        });
     }
 }

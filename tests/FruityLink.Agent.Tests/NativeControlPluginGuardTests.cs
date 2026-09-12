@@ -42,7 +42,7 @@ public sealed class NativeControlPluginGuardTests
         { "mixer volume track 126", p => p.SetMixerVolumeAsync(126, 6400) },
         { "fx slot 10", p => p.AddMixerEffectAsync(0, 10, "Fruity Reeverb 2") },
         { "channel -1", p => p.SetChannelVolumeAsync(-1, 10000) },
-        { "route to mixer 126", p => p.SetChannelFxRouteAsync(0, 126) },
+        { "route to mixer 126", p => p.SetChannelFxRouteAsync("0", 126) },
         // Color pre-validation: junk hex would otherwise become a wrong color or a FormatException.
         { "color 4-digit hex", p => p.SetTrackColorAsync(1, "FF88") },
         { "color non-hex", p => p.SetTrackColorAsync(1, "GGHHII") },
