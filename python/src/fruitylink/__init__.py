@@ -20,6 +20,7 @@ from .records import (
     Ticks,
     Timebase,
 )
+from .sessions import StudioSession, launch
 from .studio import Studio, connect
 from .transport import NamedPipeTransport, RequestTransport
 
@@ -28,5 +29,5 @@ __all__ = [
     "Beats", "ChannelIndex", "ClipIndex", "ClipMove", "ClipResize", "ConnectionError", "Endpoint",
     "FruityLinkError", "MixerTrackIndex", "NamedPipeTransport", "NoteEdit", "NoteRef", "NoteSpec",
     "Operations", "PatternClipSpec", "PatternIndex", "PlaylistTrackIndex", "ProtocolError", "RemoteError",
-    "RequestTransport", "Studio", "Ticks", "Timebase", "connect", "discover",
+    "RequestTransport", "Studio", "StudioSession", "Ticks", "Timebase", "connect", "discover", "launch",
 ]

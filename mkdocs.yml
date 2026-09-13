@@ -70,6 +70,7 @@ nav:
       - Overview: csharp/index.md
       - First plugin: csharp/first-plugin.md
       - Recipes: csharp/recipes.md
+      - Background launching: background-launching.md
       - FL control API: fl-control-api.md
       - Plugin lifecycle: plugin-lifecycle.md
       - Menus and toolbar: menus-and-toolbar.md

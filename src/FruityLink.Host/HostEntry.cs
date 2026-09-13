@@ -26,6 +26,16 @@ public static class HostEntry
         try
         {
             Log($"managed Bootstrap entered (pid={Environment.ProcessId}, mtid={Environment.CurrentManagedThreadId})");
+            if (AutomationHost.TryReadConfiguration(Environment.GetEnvironmentVariable, out var automation, out var error))
+            {
+                var worker = new Thread(() => RunAutomationHost(automation!))
+                { IsBackground = true, Name = "FruityLink-Automation" };
+                worker.Start();
+                return 0;
+            }
+            if (error is not null)
+                throw new InvalidOperationException(error);
+
             var ui = new Thread(UiThread) { IsBackground = true, Name = "FruityLink-UI" };
             ui.SetApartmentState(ApartmentState.STA);
             ui.Start();
@@ -148,6 +158,7 @@ public static class HostEntry
             {
                 if (InProcBridge.Raw("fl_ready").Trim() == "1")
                 {
+                    SignalAutomationStartupReady();
                     Log($"FL ready after {sw.ElapsedMilliseconds}ms");
                     return;
                 }
@@ -365,6 +376,31 @@ public static class HostEntry
             TryRaw("toolbar_button_refresh", "toolbar_button_refresh (post-init)", logResult: true);
         }
         catch (Exception ex) { Log("InitializeRealPluginHost FAILED: " + ex); }
+    }
+
+    private static void SignalAutomationStartupReady()
+    {
+        string? name = Environment.GetEnvironmentVariable("FRUITYLINK_STARTUP_EVENT");
+        if (string.IsNullOrEmpty(name)) return;
+        try
+        {
+            using var ready = EventWaitHandle.OpenExisting(name);
+            ready.Set();
+        }
+        catch (WaitHandleCannotBeOpenedException) { /* The launching owner has already gone away. */ }
+        catch (Exception error) { Log("startup readiness notification failed: " + error.Message); }
+    }
+
+    private static void RunAutomationHost(AutomationHost.Configuration configuration)
+    {
+        try
+        {
+            TryLoadBridge();
+            FlInjectBridge.UseInProcessTransport();
+            Log("standalone automation: in-process bridge transport enabled");
+            AutomationHost.Run(configuration, WaitForFlReady, Log);
+        }
+        catch (Exception ex) { Log("standalone automation FAILED: " + ex); }
     }
 
     private static void QueueRefresh(string command)

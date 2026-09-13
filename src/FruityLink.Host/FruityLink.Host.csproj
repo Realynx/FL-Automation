@@ -33,6 +33,8 @@
   <ItemGroup>
     <!-- In-proc bridge transport + the full FL control surface. -->
     <ProjectReference Include="..\FruityLink.FlStudio\FruityLink.FlStudio.csproj" />
+    <!-- Authenticated standalone automation endpoint used by owned background FL processes. -->
+    <ProjectReference Include="..\FruityLink.Scripting\FruityLink.Scripting.csproj" />
     <!-- Plugin contract read by the native "Plugins" toolbar dropdown (Abstractions -> Core only;
          no cycle). PluginGlue marshals PluginManagerLocator.Current to the C++ bridge. -->
     <ProjectReference Include="..\FruityLink.Plugins.Abstractions\FruityLink.Plugins.Abstractions.csproj" />

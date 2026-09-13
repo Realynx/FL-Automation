@@ -6,6 +6,8 @@ Typed Python automation for FL Studio: compose patterns, arrange clips, route au
 
 FLMCP and the optional Python IDE supply an already connected `fl` using the bundled interpreter. External programs need Windows, Python 3.11+, and the matching **FL Python** endpoint plugin enabled in FL Studio. The package uses only the standard library.
 
+For independent build jobs, use [`launch(..., background=True)`](../docs/background-launching.md#standalone-python-builds). The framework's SessionHost launches FL on a private Windows desktop and exposes its scripting endpoint without requiring an MCP or FL Python plugin. Each job has its own working project, process and desktop; save explicitly before closing, or use `session.render()` to save a snapshot and export WAV.
+
 From the FL-Automation repository root:
 
 ```powershell

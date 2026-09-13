@@ -10,5 +10,6 @@
     <PackageReference Include="xunit.runner.visualstudio" />
     <ProjectReference Include="../../src/FruityLink.FlStudio/FruityLink.FlStudio.csproj" />
     <ProjectReference Include="../../src/FruityLink.Scripting/FruityLink.Scripting.csproj" />
+    <Compile Include="../../src/FruityLink.Host/AutomationHost.cs" Link="AutomationHost.cs" />
   </ItemGroup>
 </Project>
