@@ -19,9 +19,11 @@ namespace FruityLink.Ui.Avalonia.Hosting;
 /// creates/closes its window(s) on this thread — the thread keeps running so a later re-enable can
 /// reuse it.</para>
 ///
-/// <para><b>The application is the caller's.</b> This SDK host doesn't know the product's
-/// <c>Application</c> subclass: the FIRST <see cref="EnsureStarted(Func{AppBuilder})"/> call supplies an
-/// <see cref="AppBuilder"/> factory (e.g. <c>() =&gt; AppBuilder.Configure&lt;App&gt;().UsePlatformDetect().WithInterFont()</c>);
+/// <para><b>Shared application, local plugin themes.</b> The FIRST
+/// <see cref="EnsureStarted(Func{AppBuilder})"/> call supplies an
+/// <see cref="AppBuilder"/> factory. UI plugins should configure the neutral <see cref="Application"/>
+/// type and put their themes/resources on their own windows, so either plugin may start first and
+/// disabling a plugin does not leave its application instance rooted for the process lifetime;
 /// the host then appends its embed-safe platform options and performs the setup on the Avalonia thread.
 /// Later calls (any overload) just wait for that one startup.</para>
 ///
@@ -44,7 +46,7 @@ public sealed class EmbeddedAvaloniaHost
     private Func<AppBuilder>? _appBuilderFactory;
     private volatile Exception? _startError;
 
-    private EmbeddedAvaloniaHost() { }
+    internal EmbeddedAvaloniaHost() { }
 
     /// <summary>
     /// Ensure the Avalonia app + dispatcher thread is up (idempotent, once per process). Blocks the
@@ -67,42 +69,37 @@ public sealed class EmbeddedAvaloniaHost
     {
         lock (_gate)
         {
-            if (_thread is not null)
-            {
-                _ready.Wait();
-                if (_startError is not null)
-                    throw new InvalidOperationException("Avalonia UI init failed: " + _startError.Message, _startError);
-                return;
-            }
-
-            _appBuilderFactory = appBuilder ?? throw new InvalidOperationException(
-                "The first EnsureStarted call must supply the product's AppBuilder factory " +
-                "(e.g. () => AppBuilder.Configure<App>().UsePlatformDetect()).");
-
-            _thread = new Thread(ThreadMain) { IsBackground = true, Name = "FL Agent Avalonia UI" };
-            _thread.SetApartmentState(ApartmentState.STA);
-            _thread.Start();
+            if (_thread is null) StartThread(appBuilder);
+            if (_thread == Thread.CurrentThread && !_ready.IsSet)
+                throw new InvalidOperationException("Avalonia startup cannot wait for itself. Finish the AppBuilder factory before invoking the host.");
         }
 
+        // Never hold the startup gate while waiting: the AppBuilder factory can itself call host
+        // helpers, which must be able to detect re-entrancy instead of deadlocking both threads.
         _ready.Wait();
         if (_startError is not null)
             throw new InvalidOperationException("Avalonia UI init failed: " + _startError.Message, _startError);
+    }
+
+    private void StartThread(Func<AppBuilder>? appBuilder)
+    {
+        _appBuilderFactory = appBuilder ?? throw new InvalidOperationException(
+            "The first EnsureStarted call must supply the product's AppBuilder factory " +
+            "(e.g. () => AppBuilder.Configure<App>().UsePlatformDetect()).");
+        try
+        {
+            _thread = new Thread(ThreadMain) { IsBackground = true, Name = "FruityLink Avalonia UI" };
+            _thread.SetApartmentState(ApartmentState.STA);
+            _thread.Start();
+        }
+        catch (Exception ex) { _startError = ex; _ready.Set(); }
     }
 
     private void ThreadMain()
     {
         try
         {
-            _appBuilderFactory!()
-                .With(new global::Avalonia.Win32PlatformOptions
-                {
-                    // Software rendering (Skia → bitmap) blitted to the window's redirection surface via
-                    // GDI. This is the reliable presenter for a window that will be reparented as a
-                    // WS_CHILD of FL's foreign HWND (GPU/composition presenters go blank in that case).
-                    RenderingMode = new[] { global::Avalonia.Win32RenderingMode.Software },
-                    CompositionMode = new[] { global::Avalonia.Win32CompositionMode.RedirectionSurface },
-                })
-                .SetupWithoutStarting();
+            ConfigureApplication();
         }
         catch (Exception ex)
         {
@@ -119,18 +116,41 @@ public sealed class EmbeddedAvaloniaHost
         // must NOT stop the thread (no application lifetime is configured, so a last-window-closed does
         // not shut anything down), so a later plugin re-enable can create a fresh window on this thread.
         try { Dispatcher.UIThread.MainLoop(CancellationToken.None); }
-        catch { /* thread ends with the process */ }
+        catch (Exception ex) { _startError = ex; }
+        finally { _startError ??= new InvalidOperationException("Avalonia UI dispatcher has stopped."); }
+    }
+
+    private void ConfigureApplication()
+    {
+        // Drop the caller's delegate before entering the permanent loop. A plugin factory's target
+        // or declaring assembly must not remain rooted merely because it started the shared host.
+        Func<AppBuilder> factory = _appBuilderFactory!;
+        _appBuilderFactory = null;
+        factory().With(new global::Avalonia.Win32PlatformOptions
+        {
+            RenderingMode = new[] { global::Avalonia.Win32RenderingMode.Software },
+            CompositionMode = new[] { global::Avalonia.Win32CompositionMode.RedirectionSurface },
+        }).SetupWithoutStarting();
     }
 
     /// <summary>Run <paramref name="action"/> on the Avalonia UI thread and wait for it.</summary>
-    public void Invoke(Action action) => Dispatcher.UIThread.Invoke(action);
+    public void Invoke(Action action)
+    {
+        EnsureStarted();
+        Dispatcher.UIThread.Invoke(action);
+    }
 
     /// <summary>Run <paramref name="func"/> on the Avalonia UI thread and return its result.</summary>
-    public T Invoke<T>(Func<T> func) => Dispatcher.UIThread.Invoke(func);
+    public T Invoke<T>(Func<T> func)
+    {
+        EnsureStarted();
+        return Dispatcher.UIThread.Invoke(func);
+    }
 
     /// <summary>Post <paramref name="action"/> to the Avalonia UI thread (fire-and-forget, non-blocking).</summary>
     public void Post(Action action)
     {
+        if (!_ready.IsSet || _startError is not null) return;
         try { Dispatcher.UIThread.Post(action); }
         catch { /* dispatcher gone / shutting down — best-effort */ }
     }

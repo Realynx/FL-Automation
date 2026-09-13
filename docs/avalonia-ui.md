@@ -1,5 +1,13 @@
 # Avalonia UI inside FL
 
+For multiple plugins in one FL process, use the shared host and the
+[async per-plugin window lifecycle](window-embedding.md#independent-plugin-windows).
+Configure a neutral `Application` and keep themes/resources on each window.
+`GetWindowOptions` supplies scaled client bounds, `PinToHostContent` keeps toolkit resize/DPI
+updates inside the native content container, and `CloseAsync` confirms toolkit cleanup before
+unload. Native detachment must succeed first. The shared dispatcher, toolkit and interpreter
+remain alive when individual plugins are disabled.
+
 `FruityLink.Ui.Avalonia.Hosting` hosts an [Avalonia](https://avaloniaui.net/) UI inside FL Studio's
 window chrome. It handles the Avalonia lifetime and the reparent/rendering details of
 [window embedding](window-embedding.md) so your plugin only supplies views.
@@ -66,9 +74,18 @@ software-render mode with its redirection surface for the whole time it is paren
 ### Force a repaint after embed / re-show
 
 **Why:** even in software mode, right after the reparent (and after hiding then re-showing) the child can
-stay **blank until the first input** arrives. Call the host's force-render after you embed and on every
-re-show to get a synchronous repaint. (Do **not** try to fix this with a ±1px size-nudge — it makes the
-lazy-render *worse*.)
+stay **blank until the first input** arrives. Call `view.ForceRender()` after embedding and on re-show.
+It queues one repaint after the native layout callback returns, invalidates the visual and the whole
+child HWND without erasing its background, then lets Avalonia process `WM_PAINT`. Repeated layout
+notifications share that queued repaint, and unchanged geometry does not force another size/move.
+
+This follows Avalonia's [Win32 invalidation](https://github.com/AvaloniaUI/Avalonia/blob/11.3.18/src/Windows/Avalonia.Win32/WindowImpl.cs#L602)
+and [compositor repaint](https://github.com/AvaloniaUI/Avalonia/blob/11.3.18/src/Avalonia.Base/Rendering/Composition/CompositingRenderer.cs#L204)
+paths. Avoid background erase, synchronous repaint inside size callbacks, fake input and size nudges.
+The native bridge must exclude only the owned plugin content rectangle from parent painting.
+Do not add blanket `WS_CLIPCHILDREN` to FL's frame: FL paints its native title bar and buttons
+through that parent surface, so the blanket style makes the chrome disappear. The separate
+plugin content container retains its own child clipping.
 
 ### Avalonia cannot be torn down — hide, never stop the UI thread
 

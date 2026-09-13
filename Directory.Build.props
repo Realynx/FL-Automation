@@ -8,6 +8,7 @@
     <TreatWarningsAsErrors>false</TreatWarningsAsErrors>
     <GenerateDocumentationFile>false</GenerateDocumentationFile>
     <Deterministic>true</Deterministic>
+    <EnableNETAnalyzers>true</EnableNETAnalyzers>
     <Authors>FruityLink</Authors>
     <Product>FruityLink SDK</Product>
     <!-- The SDK version stamped on every assembly, read from the sdk-root VERSION file:
@@ -18,6 +19,10 @@
          plain net9.0 for testability, so silence the platform-compat analyzer repo-wide. -->
     <NoWarn>$(NoWarn);CA1416</NoWarn>
   </PropertyGroup>
+
+  <ItemGroup>
+    <AdditionalFiles Include="$(MSBuildThisFileDirectory)CodeMetricsConfig.txt" />
+  </ItemGroup>
 
   <!-- NuGet metadata shared by the packable SDK projects. Packing is OPT-IN:
        developer-facing libraries set IsPackable=true (+ a Description) in their

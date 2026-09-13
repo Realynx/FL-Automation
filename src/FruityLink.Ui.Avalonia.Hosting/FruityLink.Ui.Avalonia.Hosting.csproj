@@ -35,9 +35,15 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <ProjectReference Include="../FruityLink.Plugins.Abstractions/FruityLink.Plugins.Abstractions.csproj" />
     <!-- Pinned inline to match FruityLink.Ui.Avalonia (Directory.Packages.props stays untouched). -->
     <PackageReference Include="Avalonia" Version="11.3.18" />
     <PackageReference Include="Avalonia.Desktop" Version="11.3.18" />
+    <!-- Shared UI plugins use the same baseline theme/font assemblies regardless of start order. -->
+    <PackageReference Include="Avalonia.Themes.Fluent" Version="11.3.18" />
+    <PackageReference Include="Avalonia.Fonts.Inter" Version="11.3.18" />
+    <!-- Editor theme assets use Avalonia's process-wide assembly cache; keep their owner stable. -->
+    <PackageReference Include="Avalonia.AvaloniaEdit" Version="11.3.0" />
   </ItemGroup>
 
 </Project>

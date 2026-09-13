@@ -1,0 +1,27 @@
+<?xml version="1.0"?>
+<SyntaxDefinition name="Python" extensions=".py" xmlns="http://icsharpcode.net/sharpdevelop/syntaxdefinition/2008">
+  <Color name="Comment" foreground="#8998AE" fontStyle="italic" />
+  <Color name="String" foreground="#A8D99A" />
+  <Color name="Keyword" foreground="#C9A5FA" fontWeight="bold" />
+  <Color name="Builtin" foreground="#83CFF5" />
+  <Color name="Number" foreground="#F5BC83" />
+  <RuleSet>
+    <Span color="Comment" begin="#" />
+    <Span color="String" multiline="true" begin="&quot;&quot;&quot;" end="&quot;&quot;&quot;" />
+    <Span color="String" multiline="true" begin="'''" end="'''" />
+    <Span color="String" begin="&quot;" end="&quot;"><RuleSet><Span begin="\\" end="." /></RuleSet></Span>
+    <Span color="String" begin="'" end="'"><RuleSet><Span begin="\\" end="." /></RuleSet></Span>
+    <Keywords color="Keyword">
+      <Word>False</Word><Word>None</Word><Word>True</Word><Word>and</Word><Word>as</Word>
+      <Word>assert</Word><Word>async</Word><Word>await</Word><Word>break</Word><Word>class</Word>
+      <Word>continue</Word><Word>def</Word><Word>del</Word><Word>elif</Word><Word>else</Word>
+      <Word>except</Word><Word>finally</Word><Word>for</Word><Word>from</Word><Word>global</Word>
+      <Word>if</Word><Word>import</Word><Word>in</Word><Word>is</Word><Word>lambda</Word>
+      <Word>nonlocal</Word><Word>not</Word><Word>or</Word><Word>pass</Word><Word>raise</Word>
+      <Word>return</Word><Word>try</Word><Word>while</Word><Word>with</Word><Word>yield</Word>
+      <Word>match</Word><Word>case</Word>
+    </Keywords>
+    <Keywords color="Builtin"><Word>print</Word><Word>range</Word><Word>len</Word><Word>str</Word><Word>int</Word><Word>float</Word><Word>list</Word><Word>dict</Word><Word>enumerate</Word><Word>zip</Word><Word>fl</Word><Word>result</Word></Keywords>
+    <Rule color="Number">\b(0[xX][0-9a-fA-F_]+|\d[\d_]*(\.\d[\d_]*)?([eE][+-]?\d+)?)\b</Rule>
+  </RuleSet>
+</SyntaxDefinition>

@@ -15,12 +15,59 @@ jobs:
         with:
           dotnet-version: 9.0.x
 
-      - name: Build SDK solution
-        run: dotnet build FruityLink.Sdk.slnx -c Release
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Select Python for C# transport integration tests
+        shell: pwsh
+        run: '"FRUITYLINK_TEST_PYTHON=$((Get-Command python).Source)" >> $env:GITHUB_ENV'
+
+      - name: Prepare verified CPython for embedded integration tests
+        shell: pwsh
+        run: |
+          $archive = Join-Path $env:RUNNER_TEMP 'python-3.14.6-embed-amd64.zip'
+          $runtime = Join-Path $env:RUNNER_TEMP 'fruitylink-embedded-python'
+          Invoke-WebRequest 'https://www.python.org/ftp/python/3.14.6/python-3.14.6-embed-amd64.zip' -OutFile $archive
+          $expected = 'df901e84a896ff1ee720ad03377e0c8d8c2244fda79808aeeaff6316df1cb75c'
+          if ((Get-Item -LiteralPath $archive).Length -ne 12570832 -or (Get-FileHash -LiteralPath $archive -Algorithm SHA256).Hash -ne $expected) {
+            throw 'Embedded CPython test archive failed integrity verification.'
+          }
+          Expand-Archive -LiteralPath $archive -DestinationPath $runtime
+          "FRUITYLINK_TEST_PYTHON_RUNTIME=$runtime" >> $env:GITHUB_ENV
+          "FRUITYLINK_TEST_PYTHON_PACKAGE=$(Join-Path $env:GITHUB_WORKSPACE 'python/src')" >> $env:GITHUB_ENV
+
+      - name: Build, analyze, and test SDK
+        shell: pwsh
+        run: ./scripts/codefactor-check.ps1
+
+      - name: Build and test native bridge
+        run: |
+          cmake -S native/bridge -B native/bridge/build -A x64
+          cmake --build native/bridge/build --config Release
+          ctest --test-dir native/bridge/build -C Release --output-on-failure
 
       - name: Pack (dry run — catches packaging regressions before a release)
         run: |
           dotnet pack src/FruityLink.Core/FruityLink.Core.csproj -c Release --no-build -o packages
+          dotnet pack src/FruityLink.Scripting/FruityLink.Scripting.csproj -c Release --no-build -o packages
           dotnet pack src/FruityLink.Plugins.Abstractions/FruityLink.Plugins.Abstractions.csproj -c Release --no-build -o packages
           dotnet pack src/FruityLink.Ui.Avalonia.Hosting/FruityLink.Ui.Avalonia.Hosting.csproj -c Release --no-build -o packages
           dotnet pack src/FruityLink.Ui.Wpf.Hosting/FruityLink.Ui.Wpf.Hosting.csproj -c Release --no-build -o packages
+
+  python:
+    runs-on: windows-latest
+    strategy:
+      matrix:
+        python-version: ['3.11', '3.13']
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Install Python development environment
+        run: |
+          python -m pip install uv
+          uv sync --directory python --python "${{ matrix.python-version }}"
+      - name: Check API parity, lint, types, tests, and distributions
+        run: uv run --directory python python tools/check.py

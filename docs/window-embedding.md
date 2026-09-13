@@ -1,9 +1,74 @@
 # Window embedding
 
-FL Automate hosts its UI *inside* FL Studio's own window chrome — a plugin window sits in a real FL
-editor host form, next to FL's VST/plugin editors, rather than floating as a detached OS window. The
-`IFlWindowHost` capability (exposed on `IPluginContext` as `Windows`) lets your plugin do the same with
-any Win32 `HWND`.
+Plugins can host their UI *inside* FL Studio's own window chrome using a native FL form. The
+`IFlWindowHost` capability (exposed on `IPluginContext` as `Windows`) accepts a Win32 `HWND` and
+preserves a regular external window when native hosting is unavailable.
+
+## Independent plugin windows
+
+The current host gives each plugin an independent session through `context.Windows`. New
+integrations use `IAsyncFlWindowHost`: native creation, visibility and release run on workers
+while the child's UI dispatcher keeps pumping. Blocking a shared Avalonia thread on FL could
+otherwise block every embedded child on that thread.
+
+`FlWindowOptions` supplies the caption and preferred/minimum content sizes in **physical pixels**.
+Avalonia's `view.GetWindowOptions(caption)` converts its DIP dimensions using the current rendering
+scale. Creation returns a hidden native form; the adapter reparents on the child's owning thread
+and awaits a separate bind acknowledgement before native resize tracking begins.
+
+The native content container uses the form's verified inner client rectangle, bounded by the HWND
+client area and mapped FL caption. No internal content-control pointer is assumed. Replies describe the
+container's own client coordinates (`cx=0`, `cy=0`), so consumers do not apply a second titlebar inset.
+
+```csharp
+// Execute on the Avalonia dispatcher. These awaits keep it free for other windows.
+view.PrepareForEmbedding();
+if (context.Windows is IAsyncFlWindowHost host &&
+    await host.TryEmbedAsync(view.Handle, view.GetWindowOptions("My plugin"), show: false))
+{
+    view.PinToHostContent(host.LastInsetX, host.LastInsetY);
+    await host.SetVisibleAsync(true, activate: false);
+    view.ForceRender();
+}
+else
+{
+    view.ShowExternal();
+}
+```
+
+Do not call synchronous `IsBridgeAvailable` from a shared UI thread. Attempt async embedding
+directly or await `IsBridgeAvailableAsync`. Explicit menu/toolbar reopening may use
+`SetVisibleAsync(true, activate: true)` and then focus the intended input control. Initial
+presentation and hiding should not steal focus. External fallback preserves its position after
+the first show rather than recentering each toggle.
+
+Plugins needing additional windows call
+`((IFlWindowHostFactory)context.Windows).CreateWindowHost("browser", "Plugin browser")`.
+Identifiers are local to the plugin; the same identifier retrieves its existing scope. Disabling
+the plugin closes all its scopes. One plugin cannot control another plugin's native window.
+
+Teardown awaits detachment before destroying the toolkit window:
+
+```csharp
+if (!await host.CloseAsync())
+    throw new InvalidOperationException("Detach is incomplete; retain the view and retry.");
+await view.CloseAsync();
+```
+
+A false embed result means the child was restored for external fallback. An exception can mean
+cleanup was not confirmed; propagate it to lifecycle handling instead of showing an uncertain
+still-parented child externally. Failed teardown retains the instance, load context and assets
+until a retry succeeds. Cancellation waits for started native work rather than abandoning a
+creation task that could complete later.
+
+Log `LastEmbedReply` when embedding returns false. A native `reason`, such as
+`native-content-bounds-unavailable`, identifies the failed creation step; it does not mean that
+the bridge is absent. The Python IDE records this diagnostic as a bounded single log line before
+using its external window. Do not turn an unconfirmed cleanup exception into a normal fallback.
+
+The synchronous API below remains for compatibility. New scoped sessions refuse synchronous
+embedding with an actionable diagnostic, preserving external fallback for legacy callers. The
+legacy root adapter retains its single-slot behavior. Use the async lifecycle for new plugins.
 
 If you host **Avalonia** UI, use [FruityLink.Ui.Avalonia.Hosting](avalonia-ui.md) instead of driving
 the raw HWND embed yourself. If you host **WPF** UI, use `FruityLink.Ui.Wpf.Hosting`
@@ -37,10 +102,11 @@ window then behaves like a first-class FL sub-window: it carries FL's border/clo
 and hidden (drive that from a `View`-menu toggle or a toolbar toggle — see
 [Menus and toolbar](menus-and-toolbar.md)), and is resized to fit the host form's content area.
 
-Under the hood this rides the native bridge's window-host messages (embed, show/hide, close, minimize,
-maximize, dock) — the host marshals each to the correct thread for you (see below).
+Under the hood this uses native bridge messages for creation, binding, visibility and release. The
+current native chrome supports close and maximize; minimize/menu controls are hidden and docking
+requests are refused. The host marshals each operation to the correct thread (see below).
 
-## The embed threading contract
+## The legacy embed threading contract
 
 Reparenting a window across process-internal UI threads is the part that goes wrong if you improvise.
 The rules the host follows, and that you must respect:

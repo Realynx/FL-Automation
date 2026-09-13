@@ -1,14 +1,13 @@
 // sigscan.h — FlBridge runtime signature-scanning subsystem (FL version portability).
 //
 // Resolves FL Studio addresses at RUNTIME by byte-signature scanning the loaded FLEngine_x64.dll,
-// so ONE bridge binary can support multiple FL versions (25.2.5 / 26.1.0) instead of the hardcoded
+// so ONE bridge binary selects an FL 2025 / 2026 scanner instead of the hardcoded
 // `base + (ghidra - 0x400000)` rebase. Design: re/version-portability-design.md.
 //
 // FAIL-SAFE by construction: a wrong address is an uncatchable AV inside FL, so every path here
 // REFUSES rather than guesses — 0 matches = NotFound, >1 = Ambiguous (never pick one), a fallback is
-// never trusted on an unknown FL version, and all raw reads are SEH-guarded. This subsystem is
-// ADDITIVE: nothing resolves through it until a call site opts in via a `sym:NAME` wire token; the
-// legacy hex-address path is untouched.
+// never trusted on an unknown FL version, and all raw reads are SEH-guarded.
+// Both named symbols and legacy 2025 addresses use this resolver.
 #pragma once
 
 #define WIN32_LEAN_AND_MEAN
@@ -70,7 +69,7 @@ struct SymEntry {
 
 // ---- core primitives (exposed for completeness / reuse; the wire path uses the helpers below) ----
 bool          parsePattern(const char* ida, Pattern& out);
-int           getExecRanges(HMODULE mod, ExecRange* out, int maxOut);
+int           getExecRanges(HMODULE mod, ExecRange* out, int maxOut, uint64_t imageSize = 0);
 bool          matchAt(const Pattern& pat, const unsigned char* p);
 ResolveStatus resolveUnique(const Pattern& pat, const ExecRange* ranges, int nRanges, uint64_t* outAddr);
 ResolveStatus resolveDataRef(const Pattern& pat, const ExecRange* ranges, int nRanges,
@@ -78,20 +77,29 @@ ResolveStatus resolveDataRef(const Pattern& pat, const ExecRange* ranges, int nR
 ResolveStatus resolveVtableSlot(const Pattern& pat, const ExecRange* ranges, int nRanges,
                                 int dispOff, int dispSize, int64_t* outOffset);
 FlVersion     detectFlVersion(HMODULE mod);
+FlVersion     detectFlFileVersion(const wchar_t* path);
+// Legacy hardcoded fallback keys. Object layout capabilities are selected separately by the scanner.
+FlVersion     knownFlVersion(WORD major, WORD minor, WORD patch, WORD build);
 uint64_t      fallbackAddr(const SymEntry& e, HMODULE mod, FlVersion ver);
 bool          verifyBytes(uint64_t addr, const Pattern& pat);
+// Resolve one entry without publishing partial state to callers.
+void          resolveSymbol(SymEntry& e, HMODULE mod, FlVersion ver,
+                            const ExecRange* ranges, int nRanges, uint64_t imageSize = 0);
 
 // ---- public entry points used by the bridge wire dispatch ----
 // Resolve every symbol in the table ONCE (guarded). No-op until FLEngine_x64.dll is loaded, so it is
 // safe (and cheap) to call repeatedly — the first call after FL is up does the work.
 void          sig_resolveAll();
-// Lookup by name; NULL if the name isn't in the table.
-SymEntry*     sig_findSym(const char* name);
+// Lookup by name; NULL if absent. Before publication returns an immutable unresolved definition.
+const SymEntry* sig_findSym(const char* name);
 // Resolved absolute address (or vtable offset) for a name, or 0 if not resolved / unknown.
 uint64_t      sig_addr(const char* name);
 // Reverse lookup for the legacy hex wire path: a 2025 Ghidra address -> its resolved runtime address,
 // or 0 if it isn't a known symbol. Lets hardcoded-hex call sites become version-correct without migration.
 uint64_t      sig_addrByGhidra2025(uint64_t ghidra25);
+// Shared legacy resolver: failed known symbols never fall through to a raw rebase; unmapped addresses
+// are accepted only on the exact original 2025 build and inside the loaded module.
+uint64_t      sig_legacyAddr(HMODULE mod, FlVersion ver, uint64_t ghidra25);
 // The FL version detected at resolve time (valid after sig_resolveAll()).
 FlVersion     sig_version();
 // Diagnostic JSON for the `syms` wire command: {"ver":N,"ok":N,"fail":M,"unresolved":[{"name","why"}]}.
@@ -101,3 +109,7 @@ const char*   sig_statusStr(ResolveStatus s);
 
 // Convenience: resolved absolute address by name, mirroring rb()/SYM("name"). 0 if unresolved.
 #define SYM(n) sig_addr(n)
+
+#ifdef FRUITYLINK_SCANNER_TESTS
+void sig_testSetResolved(bool complete);
+#endif

@@ -121,12 +121,12 @@ public static class PluginHost
     {
         string? v = Environment.GetEnvironmentVariable("FRUITYLINK_PLUGIN_HOTRELOAD");
         if (string.IsNullOrWhiteSpace(v)) return true;
-        return v.Trim() switch
+        return v.Trim().ToLowerInvariant() switch
         {
             "0" => false,
-            _ when v.Equals("false", StringComparison.OrdinalIgnoreCase) => false,
-            _ when v.Equals("off", StringComparison.OrdinalIgnoreCase) => false,
-            _ when v.Equals("no", StringComparison.OrdinalIgnoreCase) => false,
+            "false" => false,
+            "off" => false,
+            "no" => false,
             _ => true,
         };
     }

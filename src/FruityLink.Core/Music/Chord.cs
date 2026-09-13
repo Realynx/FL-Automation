@@ -3,17 +3,29 @@ namespace FruityLink.Core.Music;
 /// <summary>The tertian quality of a chord, inferred from its stacked intervals.</summary>
 public enum ChordQuality
 {
+    /// <summary>Major triad.</summary>
     Major,
+    /// <summary>Minor triad.</summary>
     Minor,
+    /// <summary>Diminished triad.</summary>
     Diminished,
+    /// <summary>Augmented triad.</summary>
     Augmented,
+    /// <summary>Major triad with a major seventh.</summary>
     MajorSeventh,
+    /// <summary>Minor triad with a minor seventh.</summary>
     MinorSeventh,
+    /// <summary>Major triad with a minor seventh.</summary>
     DominantSeventh,
+    /// <summary>Half-diminished seventh chord.</summary>
     MinorSeventhFlatFive, // half-diminished
+    /// <summary>Diminished triad with a diminished seventh.</summary>
     DiminishedSeventh,
+    /// <summary>Minor triad with a major seventh.</summary>
     MinorMajorSeventh,
+    /// <summary>Augmented triad with a minor seventh.</summary>
     AugmentedSeventh,
+    /// <summary>Intervals do not match a named quality.</summary>
     Unknown,
 }
 

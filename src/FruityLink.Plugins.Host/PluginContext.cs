@@ -11,9 +11,10 @@ namespace FruityLink.Plugins.Host;
 /// per plugin so its <see cref="Menu"/> contributions are tagged with that plugin's id and removed as
 /// a set when it is disabled.
 /// </summary>
-internal sealed class PluginContext : IPluginContext
+internal sealed class PluginContext : IPluginContext, IAsyncDisposable
 {
     private readonly Action<string> _log;
+    private readonly PluginWindowHost _windows;
 
     public PluginContext(INativeFlControl fl, IServiceProvider services, Action<string> log, IFlMenuRegistrar menu, IFlToolbarRegistrar toolbar, IFlWindowHost? windows = null)
     {
@@ -22,7 +23,7 @@ internal sealed class PluginContext : IPluginContext
         _log = log;
         Menu = menu;
         Toolbar = toolbar;
-        Windows = windows ?? NullFlWindowHost.Instance;
+        _windows = new PluginWindowHost(windows ?? NullFlWindowHost.Instance);
     }
 
     /// <inheritdoc/>
@@ -38,7 +39,9 @@ internal sealed class PluginContext : IPluginContext
     public IFlToolbarRegistrar Toolbar { get; }
 
     /// <inheritdoc/>
-    public IFlWindowHost Windows { get; }
+    public IFlWindowHost Windows => _windows;
+
+    public ValueTask DisposeAsync() => _windows.DisposeAsync();
 
     /// <inheritdoc/>
     public void Log(string message) => _log(message);

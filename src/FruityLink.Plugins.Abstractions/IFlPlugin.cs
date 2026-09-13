@@ -29,7 +29,8 @@ public interface IFlPlugin
 
     /// <summary>
     /// Deactivate the plugin: stop everything started in <see cref="EnableAsync"/> and release
-    /// resources, leaving FL Studio untouched. Must be idempotent.
+    /// resources, leaving FL Studio untouched. Also called to clean up pre-warm resources or a
+    /// partially failed activation; must be safe before EnableAsync completes and must be idempotent.
     /// </summary>
     Task DisableAsync(CancellationToken ct = default);
 }

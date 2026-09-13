@@ -47,133 +47,48 @@ public sealed partial class FlInjectBridge
         if (pl != 0) await CallAsync("da40c0", new ulong[] { pl }, ct);
     }
 
-    // Recompute the arrangement's SONG LENGTH so the transport can advance the playhead across the clips we
-    // just changed. ROOT CAUSE of the "press play but the playhead is stuck / newly-arranged clips don't
-    // play" bug: FL confines the playhead to a cached play-range whose end is the SONG LENGTH. FL derives
-    // that length from the playlist only on specific events — an arrangement switch, or a pattern whose own
-    // playlist-block LENGTH changed (FLpat_RebuildPatternAndRefresh @0x11D4140 → FUN_00d37450). A raw clip
-    // insert/move/resize that references an already-sized pattern triggers NONE of those, so the song keeps
-    // its OLD length: clips past the old end fall outside the play-range and the transport "plays" but loops
-    // inside the stale range (stranded near tick 0/1 when the prior song was short/empty).
-    //
-    // TWO-STEP FIX (the single-step version RECURRED 2026-07-03 — see below):
-    //  (1) Re-select the CURRENT arrangement via FLpl_SetCurrentArrangement(@0x11FC880). Selecting the same
-    //      index runs FL's full sanctioned refresh (rebinds the playlist sub-object, re-derives the play-range
-    //      + toolbar slider, redraws) with no data loss. DECOMPILE (re-verified 2026-07-03): there is NO
-    //      "if(new==current) return" short-circuit — only the tail usage-timer FUN_010cefd0 + a UI-poke are
-    //      gated on the "index actually changed" flag; the song-length recompute FUN_00d37450(songObj,1) runs
-    //      UNCONDITIONALLY. So the same-index re-select is NOT a no-op (live: play-range [0..3839]→[0..34559]).
-    //  (2) BUT FUN_00d37450's playlist scan that sets the length (songObj+0xB04 = max clip end) is GATED on
-    //      songObj+0xB00>=2 and dereferences the possibly-null playlist sub-object songObj+0xD04. In the live
-    //      GUI those hold (b00=2, d04 valid) so step 1 alone works — which is exactly why the harness passed
-    //      while a real session still got stuck: in ANY state where that gate/deref doesn't hold, step 1
-    //      silently leaves the song length SHORT. So AFTER step 1 we ALSO recompute the length DIRECTLY from
-    //      the clip collection (mode- and d04-INDEPENDENT) and GROW songObj+0xB04 to cover the furthest clip.
-    //      Grow-only: a delete/resize SHRINK is handled by step 1's scan, and any marker-based length is kept.
-    //      (Dead ends still avoided: we DON'T poke the transient slider range globals and DON'T drive
-    //      FUN_010ce8a0 off the bus — both were live-confirmed to be overwritten/wedge FL. b04 written to the
-    //      true clip max is stable across transport ticks — live-verified it holds [0..34559] through playback.)
-    // Both steps are SEH-guarded on the bridge; a fault must never fail the edit.
+    // Re-selecting the current arrangement invokes FL's own song-length and play-range refresh.
+    // Verified on FL 26.1.3.5570: even a same-index selection calls the native recompute routine.
+    // Do not add raw cached-field fallbacks: legacy +0xB04 is a double viewport field in FL 2026.
     private async Task RecomputeSongLengthAsync(CancellationToken ct)
     {
-        int idx = BitConverter.ToInt32(await PeekAsync("149e8b4", 4, ct), 0);   // current arrangement index
+        int idx = BitConverter.ToInt32(await PeekAsync("149e8b4", 4, ct), 0);
         LogOp("RecomputeSongLength", $"arrangement={idx}");
         if (idx < 0) return;
-        try { await CallAsync("11fc880", new ulong[] { (uint)idx }, ct); }      // (1) FLpl_SetCurrentArrangement(current)
+        try { await CallAsync("11fc880", new ulong[] { (uint)idx }, ct); }
         catch (InvalidOperationException) { /* refresh is best-effort; never break the edit */ }
-        try { await SetSongLengthToContentAsync(ct); }                          // (2) authoritative, mode-independent
-        catch (InvalidOperationException) { /* best-effort */ }
     }
 
-    /// <summary>The song object: <c>*(*(0x14aab88))</c> (a .data→.bss DOUBLE deref; single-deref reads were
-    /// "one deref short" — see re/12 §Transport). Its +0xB04 field is the cached song length in ticks.</summary>
-    private async Task<ulong> SongObjAsync(CancellationToken ct)
-    {
-        ulong slot = await GPtrAsync("14aab88", ct);
-        return slot != 0 ? await APtrAsync(slot, ct) : 0;
-    }
-
-    /// <summary>Furthest playlist-clip END tick (max of start+len) over the live clip collection — the value
-    /// FL's own scan computes for the song length, but derived here WITHOUT FL's mode-gate / null-deref risk.
-    /// Every slot 0..count(+0x14) is a real clip (see <see cref="ListClipsAsync"/>); holes (src 0 / len&lt;=0)
-    /// are skipped.</summary>
+    /// <summary>Furthest valid playlist-clip end tick over the actual collection count.
+    /// Includes unselected/template clips and source ID zero (audio channel zero); malformed spans are skipped.</summary>
     private async Task<long> MaxClipEndAsync(CancellationToken ct)
     {
         var (data, stride, count) = await ClipCollectionAsync(ct);
         if (data == 0 || stride <= 0 || count <= 0) return 0;
+        count = CheckedQueryCount(count, 1_000_000);
+        if (stride is < 0x24 or > 4096) throw new InvalidOperationException("Invalid clip record stride.");
         long max = 0;
         for (int i = 0; i < count; i++)
         {
-            byte[] cb = await PeekAbsAsync(data + (ulong)i * (ulong)stride, 0x14, ct);
+            byte[] cb = await PeekAbsAsync(checked(data + (ulong)i * (ulong)stride), 0x14, ct);
             int start = BitConverter.ToInt32(cb, 0);
             int len = BitConverter.ToInt32(cb, 8);
-            // "Active/placed" is the +0x13 & 0x80 flag AddPatternClips sets and DeleteClips clears — NOT
-            // src==0: src is (channelIndex<<16) for audio clips, so channel 0 is a legit source id of 0
-            // and the old src==0 skip UNDER-counted it (would strand a channel-0 audio clip past a shorter
-            // clip). Skip inactive holes + malformed spans; count everything else.
-            if ((cb[0x13] & 0x80) == 0 || start < 0 || len <= 0) continue;
+            // 0x80 is selection-style, not existence; valid FL-authored clips may have it clear.
+            // Removed slots lie outside count, as in ListClipsAsync and QueryClipsAsync.
+            if (start < 0 || len <= 0) continue;
             long end = (long)start + len;
             if (end > max) max = end;
         }
         return max;
     }
 
-    /// <summary>Furthest timeline-marker tick (marker manager @songObj+0xd5c; entries stride 0x34, tick @+0)
-    /// — folded into the song length so an INTENTIONAL end-marker placed past the last clip still sizes the
-    /// song (this is why the length recompute must be max(clipEnd, markerEnd), matching FL's FUN_00d37450).</summary>
-    private async Task<long> MaxMarkerTickAsync(ulong songObj, CancellationToken ct)
-    {
-        try
-        {
-            ulong mgr = await APtrAsync(songObj + 0xd5c, ct);
-            if (mgr == 0) return 0;
-            ulong a = await APtrAsync(mgr, ct);
-            if (a == 0) return 0;
-            int count = await AI32Async(a - 8, ct);
-            long max = 0;
-            for (int i = 0; i < count && i < 512; i++)
-            {
-                int tick = await AI32Async(a + (ulong)i * 0x34, ct);
-                if (tick > max) max = tick;
-            }
-            return max;
-        }
-        catch (InvalidOperationException) { return 0; }
-    }
-
-    /// <summary>Step (2) of the song-length recompute: set the cached song length (songObj+0xB04) to the
-    /// TRUE content length = max(furthest clip end, furthest marker tick) — FL's own FUN_00d37450 definition,
-    /// so FL agrees and won't fight it. AUTHORITATIVE (grow AND shrink) + mode/d04-INDEPENDENT: fixes BOTH the
-    /// stale-SHORT stuck-playhead bug AND the stale-LONG "extend → song too long → plays but never advances"
-    /// regression that grow-only could never undo when FL's gated scan (step 1) no-ops. Clamped to a ceiling
-    /// so one mis-placed/garbage clip can't push b04 near int.MaxValue (which collapses FL's per-tick play-range
-    /// recompute → stranded playhead).</summary>
-    private async Task SetSongLengthToContentAsync(CancellationToken ct)
-    {
-        ulong songObj = await SongObjAsync(ct);
-        if (songObj <= 0x10000) return;
-        long want = Math.Max(await MaxClipEndAsync(ct), await MaxMarkerTickAsync(songObj, ct));
-        if (want <= 0) return;                       // no content to size to — leave FL's value alone
-        const long TickCeiling = 0x40000000;         // ~279k bars @ ppq 960; keeps b04 far from int.MaxValue
-        if (want > TickCeiling) want = TickCeiling;
-        if (await AI32Async(songObj + 0xb04, ct) != (int)want)
-            await PokeAbsAsync(songObj + 0xb04, BitConverter.GetBytes((int)want), ct);
-    }
-
-    /// <summary>DIAGNOSTIC/TEST hook (harness only): reports the song-object scope field (b00), the cached
-    /// song length (b04) and the true furthest clip end (maxClipEnd). Optionally FORCES b04 to a value first
-    /// (to SIMULATE a stale/failed FL scan) and/or runs the direct grow-recompute — so a test can prove step
-    /// (2) grows the length back regardless of FL's gated path. Never called by product code.</summary>
+    /// <summary>Read-only playlist content length. Legacy cached-field mutation parameters are refused;
+    /// retained only for source compatibility with older diagnostic harnesses.</summary>
     public async Task<string> DiagSongScopeAsync(int forceB04 = int.MinValue, bool recompute = false, CancellationToken ct = default)
     {
-        ulong songObj = await SongObjAsync(ct);
-        long maxEnd = await MaxClipEndAsync(ct);
-        if (songObj > 0x10000 && forceB04 != int.MinValue)
-            await PokeAbsAsync(songObj + 0xb04, BitConverter.GetBytes(forceB04), ct);
-        if (recompute) await SetSongLengthToContentAsync(ct);
-        int b00 = songObj > 0x10000 ? await AI32Async(songObj + 0xb00, ct) : int.MinValue;
-        int b04 = songObj > 0x10000 ? await AI32Async(songObj + 0xb04, ct) : int.MinValue;
-        return $"songObj=0x{songObj:x} b00={b00} b04={b04} maxClipEnd={maxEnd}";
+        if (forceB04 != int.MinValue || recompute)
+            throw new NotSupportedException("Direct song-scope mutation is disabled: legacy cached-field offsets are not valid across FL builds.");
+        return $"maxClipEnd={await MaxClipEndAsync(ct)} cachedFields=unavailable";
     }
 
     // A pattern clip's on-screen length is a DERIVED CACHE (clip+0x08) that FLpl_RepaintPlaylist does NOT
@@ -211,7 +126,7 @@ public sealed partial class FlInjectBridge
             uint rgb = BgrToRgb(c);
             byte enabled = tr[TrackFieldEnabled], customColor = tr[TrackFieldCustomColor], collapsed = tr[TrackFieldCollapsed], selected = tr[TrackFieldSelected];
             int mode = BitConverter.ToInt32(tr, TrackFieldMode);
-            if (string.IsNullOrEmpty(name) && enabled != 0 && customColor == 0 && collapsed == 0 && selected == 0 && mode == 0)
+            if (IsDefaultPlaylistTrack(name, tr))
                 continue;  // pristine default — unlisted (the header says so)
             lastCustom = i;
             string disp = string.IsNullOrEmpty(name) ? $"Track {i}" : name;
@@ -222,15 +137,19 @@ public sealed partial class FlInjectBridge
         return "Playlist tracks 1-50 (unlisted = default):\n" + sb.ToString().TrimEnd() + tail;
     }
 
+    private static bool IsDefaultPlaylistTrack(string name, byte[] track) =>
+        string.IsNullOrEmpty(name) && track[TrackFieldEnabled] != 0 && track[TrackFieldCustomColor] == 0
+        && track[TrackFieldCollapsed] == 0 && track[TrackFieldSelected] == 0
+        && BitConverter.ToInt32(track, TrackFieldMode) == 0;
+
     public async Task SetTrackNameAsync(int track, string name, CancellationToken ct = default)
     {
         ulong root = await PlaylistRootAsync(ct);
         if (root == 0) throw new InvalidOperationException("Playlist not available.");
         uint color = BitConverter.ToUInt32(await PeekAbsAsync(TrackField(root, track, TrackFieldColor), 4, ct), 0);
-        // NOTE: still the transient scratch-const string (as shipped). This rename is on FL's UStrAsg-SHARE
-        // path so it's technically fragile (see MakeOwnedDelphiStringAsync), but it WORKS today — leaving it
-        // until the shared makeUStr helper is live-verified, so a regression can't slip into a working tool.
-        ulong strPtr = await WriteDelphiStringAsync(name, ct);
+        // The setter copies this leased temporary string through FL's UStrAsg assignment.
+        using var scratch = await LeaseScratchAsync(ct).ConfigureAwait(false);
+        ulong strPtr = await WriteDelphiStringAsync(name, scratch, ct);
         await CallAsync("11e7940", new ulong[] { root, (uint)track, strPtr, color }, ct);  // SetTrackNameAndColor (self-refreshes)
     }
 
@@ -404,22 +323,7 @@ public sealed partial class FlInjectBridge
             int len = BitConverter.ToInt32(cb, 8);
             if (!srcNames.TryGetValue(src, out string? srcName))
             {
-                try
-                {
-                    if (src >= 0x50000000)
-                    {
-                        int p = (int)((src - 0x50000000) >> 16);
-                        srcName = await GetPatternNameAsync(p, ct);
-                        if (srcName == $"Pattern {p}") srcName = "";
-                    }
-                    else
-                    {
-                        int c = (int)(src >> 16);
-                        srcName = await GetChannelNameAsync(c, ct);
-                        if (srcName == $"Channel {c}") srcName = "";
-                    }
-                }
-                catch (InvalidOperationException) { srcName = ""; }   // garbage/foreign source id — omit, never fail the listing
+                srcName = await GetClipSourceNameAsync(src, ct);
                 srcNames[src] = srcName;
             }
             string srcDesc = (src >= 0x50000000 ? $"pattern {(int)((src - 0x50000000) >> 16)}" : $"channel {(int)(src >> 16)}")
@@ -427,13 +331,31 @@ public sealed partial class FlInjectBridge
             sb.Append($"[{i}] track {trackNo} start={start} len={len} {srcDesc}{((flags & 0x20) != 0 ? " muted" : "")}\n");
             shown++;
         }
+        return FormatClipPage(sb, shown, matched, offset, track, hasMore);
+    }
+
+    private static string FormatClipPage(StringBuilder rows, int shown, int matched, int offset, int track, bool hasMore)
+    {
         if (shown == 0)
             return track > 0 ? $"(no active clips on track {track}{(offset > 0 ? $" at offset {offset}" : "")})"
                 : offset > 0 ? $"(no clips at offset {offset} — {matched} active clips total)"
                 : "(no active clips)";
         string more = hasMore ? $"\n(more — call again with offset={offset + shown})" : "";
         return $"{shown} clips{(track > 0 ? $" on track {track}" : "")}{(offset > 0 ? $" from offset {offset}" : "")}:\n"
-            + sb.ToString().TrimEnd() + more;
+            + rows.ToString().TrimEnd() + more;
+    }
+
+    private async Task<string> GetClipSourceNameAsync(uint source, CancellationToken ct)
+    {
+        try
+        {
+            bool pattern = source >= 0x50000000;
+            int index = (int)((pattern ? source - 0x50000000 : source) >> 16);
+            string name = pattern ? await GetPatternNameAsync(index, ct) : await GetChannelNameAsync(index, ct);
+            string defaultName = pattern ? $"Pattern {index}" : $"Channel {index}";
+            return name == defaultName ? "" : name;
+        }
+        catch (InvalidOperationException) { return ""; }
     }
 
     /// <summary>Adds a pattern clip to the playlist timeline. <paramref name="pattern"/> is 1-based (the same
@@ -531,7 +453,7 @@ public sealed partial class FlInjectBridge
         LogOp("ResizeClips", string.Join(", ", resizes.Select(r => $"[{r.Index}]len={r.LengthTick}")));
         var (data, stride, count) = await ClipCollectionAsync(ct);
         if (data == 0 || stride <= 0) throw new InvalidOperationException("Playlist clip collection not available.");
-        ulong setSrcRange = GhidraToRuntime(0xF71A70);   // FLpl_SetClipSourceRange(clip, double start, double end)
+        ulong setSrcRange = await ResolveSymbolAddressAsync("FLpl_SetClipSourceRange", ct);
         foreach (var r in resizes)
         {
             if (r.Index < 0 || r.Index >= count)
@@ -543,8 +465,7 @@ public sealed partial class FlInjectBridge
             // SOURCE RANGE (+0x18/+0x1c) — so a +0x08-only resize is reverted (and the song shrinks back). Set
             // the source range [0..len] via FL's own setter FIRST so the resolver derives the SAME extended
             // length: the resize survives the refresh AND the song grows to cover it (RE: re/25 §Deferred).
-            if (setSrcRange != 0 && IsInModule(setSrcRange))
-                await CallFAbsAsync(setSrcRange, new ulong[] { clip, Bits(0), Bits(len) }, ct);
+            await CallFAbsAsync(setSrcRange, new ulong[] { clip, Bits(0), Bits(len) }, ct);
             await PokeAbsAsync(clip + 8, BitConverter.GetBytes(len), ct);
         }
         await RepaintPlaylistAsync(ct);
@@ -568,8 +489,7 @@ public sealed partial class FlInjectBridge
         // Dedupe + sort DESCENDING: the indices all come from ONE ListClips snapshot, so validate them against
         // the original count; removing top-down means the surviving lower indices never shift under us.
         var indices = clipIndices.Distinct().OrderByDescending(i => i).ToList();
-        await _scratchGate.WaitAsync(ct).ConfigureAwait(false);
-        try
+        using (var scratch = await AcquireScratchLeaseAsync(ct).ConfigureAwait(false))
         {
             ulong C = await ClipCollObjAsync(ct);
             if (C == 0) throw new InvalidOperationException("Playlist clip collection not available.");
@@ -594,7 +514,6 @@ public sealed partial class FlInjectBridge
             await PokeAbsAsync(C + 0x14, BitConverter.GetBytes(curCount), ct);   // final count (one write)
             await CallAsync("f6e180", new ulong[] { C }, ct);                    // RecountActiveClips (+0x48) ONCE
         }
-        finally { _scratchGate.Release(); }
         await RepaintPlaylistAsync(ct);   // ONCE
         await RecomputeSongLengthAsync(ct);  // deleting the furthest clip must shrink the play-range to match
     }
@@ -634,13 +553,12 @@ public sealed partial class FlInjectBridge
     // Shared clip-insert core (same path the engine's FLpl_SendPatternToPlaylist uses): init defaults into a
     // 0x48 temp, set fields, insert into the collection. Guards the resolved vtbl fn ptrs against the FLEngine
     // module range (calling a non-code ptr AVs and crashes FL).
-    private async Task InsertClipRawAsync(int startTick, uint sourceID, int len, int track, int srcStart, int srcEnd, CancellationToken ct)
+    private async Task<int> InsertClipRawAsync(int startTick, uint sourceID, int len, int track, int srcStart, int srcEnd, CancellationToken ct)
     {
         // Lease the scratch buffer for the WHOLE build→insert span so no other scratch-building op can
         // clobber the half-built clip struct between our pokes and the insert (the corruption class that
         // helped crash FL). Held across several RawAsync calls; _scratchGate != _pipeGate, so no deadlock.
-        await _scratchGate.WaitAsync(ct).ConfigureAwait(false);
-        try
+        using (var scratch = await LeaseScratchAsync(ct).ConfigureAwait(false))
         {
             ulong C = await ClipCollObjAsync(ct);
             if (C == 0) throw new InvalidOperationException("Playlist clip collection not available.");
@@ -648,7 +566,7 @@ public sealed partial class FlInjectBridge
             ulong initFn = await APtrAsync(vt + 0x10, ct);
             ulong insertFn = await APtrAsync(vt + 8, ct);
             EnsureInModule("Clip-insert", initFn, insertFn);
-            ulong tmp = await ScratchAsync(ct);
+            ulong tmp = scratch.Address;
             await PokeAbsAsync(tmp, new byte[0x48], ct);
             await CallAbsAsync(initFn, new ulong[] { C, tmp }, ct);   // init defaults + internal links FIRST
             await PokeAbsAsync(tmp + 0x00, BitConverter.GetBytes(startTick), ct);
@@ -659,10 +577,13 @@ public sealed partial class FlInjectBridge
             await PokeAbsAsync(tmp + 0x13, new byte[] { (byte)(fl | 0x80) }, ct);
             await PokeAbsAsync(tmp + 0x18, BitConverter.GetBytes(srcStart), ct);
             await PokeAbsAsync(tmp + 0x1c, BitConverter.GetBytes(srcEnd), ct);
-            await CallAbsAsync(insertFn, new ulong[] { C, tmp }, ct);
+            ulong inserted = await CallAbsAsync(insertFn, new ulong[] { C, tmp }, ct);
             await CallAsync("f6e180", new ulong[] { C }, ct);  // RecountActiveClips
+            int count = await ClipCountAsync(ct);
+            if (inserted >= (ulong)count || inserted > int.MaxValue)
+                throw new InvalidOperationException("Clip insertion returned an invalid index after mutation; inspect the playlist before retrying.");
+            return (int)inserted;
         }
-        finally { _scratchGate.Release(); }
     }
 
     private async Task<ulong> FindClipAddrAsync(int startTick, short trackField, uint sourceID, ulong exclude, CancellationToken ct)
@@ -673,7 +594,7 @@ public sealed partial class FlInjectBridge
             ulong addr = data + (ulong)i * (ulong)stride;
             if (addr == exclude) continue;
             byte[] cb = await PeekAbsAsync(addr, 0x20, ct);
-            if ((cb[0x13] & 0x80) == 0) continue;
+            // Every slot inside the collection count exists, including unselected clips.
             if (BitConverter.ToInt32(cb, 0) == startTick && BitConverter.ToInt16(cb, 0xc) == trackField && BitConverter.ToUInt32(cb, 4) == sourceID)
                 return addr;
         }
@@ -687,7 +608,6 @@ public sealed partial class FlInjectBridge
         ulong clip = await ClipAddrAsync(clipIndex, ct);
         if (clip == 0) throw new InvalidOperationException("Clip not found.");
         byte[] cb = await PeekAbsAsync(clip, 0x20, ct);
-        if ((cb[0x13] & 0x80) == 0) throw new InvalidOperationException($"Clip {clipIndex} is not an active clip.");
         int start = BitConverter.ToInt32(cb, 0);
         uint src = BitConverter.ToUInt32(cb, 4);
         int len = BitConverter.ToInt32(cb, 8);
@@ -697,6 +617,8 @@ public sealed partial class FlInjectBridge
             throw new InvalidOperationException($"Slice tick {tick} must be strictly inside the clip ({start}..{origEnd}).");
         int off = tick - start;
         bool audio = src < 0x50000000;
+        // Resolve before editing either half so an unsupported build cannot leave a partial slice.
+        ulong sourceRange = audio ? await ResolveSymbolAddressAsync("FLpl_SetClipSourceRange", ct) : 0;
         // 1) shorten the original to the slice point
         await PokeAbsAsync((await ClipAddrAsync(clipIndex, ct)) + 8, BitConverter.GetBytes(off), ct);
         // 2) insert the second half (same source/track)
@@ -704,14 +626,10 @@ public sealed partial class FlInjectBridge
         // 3) for AUDIO, split the source window so the second half continues the sample
         if (audio)
         {
-            ulong sr = GhidraToRuntime(0xF71A70);  // FLpl_SetClipSourceRange(clip, double start, double end)
-            if (sr != 0)
-            {
-                ulong c1 = await ClipAddrAsync(clipIndex, ct);
-                await CallFAbsAsync(sr, new ulong[] { c1, Bits(0), Bits(off) }, ct);
-                ulong c2 = await FindClipAddrAsync(tick, trackField, src, c1, ct);
-                if (c2 != 0) await CallFAbsAsync(sr, new ulong[] { c2, Bits(off), Bits(origEnd - start) }, ct);
-            }
+            ulong c1 = await ClipAddrAsync(clipIndex, ct);
+            await CallFAbsAsync(sourceRange, new ulong[] { c1, Bits(0), Bits(off) }, ct);
+            ulong c2 = await FindClipAddrAsync(tick, trackField, src, c1, ct);
+            if (c2 != 0) await CallFAbsAsync(sourceRange, new ulong[] { c2, Bits(off), Bits(origEnd - start) }, ct);
         }
         await RepaintPlaylistAsync(ct);
         await RecomputeSongLengthAsync(ct);   // the two halves span the original, so length is unchanged — but keep the guarantee uniform
@@ -724,7 +642,6 @@ public sealed partial class FlInjectBridge
         ulong clip = await ClipAddrAsync(clipIndex, ct);
         if (clip == 0) throw new InvalidOperationException("Clip not found.");
         byte[] cb = await PeekAbsAsync(clip, 0x20, ct);
-        if ((cb[0x13] & 0x80) == 0) throw new InvalidOperationException($"Clip {clipIndex} is not an active clip.");
         int start = BitConverter.ToInt32(cb, 0);
         uint src = BitConverter.ToUInt32(cb, 4);
         int len = BitConverter.ToInt32(cb, 8);

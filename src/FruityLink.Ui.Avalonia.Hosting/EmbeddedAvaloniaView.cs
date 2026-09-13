@@ -1,7 +1,10 @@
 using System;
 using System.Runtime.InteropServices;
+using System.Threading.Tasks;
 using Avalonia;
 using Avalonia.Controls;
+using Avalonia.Threading;
+using FruityLink.Plugins.Abstractions;
 
 namespace FruityLink.Ui.Avalonia.Hosting;
 
@@ -21,6 +24,10 @@ public class EmbeddedAvaloniaView
 {
     private readonly Window _window;
     private bool _reallyClose;
+    private bool _preparedForEmbedding;
+    private bool _externalPresented;
+    private ChildContentPin? _contentPin;
+    private readonly DeferredRepaint _repaint;
 
     /// <summary>Raised (on the UI thread) when the user closes the EXTERNAL window via its OS close (X):
     /// we hide it instead of destroying it (mirroring FL's View-menu windows) so a toggle can re-show it.
@@ -35,6 +42,7 @@ public class EmbeddedAvaloniaView
     public EmbeddedAvaloniaView(Window window)
     {
         _window = window ?? throw new ArgumentNullException(nameof(window));
+        _repaint = new DeferredRepaint(action => Dispatcher.UIThread.Post(action, DispatcherPriority.Render), InvalidateSurface);
         _window.Closing += (_, e) =>
         {
             if (_reallyClose) return;    // owner is tearing down → let it really close
@@ -54,6 +62,28 @@ public class EmbeddedAvaloniaView
     /// </summary>
     public IntPtr Handle => _window.TryGetPlatformHandle()?.Handle ?? IntPtr.Zero;
 
+    /// <summary>Convert the current requested/minimum client dimensions from DIPs to physical pixels.
+    /// Read this on the UI thread after preparing the window, so the platform's current scale is known.</summary>
+    public FlWindowOptions GetWindowOptions(string caption)
+    {
+        double scale = double.IsFinite(_window.RenderScaling) && _window.RenderScaling > 0 ? _window.RenderScaling : 1;
+        int minimumWidth = Pixels(_window.MinWidth, scale, 1);
+        int minimumHeight = Pixels(_window.MinHeight, scale, 1);
+        return new FlWindowOptions(caption, Math.Max(minimumWidth, Pixels(_window.Width, scale, 640)),
+            Math.Max(minimumHeight, Pixels(_window.Height, scale, 480)), minimumWidth, minimumHeight);
+    }
+
+    private static int Pixels(double value, double scale, int fallback)
+        => double.IsFinite(value) && value > 0 ? (int)Math.Clamp(Math.Ceiling(value * scale), 1, 20000) : fallback;
+
+    /// <summary>Keep toolkit position/DPI updates inside the native parent's content area. Call on
+    /// the child's UI thread only after embedding succeeds. Removed when the view is closed/detached.</summary>
+    public void PinToHostContent(int insetX, int insetY)
+    {
+        _contentPin?.Dispose();
+        _contentPin = new ChildContentPin(Handle, insetX, insetY, _repaint.Request);
+    }
+
     /// <summary>
     /// Make the window child-embed-friendly BEFORE the reparent: no OS chrome (FL draws the chrome), no
     /// taskbar button, no activation steal, parked off-screen so the pre-embed <see cref="Window.Show()"/>
@@ -62,6 +92,7 @@ public class EmbeddedAvaloniaView
     /// </summary>
     public void PrepareForEmbedding()
     {
+        _preparedForEmbedding = true;
         _window.SystemDecorations = SystemDecorations.None;
         _window.ShowInTaskbar = false;
         _window.ShowActivated = false;
@@ -69,7 +100,7 @@ public class EmbeddedAvaloniaView
         _window.WindowStartupLocation = WindowStartupLocation.Manual;
         _window.Position = new PixelPoint(-32000, -32000);
         _window.Show();                 // realizes the Win32 HWND + first software paint
-        ForceRenderCore();
+        _repaint.Request();
     }
 
     /// <summary>External top-level fallback (no bridge / reparent failed): normal chrome, on-screen.</summary>
@@ -79,31 +110,49 @@ public class EmbeddedAvaloniaView
         {
             _window.SystemDecorations = SystemDecorations.Full;
             _window.ShowInTaskbar = true;
+            _window.ShowActivated = true;
             _window.CanResize = true;
             _window.WindowStartupLocation = WindowStartupLocation.CenterScreen;
             _window.Show();
+            // PrepareForEmbedding already showed the window at -32000. StartupLocation applies
+            // only to its first show, so explicitly recover an already-realized fallback window.
+            _contentPin?.Dispose();
+            _contentPin = null;
+            if (!_externalPresented && _preparedForEmbedding) CenterOnScreen();
+            _externalPresented = true;
             _window.Activate();
         }
         UiThread.RunOrPost(Apply);
     }
 
+    private void CenterOnScreen()
+    {
+        var screen = _window.Screens.ScreenFromWindow(_window) ?? _window.Screens.Primary;
+        if (screen is null) { _window.Position = new PixelPoint(0, 0); return; }
+        PixelRect area = screen.WorkingArea;
+        int width = (int)Math.Ceiling(_window.Bounds.Width * screen.Scaling);
+        int height = (int)Math.Ceiling(_window.Bounds.Height * screen.Scaling);
+        _window.Position = new PixelPoint(area.X + Math.Max(0, (area.Width - width) / 2),
+            area.Y + Math.Max(0, (area.Height - height) / 2));
+    }
+
     /// <summary>
     /// Force the embedded child to actually re-present. In software/redirection mode Avalonia paints via
     /// the redirection surface, but after a host hide→show (or an initial reparent) it can stay blank
-    /// until an input event — so we invalidate the visual tree AND drive a synchronous native repaint.
+    /// until an input event. Queue one visual and full-surface invalidation after native layout returns;
+    /// Avalonia's normal WM_PAINT path then requests a complete compositor redraw without background erase.
     /// Safe from any thread.
     /// </summary>
-    public void ForceRender() => UiThread.RunOrPost(ForceRenderCore);
+    public void ForceRender() => UiThread.RunOrPost(_repaint.Request);
 
-    private void ForceRenderCore()
+    private void InvalidateSurface()
     {
         try
         {
             _window.InvalidateVisual();
             IntPtr h = Handle;
             if (h != IntPtr.Zero)
-                RedrawWindow(h, IntPtr.Zero, IntPtr.Zero,
-                    RDW_INVALIDATE | RDW_ERASE | RDW_UPDATENOW | RDW_ALLCHILDREN);
+                InvalidateRect(h, IntPtr.Zero, erase: false);
         }
         catch { /* best-effort */ }
     }
@@ -114,10 +163,29 @@ public class EmbeddedAvaloniaView
 
     /// <summary>Close (destroy) the window. The Avalonia THREAD keeps running for a later re-enable.</summary>
     public void Close()
-        => UiThread.RunOrPost(() => { try { _reallyClose = true; _window.Close(); } catch { } });
+    {
+        if (Dispatcher.UIThread.CheckAccess()) CloseCore();
+        else ObserveCloseAsync();
+    }
 
-    private const uint RDW_INVALIDATE = 0x0001, RDW_ERASE = 0x0004, RDW_ALLCHILDREN = 0x0080, RDW_UPDATENOW = 0x0100;
+    /// <summary>Close on the owning UI thread and report cleanup failures before plugin unload.</summary>
+    public async Task CloseAsync() => await Dispatcher.UIThread.InvokeAsync(CloseCore);
+
+    private void CloseCore()
+    {
+        _contentPin?.Dispose();
+        _contentPin = null;
+        _reallyClose = true;
+        _window.Close();
+        _repaint.Dispose();
+    }
+
+    private async void ObserveCloseAsync()
+    {
+        try { await CloseAsync().ConfigureAwait(false); }
+        catch { /* A failed live subclass remains rooted; callers needing confirmation use CloseAsync. */ }
+    }
 
     [DllImport("user32.dll")]
-    private static extern bool RedrawWindow(IntPtr hWnd, IntPtr lprcUpdate, IntPtr hrgnUpdate, uint flags);
+    private static extern bool InvalidateRect(IntPtr hWnd, IntPtr rectangle, bool erase);
 }

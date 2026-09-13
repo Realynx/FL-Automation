@@ -148,7 +148,8 @@ public sealed partial class FlInjectBridge
     {
         ValidatePattern(index);
         LogOp("SetPatternName", $"index={index}");
-        ulong str = await MakeOwnedDelphiStringAsync(name ?? string.Empty, ct);
+        using var scratch = await LeaseScratchAsync(ct).ConfigureAwait(false);
+        ulong str = await MakeOwnedDelphiStringAsync(name ?? string.Empty, scratch, ct);
         await CallAsync("11d3960", new ulong[] { (uint)index, str }, ct);   // FLpat_SetPatternNameAndNotify
     }
 
@@ -216,40 +217,43 @@ public sealed partial class FlInjectBridge
         // round-trips on any pattern. (No -1: that read static[pattern-1] and reported "no notes".)
         int patIdx = pattern <= 0 ? await GetCurrentPatternAsync(ct) : pattern;
         ValidatePattern(patIdx);
-        ulong rec = await GPtrAsync((0x1803B90 + (ulong)patIdx * 0xC0).ToString("x"), ct);
+        ulong rec = await NoteRecorderAsync(patIdx, ct);
         if (rec == 0) return $"(pattern {patIdx} has no notes)";
-        int count = await AI32Async(rec + 0x14, ct);
+        int count = CheckedQueryCount(await AI32Async(rec + 0x14, ct), 1_000_000);
         ulong data = await APtrAsync(rec + 8, ct);
         if (count <= 0 || data == 0) return $"(pattern {patIdx} has no notes)";
         if (offset < 0) offset = 0;
         if (offset >= count) return $"(pattern {patIdx}: offset {offset} is past the last note — {count} notes total)";
         int n = Math.Min(count - offset, 300);
         byte[] all = await PeekAbsAsync(data + (ulong)offset * 0x18, n * 0x18, ct);
-        var sb = new StringBuilder();
-        int shown = 0;
-        int nextOffset = -1;   // raw index to continue from, or -1 = nothing left
-        for (int i = 0; i < n; i++)
-        {
-            int o = i * 0x18;
-            int ch = BitConverter.ToUInt16(all, o + 6);
-            if (channel >= 0 && ch != channel) continue;
-            if (shown == NotesPageSize) { nextOffset = offset + i; break; }
-            int pos = BitConverter.ToInt32(all, o + 0);
-            int len = BitConverter.ToInt32(all, o + 8);
-            int key = BitConverter.ToUInt16(all, o + 0xC);
-            int vel = all[o + 0x15];
-            bool muted = (all[o + 0x13] & 0x20) != 0;
-            sb.Append($"ch{ch} {KeyName(key)}({key}) pos={pos} len={len} vel={vel}{(muted ? " muted" : "")}\n");
-            shown++;
-        }
-        if (nextOffset < 0 && offset + n < count) nextOffset = offset + n;   // read window ended before the last note
+        var (rows, shown, nextOffset) = FormatNoteRows(all, channel, offset);
+        if (nextOffset < 0 && offset + n < count) nextOffset = offset + n;
         if (shown == 0)
             return channel >= 0
                 ? $"(no notes on channel {channel} in pattern {patIdx}{(nextOffset >= 0 ? $" here — more notes exist, call again with offset={nextOffset}" : "")})"
                 : $"(pattern {patIdx} has no notes)";
         string more = nextOffset >= 0 ? $"\n(more — call again with offset={nextOffset})" : "";
         return $"Pattern {patIdx}: showing {shown} of {count} notes{(channel >= 0 ? $" (channel {channel} only)" : "")}{(offset > 0 ? $" from offset {offset}" : "")}:\n"
-            + sb.ToString().TrimEnd() + more;
+            + rows + more;
+    }
+
+    private static (string rows, int shown, int nextOffset) FormatNoteRows(byte[] all, int channel, int offset)
+    {
+        var sb = new StringBuilder();
+        int shown = 0;
+        int nextOffset = -1;   // raw index to continue from, or -1 = nothing left
+        for (int i = 0; i < all.Length / NoteStride; i++)
+        {
+            var note = DecodeQueryNote(all, i * NoteStride, offset + i);
+            int ch = note.Channel;
+            if (channel >= 0 && ch != channel) continue;
+            if (shown == NotesPageSize) { nextOffset = offset + i; break; }
+            int pos = note.StartTick, len = note.LengthTick, key = note.Key, vel = note.Velocity;
+            bool muted = note.Muted;
+            sb.Append($"ch{ch} {KeyName(key)}({key}) pos={pos} len={len} vel={vel}{(muted ? " muted" : "")}\n");
+            shown++;
+        }
+        return (sb.ToString().TrimEnd(), shown, nextOffset);
     }
 
     // ---- surgical note edit / delete (in-place on the 24-byte struct array) ----
@@ -268,9 +272,9 @@ public sealed partial class FlInjectBridge
     /// or null when the pattern has no note store. An empty (count 0) store returns an empty list.</summary>
     private async Task<(ulong rec, ulong data, List<byte[]> notes)?> ReadNoteStructsAsync(int patIdx, CancellationToken ct)
     {
-        ulong rec = await GPtrAsync((0x1803B90 + (ulong)patIdx * 0xC0).ToString("x"), ct);
+        ulong rec = await NoteRecorderAsync(patIdx, ct);
         if (rec == 0) return null;
-        int count = await AI32Async(rec + 0x14, ct);
+        int count = CheckedQueryCount(await AI32Async(rec + 0x14, ct), 1_000_000);
         ulong data = await APtrAsync(rec + 8, ct);
         var list = new List<byte[]>(Math.Max(0, count));
         if (count > 0 && data != 0)
@@ -324,17 +328,21 @@ public sealed partial class FlInjectBridge
             for (int i = 0; i < notes.Count; i++)
             {
                 if (origId[i] != (e.Channel, e.Key, e.StartTick)) continue;
-                byte[] n = notes[i];
-                if (e.NewKey is int nk)       BitConverter.GetBytes((ushort)Math.Clamp(nk, 0, 131)).CopyTo(n, 0xC);
-                if (e.NewStartTick is int ns) BitConverter.GetBytes(Math.Max(0, ns)).CopyTo(n, 0);
-                if (e.NewLength is int nl)    BitConverter.GetBytes(Math.Max(1, nl)).CopyTo(n, 8);
-                if (e.NewVelocity is int nv)  n[0x15] = (byte)Math.Clamp(nv, 0, 127);
-                if (e.Muted is bool m)        n[0x13] = (byte)(m ? n[0x13] | 0x20 : n[0x13] & ~0x20);
+                ApplyNoteEdit(notes[i], e);
                 changed++;
             }
         }
         if (changed > 0) await WriteNoteStructsAsync(patIdx, rec, data, notes, ct);
         return changed;
+    }
+
+    private static void ApplyNoteEdit(byte[] note, NoteEdit edit)
+    {
+        if (edit.NewKey is int key) BitConverter.GetBytes((ushort)Math.Clamp(key, 0, 131)).CopyTo(note, 0xC);
+        if (edit.NewStartTick is int start) BitConverter.GetBytes(Math.Max(0, start)).CopyTo(note, 0);
+        if (edit.NewLength is int length) BitConverter.GetBytes(Math.Max(1, length)).CopyTo(note, 8);
+        if (edit.NewVelocity is int velocity) note[0x15] = (byte)Math.Clamp(velocity, 0, 127);
+        if (edit.Muted is bool muted) note[0x13] = (byte)(muted ? note[0x13] | 0x20 : note[0x13] & ~0x20);
     }
 
     /// <summary>Delete specific notes (matched by channel+key+startTick), keeping the rest of the pattern.

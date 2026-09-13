@@ -5,10 +5,25 @@
     <Project Path="src/FruityLink.Host/FruityLink.Host.csproj" />
     <Project Path="src/FruityLink.Plugins.Abstractions/FruityLink.Plugins.Abstractions.csproj" />
     <Project Path="src/FruityLink.Plugins.Host/FruityLink.Plugins.Host.csproj" />
+    <Project Path="src/FruityLink.Plugins.Python/FruityLink.Plugins.Python.csproj" />
+    <Project Path="src/FruityLink.Plugins.PythonIde/FruityLink.Plugins.PythonIde.csproj" />
+    <Project Path="src/FruityLink.Scripting/FruityLink.Scripting.csproj" />
     <Project Path="src/FruityLink.Ui.Avalonia.Hosting/FruityLink.Ui.Avalonia.Hosting.csproj" />
     <Project Path="src/FruityLink.Ui.Wpf.Hosting/FruityLink.Ui.Wpf.Hosting.csproj" />
   </Folder>
   <Folder Name="/samples/">
     <Project Path="samples/HelloFl/HelloFl.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/FruityLink.Plugins.PythonIde.Execution.Tests/FruityLink.Plugins.PythonIde.Execution.Tests.csproj" />
+    <Project Path="tests/FruityLink.EmbeddedPython.TestHost/FruityLink.EmbeddedPython.TestHost.csproj" />
+    <Project Path="tests/FruityLink.FlStudio.Tests/FruityLink.FlStudio.Tests.csproj" />
+    <Project Path="tests/FruityLink.Plugins.PythonIde.Ui.Tests/FruityLink.Plugins.PythonIde.Ui.Tests.csproj" />
+    <Project Path="tests/FruityLink.Scripting.Tests/FruityLink.Scripting.Tests.csproj" />
+    <Project Path="tests/FruityLink.Plugins.Python.Tests/FruityLink.Plugins.Python.Tests.csproj" />
+    <Project Path="tests/FruityLink.Hosting.Tests/FruityLink.Hosting.Tests.csproj" />
+    <Project Path="tests/FruityLink.Plugins.Host.Tests/FruityLink.Plugins.Host.Tests.csproj" />
+    <Project Path="tests/FruityLink.Plugins.Host.Tests/Fixture/Fixture.csproj" />
+    <Project Path="tests/FruityLink.Plugins.Host.Tests/Dependency/Dependency.csproj" />
   </Folder>
 </Solution>

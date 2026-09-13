@@ -4,7 +4,7 @@ namespace FruityLink.Plugins.Host;
 /// Owns the shadow-copy root for <see cref="PluginManager"/>: every plugin assembly is loaded from a
 /// private per-load copy under this root, never from the original file, so the original stays
 /// writable — a <c>dotnet build</c> over it succeeds and TRIGGERS the hot-reload watcher.
-/// Construction reclaims any copies left behind by a previous (crashed) session.
+/// Copies from another live host are never removed during construction.
 /// </summary>
 internal sealed class ShadowCopyStore
 {
@@ -17,12 +17,16 @@ internal sealed class ShadowCopyStore
     /// <param name="log">Diagnostic sink (delete failures are logged, never thrown).</param>
     public ShadowCopyStore(string shadowRoot, string pluginsDir, Action<string> log)
     {
-        _shadowRoot = shadowRoot;
-        _pluginsDir = pluginsDir;
+        _shadowRoot = Path.GetFullPath(shadowRoot);
+        _pluginsDir = Path.GetFullPath(pluginsDir);
         _log = log;
 
-        // Reclaim any shadow copies left behind by a previous (crashed) session.
-        TryDeleteDir(_shadowRoot);
+        if (PathEquals(_shadowRoot, _pluginsDir) || _shadowRoot.StartsWith(
+            Path.TrimEndingDirectorySeparator(_pluginsDir) + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase))
+            throw new ArgumentException("The shadow root must be outside the plugins directory.", nameof(shadowRoot));
+
+        // Multiple FL versions/processes can share this root. Deleting it here removes dependencies
+        // that another live plugin has not loaded yet, even if its main assembly is already locked.
         try { Directory.CreateDirectory(_shadowRoot); } catch { /* created lazily on first load */ }
     }
 
@@ -31,28 +35,19 @@ internal sealed class ShadowCopyStore
         string loadDir = Path.Combine(_shadowRoot, Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(loadDir);
 
-        string srcDir = Path.GetDirectoryName(originalDll) ?? _pluginsDir;
-        if (PathEquals(srcDir, _pluginsDir))
+        try
         {
-            // Flat layout: the dll + its sidecars only (siblings belong to other plugins).
-            CopyFileIfExists(originalDll, loadDir);
-            CopyFileIfExists(Path.ChangeExtension(originalDll, ".deps.json"), loadDir);
-            CopyFileIfExists(Path.ChangeExtension(originalDll, ".runtimeconfig.json"), loadDir);
-            CopyFileIfExists(Path.ChangeExtension(originalDll, ".pdb"), loadDir);
-        }
-        else
-        {
-            // Per-plugin folder: copy the whole package so private deps resolve from the shadow.
+            string srcDir = Path.GetDirectoryName(originalDll) ?? _pluginsDir;
+            // Flat plugins can reference sibling libraries and runtime assets too. Copying only the
+            // entry dll breaks dependencies and can cause fallback into the host's assembly context.
             CopyDirRecursive(srcDir, loadDir);
+            return (loadDir, Path.Combine(loadDir, Path.GetFileName(originalDll)));
         }
-
-        return (loadDir, Path.Combine(loadDir, Path.GetFileName(originalDll)));
-    }
-
-    private static void CopyFileIfExists(string src, string destDir)
-    {
-        if (File.Exists(src))
-            File.Copy(src, Path.Combine(destDir, Path.GetFileName(src)), overwrite: true);
+        catch
+        {
+            TryDeleteDir(loadDir);
+            throw;
+        }
     }
 
     private static void CopyDirRecursive(string src, string dst)
@@ -67,7 +62,7 @@ internal sealed class ShadowCopyStore
     public void TryDeleteDir(string dir)
     {
         try { if (Directory.Exists(dir)) Directory.Delete(dir, recursive: true); }
-        catch (Exception ex) { _log($"shadow: could not delete '{dir}': {ex.Message} (will retry next startup)"); }
+        catch (Exception ex) { _log($"shadow: could not delete '{dir}': {ex.Message} (may be cleaned after all hosts exit)"); }
     }
 
     /// <summary>Full-path, case-insensitive path equality (falls back to ordinal-ignore-case on bad paths).</summary>

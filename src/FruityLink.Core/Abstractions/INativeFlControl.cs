@@ -13,7 +13,9 @@ public interface INativeFlControl
     Task<bool> IsAvailableAsync(CancellationToken ct = default);
 
     // --- global / master (live-verified) ---
+    /// <summary>Set tempo in beats per minute (10..522).</summary>
     Task SetTempoAsync(double bpm, CancellationToken ct = default);
+    /// <summary>Read tempo in beats per minute.</summary>
     Task<double> GetTempoAsync(CancellationToken ct = default);
     /// <summary>Master volume, 0..12800 (≈7624 ≈ 0 dB).</summary>
     Task SetMasterVolumeAsync(int value, CancellationToken ct = default);
@@ -61,7 +63,7 @@ public interface INativeFlControl
     Task SetChannelMutedAsync(int channel, bool muted, CancellationToken ct = default);
     /// <summary>Read a channel's mute state (symmetric with <see cref="SetChannelMutedAsync"/>).</summary>
     Task<bool> GetChannelMutedAsync(int channel, CancellationToken ct = default);
-    /// <summary>Route a channel to a mixer track (0..125).</summary>
+    /// <summary>Route a channel to Master (0) or an active ordinary mixer insert (within 1..500). Query mixer tracks for current indices; Current and dormant slots are unavailable.</summary>
     Task SetChannelFxRouteAsync(int channel, int mixerTrack, CancellationToken ct = default);
     /// <summary>Read a channel's mixer-track route (symmetric with <see cref="SetChannelFxRouteAsync"/>).</summary>
     Task<int> GetChannelFxRouteAsync(int channel, CancellationToken ct = default);
@@ -80,19 +82,27 @@ public interface INativeFlControl
     Task<int> GetPpqAsync(CancellationToken ct = default);
 
     // --- patterns ---
+    /// <summary>Read the selected one-based pattern index.</summary>
     Task<int> GetCurrentPatternAsync(CancellationToken ct = default);
+    /// <summary>Select a one-based pattern index.</summary>
     Task SelectPatternAsync(int index, CancellationToken ct = default);
     /// <summary>Selects the first empty pattern; returns its index.</summary>
     Task<int> CreatePatternAsync(CancellationToken ct = default);
+    /// <summary>Remove all notes from the specified one-based pattern.</summary>
     Task ClearPatternAsync(int index, CancellationToken ct = default);
+    /// <summary>Read the name of a one-based pattern.</summary>
     Task<string> GetPatternNameAsync(int index, CancellationToken ct = default);
+    /// <summary>List patterns and their names.</summary>
     Task<string> ListPatternsAsync(CancellationToken ct = default);
 
     // --- channel rack ---
+    /// <summary>Read the number of channels in the rack.</summary>
     Task<int> GetChannelCountAsync(CancellationToken ct = default);
     /// <summary>Exclusively select a channel (so the piano roll edits it).</summary>
     Task SelectChannelAsync(int index, CancellationToken ct = default);
+    /// <summary>Read the name of a zero-based channel.</summary>
     Task<string> GetChannelNameAsync(int index, CancellationToken ct = default);
+    /// <summary>List channel indices and names.</summary>
     Task<string> ListChannelsAsync(CancellationToken ct = default);
     /// <summary>Rename a channel (persists across save/reload) so the model's own name→index lookups keep
     /// working on channels it created.</summary>
@@ -102,8 +112,10 @@ public interface INativeFlControl
     Task SetChannelSoloAsync(int index, CancellationToken ct = default);
 
     // --- mixer tracks (identity: resolve a bus/track NAME to its index) ---
-    /// <summary>Number of mixer tracks (127 at rest: master + 125 inserts + current).</summary>
+    /// <summary>Native mixer cardinality: Master + active ordinary inserts + Current. Current has a special physical index, not count-1; use IFlStructuredQuery.QueryMixerTracksAsync to enumerate addressable Master/insert tracks.</summary>
     Task<int> GetMixerTrackCountAsync(CancellationToken ct = default);
+    /// <summary>Add an ordinary mixer insert after afterTrack (0 = Master), or append after the last ordinary insert when -1. Returns the new track index; requery track indices and routing after this structural edit. Unsupported native builds fail without adding a track.</summary>
+    Task<int> AddMixerTrackAsync(int afterTrack = -1, CancellationToken ct = default);
     /// <summary>Effective mixer track name (custom if set, else default by type: Master/Insert n/Current).</summary>
     Task<string> GetMixerTrackNameAsync(int track, CancellationToken ct = default);
     /// <summary>Custom-named mixer tracks (+ Master) as "index: name", for name→index resolution.</summary>
@@ -118,11 +130,14 @@ public interface INativeFlControl
     Task SetMixerEqGainAsync(int track, int band, int value, CancellationToken ct = default);
 
     // --- transport ---
+    /// <summary>Start playback.</summary>
     Task TransportPlayAsync(CancellationToken ct = default);
+    /// <summary>Stop playback.</summary>
     Task TransportStopAsync(CancellationToken ct = default);
+    /// <summary>Toggle recording.</summary>
     Task TransportToggleRecordAsync(CancellationToken ct = default);
-    /// <summary>Set the song loop / time-selection region to [startTick, endTick] so the transport loops just
-    /// that span (e.g. loop the drop while working on it). endTick &lt; 0 (or &lt;= startTick) CLEARS the loop.</summary>
+    /// <summary>Set the song loop / time-selection region to [startTick, endTick), with an exclusive end
+    /// (for example, 0..1536 spans four bars at 96 PPQ). endTick &lt;= the nonnegative start clears the loop.</summary>
     Task SetLoopRegionAsync(int startTick, int endTick, CancellationToken ct = default);
 
     // --- plugins / inserts ---
@@ -182,21 +197,27 @@ public interface INativeFlControl
     Task SetPatternNameAsync(int index, string name, CancellationToken ct = default);
 
     // --- playlist tracks ---
+    /// <summary>List customized playlist tracks and summarize default tracks.</summary>
     Task<string> ListPlaylistTracksAsync(CancellationToken ct = default);
+    /// <summary>Rename a one-based playlist track.</summary>
     Task SetTrackNameAsync(int track, string name, CancellationToken ct = default);
     /// <summary>Read a playlist track's name ("" when default; symmetric with <see cref="SetTrackNameAsync"/>).</summary>
     Task<string> GetTrackNameAsync(int track, CancellationToken ct = default);
+    /// <summary>Set a playlist track color as packed RGB.</summary>
     Task SetTrackColorAsync(int track, int rgb, CancellationToken ct = default);
     /// <summary>Read a playlist track's RGB color (symmetric with <see cref="SetTrackColorAsync"/>).</summary>
     Task<int> GetTrackColorAsync(int track, CancellationToken ct = default);
+    /// <summary>Mute or unmute a playlist track.</summary>
     Task SetTrackMuteAsync(int track, bool muted, CancellationToken ct = default);
     /// <summary>Read a playlist track's mute state (symmetric with <see cref="SetTrackMuteAsync"/>).</summary>
     Task<bool> GetTrackMuteAsync(int track, CancellationToken ct = default);
     /// <summary>Toggle exclusive SOLO on a playlist track (solo again = un-solo).</summary>
     Task SetTrackSoloAsync(int track, CancellationToken ct = default);
+    /// <summary>Collapse or expand a playlist track.</summary>
     Task SetTrackCollapsedAsync(int track, bool collapsed, CancellationToken ct = default);
     /// <summary>Read a playlist track's collapsed state (symmetric with <see cref="SetTrackCollapsedAsync"/>).</summary>
     Task<bool> GetTrackCollapsedAsync(int track, CancellationToken ct = default);
+    /// <summary>Select a playlist track.</summary>
     Task SelectTrackAsync(int track, CancellationToken ct = default);
 
     // --- playlist clips (arrangement) ---
@@ -205,8 +226,11 @@ public interface INativeFlControl
     Task<string> ListClipsAsync(int offset = 0, int track = -1, CancellationToken ct = default);
     /// <summary>Add a pattern clip (pattern 1-based, matching notes/patterns; 0 or out-of-range throws) to a track at startTick; lengthTick&lt;=0 = pattern length.</summary>
     Task AddPatternClipAsync(int pattern, int track, int startTick, int lengthTick, CancellationToken ct = default);
+    /// <summary>Move a playlist clip to a tick position and track.</summary>
     Task MoveClipAsync(int clipIndex, int startTick, int track, CancellationToken ct = default);
+    /// <summary>Set a playlist clip duration in ticks.</summary>
     Task ResizeClipAsync(int clipIndex, int lengthTick, CancellationToken ct = default);
+    /// <summary>Remove a playlist clip by its collection index.</summary>
     Task DeleteClipAsync(int clipIndex, CancellationToken ct = default);
     /// <summary>Mute/unmute a playlist clip.</summary>
     Task SetClipMutedAsync(int clipIndex, bool muted, CancellationToken ct = default);
@@ -236,6 +260,7 @@ public interface INativeFlControl
     Task DuplicateClipAsync(int clipIndex, CancellationToken ct = default);
 
     // --- song / transport state ---
+    /// <summary>Describe playback state, mode, and song position.</summary>
     Task<string> GetSongStateAsync(CancellationToken ct = default);
     /// <summary>Read song mode (true) vs pattern mode (false) — symmetric with <see cref="SetSongModeAsync"/>.</summary>
     Task<bool> GetSongModeAsync(CancellationToken ct = default);
@@ -245,16 +270,23 @@ public interface INativeFlControl
     /// '^' markup. Empty when there is no active hint. Read-only; safe to poll.
     /// </summary>
     Task<string> GetStatusAsync(CancellationToken ct = default);
+    /// <summary>Select song playback when true, or pattern playback when false.</summary>
     Task SetSongModeAsync(bool song, CancellationToken ct = default);
     /// <summary>Move the song playhead to an absolute tick (PPQ).</summary>
     Task SeekAsync(int tick, CancellationToken ct = default);
+    /// <summary>List song time markers.</summary>
     Task<string> ListMarkersAsync(CancellationToken ct = default);
+    /// <summary>Add a named song marker at a tick position.</summary>
     Task AddMarkerAsync(int tick, string name, CancellationToken ct = default);
 
     // --- project lifecycle ---
+    /// <summary>Open the project at the specified path.</summary>
     Task OpenProjectAsync(string path, CancellationToken ct = default);
+    /// <summary>Save the project using the specified path.</summary>
     Task SaveProjectAsync(string path, CancellationToken ct = default);
+    /// <summary>Create a new project through FL Studio.</summary>
     Task NewProjectAsync(CancellationToken ct = default);
+    /// <summary>Read project identity and metadata.</summary>
     Task<string> GetProjectInfoAsync(CancellationToken ct = default);
     /// <summary>Save As: write to a new path and make it the current project (updates title + recent files).</summary>
     Task SaveProjectAsAsync(string path, CancellationToken ct = default);
@@ -264,24 +296,37 @@ public interface INativeFlControl
     Task SaveCopyAsync(string path, CancellationToken ct = default);
     /// <summary>Save an auto-incremented new version and make it current.</summary>
     Task SaveNewVersionAsync(CancellationToken ct = default);
+    /// <summary>List recently opened project paths.</summary>
     Task<string> ListRecentProjectsAsync(CancellationToken ct = default);
 
     // --- arrangements ---
+    /// <summary>List arrangement indices and names.</summary>
     Task<string> ListArrangementsAsync(CancellationToken ct = default);
     /// <summary>Add a new (empty) arrangement and switch to it; returns its index.</summary>
     Task<int> AddArrangementAsync(string? name, CancellationToken ct = default);
     /// <summary>Clone an arrangement (deep copy incl. clips); srcIdx&lt;0 = current. Returns the new index.</summary>
     Task<int> CloneArrangementAsync(int srcIdx, string? name, CancellationToken ct = default);
+    /// <summary>Rename an arrangement by index.</summary>
     Task RenameArrangementAsync(int idx, string name, CancellationToken ct = default);
     /// <summary>Read an arrangement's name ("" when unnamed; symmetric with <see cref="RenameArrangementAsync"/>).</summary>
     Task<string> GetArrangementNameAsync(int idx, CancellationToken ct = default);
+    /// <summary>Delete an arrangement by index.</summary>
     Task DeleteArrangementAsync(int idx, CancellationToken ct = default);
+    /// <summary>Switch to an arrangement by index.</summary>
     Task SelectArrangementAsync(int idx, CancellationToken ct = default);
 
     // --- automation clips (channel must host the Automation Clip generator) ---
+    /// <summary>Create a linked automation channel and place its clip on one-based playlist track 1..500. Times are ticks, length positive. Initial linking is part of native creation; failures may leave the channel created, so inspect before retrying.</summary>
+    Task<FlAutomationClipResult> CreateAutomationClipAsync(FlAutomationTarget target, int track, int startTick, int lengthTick, string? name = null, CancellationToken ct = default);
+    /// <summary>Place an existing Automation Clip generator on one-based playlist track 1..500. Returns the new playlist clip index; startTick is nonnegative and lengthTick positive.</summary>
+    Task<int> AddAutomationClipAsync(int channel, int track, int startTick, int lengthTick, CancellationToken ct = default);
+    /// <summary>Replace an automation envelope with 2..4000 linear points. Times are beats, first time zero, later times strictly increasing; values 0..1, tension -1..1, curve must be zero.</summary>
+    Task SetAutomationPointsAsync(int channel, IReadOnlyList<FlAutomationPointSpec> points, CancellationToken ct = default);
+    /// <summary>List an automation channel curve with times, values, and tension.</summary>
     Task<string> ListAutomationPointsAsync(int channel, CancellationToken ct = default);
     /// <summary>Add an automation point: time in beats, value 0..1, tension -1..1 (inserts in time order).</summary>
     Task AddAutomationPointAsync(int channel, double timeBeats, double value, double tension, CancellationToken ct = default);
+    /// <summary>Delete an automation point by index and recompute its curve.</summary>
     Task DeleteAutomationPointAsync(int channel, int index, CancellationToken ct = default);
 
     // --- render / export ---

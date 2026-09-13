@@ -40,6 +40,7 @@ public sealed class EmbeddedWpfView
     private readonly Window _window;
     private readonly Color? _explicitBackdrop;
     private HwndSource? _pinSrc;
+    private bool _pinInstalled;
     private int _insetX, _insetY;   // FL content inset: border (left/right/bottom) + titlebar (top)
 
     /// <param name="window">The window to make embeddable. The view does not take ownership.</param>
@@ -47,7 +48,7 @@ public sealed class EmbeddedWpfView
     /// Backdrop color for the software <see cref="HwndTarget"/>. Should match your window's
     /// background. Without an OPAQUE backdrop, areas of the child not covered by a control stay
     /// transparent in software mode inside the foreign FL parent — FL's own content bleeds through
-    /// them. When omitted, the window's <see cref="Control.Background"/> is used if it is a solid
+    /// them. When omitted, the window's <see cref="System.Windows.Controls.Control.Background"/> is used if it is a solid
     /// color, else black.
     /// </param>
     public EmbeddedWpfView(Window window, Color? opaqueBackdrop = null)
@@ -59,10 +60,14 @@ public sealed class EmbeddedWpfView
     /// <summary>The wrapped window.</summary>
     public Window Window => _window;
 
-    private Color Backdrop =>
-        _explicitBackdrop
-        ?? (_window.Background as SolidColorBrush)?.Color
-        ?? Colors.Black;
+    private Color Backdrop
+    {
+        get
+        {
+            Color color = _explicitBackdrop ?? (_window.Background as SolidColorBrush)?.Color ?? Colors.Black;
+            return Color.FromRgb(color.R, color.G, color.B);
+        }
+    }
 
     /// <summary>Ensure the Win32 HWND exists (without requiring a prior Show) and return it — the handle
     /// you hand to <c>IFlWindowHost.TryEmbed</c> to reparent this window into an FL host form.</summary>
@@ -109,11 +114,19 @@ public sealed class EmbeddedWpfView
     /// roughly centred. Safe to call whether or not embedding was attempted.</summary>
     public void RestoreExternalChrome()
     {
+        if (_pinInstalled)
+        {
+            _pinSrc?.RemoveHook(PinHook);
+            _pinInstalled = false;
+        }
         _window.WindowStyle = WindowStyle.SingleBorderWindow;
         _window.ResizeMode = ResizeMode.CanResize;
         _window.ShowInTaskbar = true;
-        _window.Left = Math.Max(0, (SystemParameters.PrimaryScreenWidth - _window.Width) / 2);
-        _window.Top = Math.Max(0, (SystemParameters.PrimaryScreenHeight - _window.Height) / 2);
+        _window.ShowActivated = true;
+        double width = double.IsFinite(_window.Width) ? _window.Width : _window.ActualWidth;
+        double height = double.IsFinite(_window.Height) ? _window.Height : _window.ActualHeight;
+        _window.Left = Math.Max(0, (SystemParameters.PrimaryScreenWidth - width) / 2);
+        _window.Top = Math.Max(0, (SystemParameters.PrimaryScreenHeight - height) / 2);
     }
 
     // --- Embed positioning: pin the HWND to fill the FL host's content control ---
@@ -134,7 +147,11 @@ public sealed class EmbeddedWpfView
         {
             IntPtr h = new WindowInteropHelper(_window).EnsureHandle();
             _pinSrc ??= HwndSource.FromHwnd(h);
-            _pinSrc?.AddHook(PinHook);
+            if (!_pinInstalled && _pinSrc is not null)
+            {
+                _pinSrc.AddHook(PinHook);
+                _pinInstalled = true;
+            }
             // As a WS_CHILD of a NON-WPF (FL) parent, WPF's default DWM/hardware composition hits the classic
             // "airspace" bug: the child's redirection surface isn't presented reliably — it goes blank on
             // re-show and only repaints the strip under a moving cursor. Forcing SOFTWARE rendering makes WPF
@@ -151,8 +168,7 @@ public sealed class EmbeddedWpfView
     {
         IntPtr parent = Win32.GetParent(h);
         if (parent == IntPtr.Zero || !Win32.GetClientRect(parent, out Win32.RECT rc)) return;
-        int w = (rc.right - rc.left) - 2 * _insetX, hh = (rc.bottom - rc.top) - _insetY - _insetX;
-        if (w < 1) w = 1; if (hh < 1) hh = 1;
+        (int w, int hh) = ContentSize(rc);
         Win32.SetWindowPos(h, IntPtr.Zero, _insetX, _insetY, w, hh, 0x0014 /*NOZORDER|NOACTIVATE*/);
     }
 
@@ -164,8 +180,7 @@ public sealed class EmbeddedWpfView
             IntPtr parent = Win32.GetParent(hwnd);
             if (parent != IntPtr.Zero && Win32.GetClientRect(parent, out Win32.RECT rc))
             {
-                int w = (rc.right - rc.left) - 2 * _insetX, hh = (rc.bottom - rc.top) - _insetY - _insetX;
-                if (w < 1) w = 1; if (hh < 1) hh = 1;
+                (int w, int hh) = ContentSize(rc);
                 var wp = Marshal.PtrToStructure<Win32.WINDOWPOS>(lParam);
                 wp.x = _insetX; wp.y = _insetY; wp.cx = w; wp.cy = hh;   // stay below the FL titlebar
                 wp.flags &= ~0x0003u;   // clear SWP_NOSIZE(0x1)|SWP_NOMOVE(0x2) so our x/y/cx/cy apply
@@ -193,6 +208,10 @@ public sealed class EmbeddedWpfView
         }
         return IntPtr.Zero;
     }
+
+    private (int Width, int Height) ContentSize(Win32.RECT rect)
+        => (Math.Max(1, rect.right - rect.left - 2 * _insetX),
+            Math.Max(1, rect.bottom - rect.top - _insetY - _insetX));
 
     /// <summary>
     /// Force the embedded WPF child to actually re-present after the FL host form was hidden→re-shown. With

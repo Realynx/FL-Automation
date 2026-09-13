@@ -3,6 +3,7 @@ name: Publish to NuGet
 # Publishes the developer-facing FruityLink SDK packages to nuget.org:
 #   FruityLink.Plugins.Abstractions  (the plugin contract — what plugin devs reference)
 #   FruityLink.Core                  (its transitive dependency)
+#   FruityLink.Scripting             (shared Python execution backend)
 #   FruityLink.Ui.Avalonia.Hosting   (embed Avalonia UI inside FL Studio)
 #   FruityLink.Ui.Wpf.Hosting        (embed WPF UI inside FL Studio)
 #
@@ -67,6 +68,7 @@ jobs:
         if: steps.gate.outputs.publish == 'true'
         run: |
           dotnet pack src/FruityLink.Core/FruityLink.Core.csproj -c Release -o packages
+          dotnet pack src/FruityLink.Scripting/FruityLink.Scripting.csproj -c Release -o packages
           dotnet pack src/FruityLink.Plugins.Abstractions/FruityLink.Plugins.Abstractions.csproj -c Release -o packages
           dotnet pack src/FruityLink.Ui.Avalonia.Hosting/FruityLink.Ui.Avalonia.Hosting.csproj -c Release -o packages
           dotnet pack src/FruityLink.Ui.Wpf.Hosting/FruityLink.Ui.Wpf.Hosting.csproj -c Release -o packages

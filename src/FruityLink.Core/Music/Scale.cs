@@ -53,28 +53,26 @@ public static class Scales
     /// Resolves a scale from a free-text name (case/space/punctuation insensitive),
     /// understanding common aliases such as "minor", "ionian", "aeolian".
     /// </summary>
-    public static bool TryParse(string name, out ScaleType type)
-    {
-        string key = Normalize(name);
-        switch (key)
+    public static bool TryParse(string name, out ScaleType type) =>
+        Names.TryGetValue(Normalize(name), out type);
+
+    private static readonly IReadOnlyDictionary<string, ScaleType> Names =
+        new Dictionary<string, ScaleType>(StringComparer.Ordinal)
         {
-            case "major": case "ionian": case "maj": type = ScaleType.Major; return true;
-            case "minor": case "naturalminor": case "aeolian": case "min": type = ScaleType.NaturalMinor; return true;
-            case "dorian": type = ScaleType.Dorian; return true;
-            case "phrygian": type = ScaleType.Phrygian; return true;
-            case "lydian": type = ScaleType.Lydian; return true;
-            case "mixolydian": case "mixo": type = ScaleType.Mixolydian; return true;
-            case "locrian": type = ScaleType.Locrian; return true;
-            case "harmonicminor": case "harmonic": type = ScaleType.HarmonicMinor; return true;
-            case "melodicminor": case "melodic": type = ScaleType.MelodicMinor; return true;
-            case "majorpentatonic": case "majpentatonic": case "pentatonicmajor": type = ScaleType.MajorPentatonic; return true;
-            case "minorpentatonic": case "minpentatonic": case "pentatonic": case "pentatonicminor": type = ScaleType.MinorPentatonic; return true;
-            case "blues": case "bluesminor": case "minorblues": type = ScaleType.Blues; return true;
-            default:
-                type = ScaleType.Major;
-                return false;
-        }
-    }
+            ["major"] = ScaleType.Major, ["ionian"] = ScaleType.Major, ["maj"] = ScaleType.Major,
+            ["minor"] = ScaleType.NaturalMinor, ["naturalminor"] = ScaleType.NaturalMinor,
+            ["aeolian"] = ScaleType.NaturalMinor, ["min"] = ScaleType.NaturalMinor,
+            ["dorian"] = ScaleType.Dorian, ["phrygian"] = ScaleType.Phrygian,
+            ["lydian"] = ScaleType.Lydian, ["mixolydian"] = ScaleType.Mixolydian,
+            ["mixo"] = ScaleType.Mixolydian, ["locrian"] = ScaleType.Locrian,
+            ["harmonicminor"] = ScaleType.HarmonicMinor, ["harmonic"] = ScaleType.HarmonicMinor,
+            ["melodicminor"] = ScaleType.MelodicMinor, ["melodic"] = ScaleType.MelodicMinor,
+            ["majorpentatonic"] = ScaleType.MajorPentatonic, ["majpentatonic"] = ScaleType.MajorPentatonic,
+            ["pentatonicmajor"] = ScaleType.MajorPentatonic,
+            ["minorpentatonic"] = ScaleType.MinorPentatonic, ["minpentatonic"] = ScaleType.MinorPentatonic,
+            ["pentatonic"] = ScaleType.MinorPentatonic, ["pentatonicminor"] = ScaleType.MinorPentatonic,
+            ["blues"] = ScaleType.Blues, ["bluesminor"] = ScaleType.Blues, ["minorblues"] = ScaleType.Blues,
+        };
 
     private static string Normalize(string name)
     {

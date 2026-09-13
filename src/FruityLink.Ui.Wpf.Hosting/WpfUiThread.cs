@@ -19,31 +19,38 @@ public sealed class WpfUiThread
     private Dispatcher? _ownedDispatcher;
     private Thread? _thread;
     private readonly string _threadName;
+    private readonly object _gate = new();
 
     /// <param name="threadName">Name given to a privately created dispatcher thread (diagnostics).</param>
     public WpfUiThread(string threadName = "FruityLink WPF UI") => _threadName = threadName;
 
     /// <summary>The dispatcher to marshal UI work onto. Valid after <see cref="Start"/>.</summary>
     public Dispatcher Dispatcher =>
-        _dispatcher ?? throw new InvalidOperationException("WpfUiThread.Start() has not been called.");
+        Volatile.Read(ref _dispatcher) ?? throw new InvalidOperationException("WpfUiThread.Start() has not been called.");
 
     /// <summary>Acquire a UI thread: the host app's if present, else a private STA thread.</summary>
     public void Start()
     {
-        if (_dispatcher is not null) return;
-
-        Dispatcher? appDispatcher = Application.Current?.Dispatcher;
-        if (appDispatcher is not null)
+        lock (_gate)
         {
-            _dispatcher = appDispatcher;          // reuse the host's UI thread; not ours to stop
-            return;
+            if (_dispatcher is { HasShutdownStarted: false }) return;
+            Dispatcher? appDispatcher = Application.Current?.Dispatcher;
+            if (appDispatcher is { HasShutdownStarted: false })
+            {
+                _dispatcher = appDispatcher;
+                return;
+            }
+            StartOwnedDispatcher();
         }
+    }
 
-        using var ready = new ManualResetEventSlim(false);
+    private void StartOwnedDispatcher()
+    {
+        var ready = new TaskCompletionSource<Dispatcher>(TaskCreationOptions.RunContinuationsAsynchronously);
         _thread = new Thread(() =>
         {
-            _ownedDispatcher = Dispatcher.CurrentDispatcher;
-            ready.Set();
+            try { ready.SetResult(Dispatcher.CurrentDispatcher); }
+            catch (Exception ex) { ready.SetException(ex); return; }
             Dispatcher.Run();
         })
         {
@@ -52,20 +59,24 @@ public sealed class WpfUiThread
         };
         _thread.SetApartmentState(ApartmentState.STA);
         _thread.Start();
-        ready.Wait();
+        _ownedDispatcher = ready.Task.GetAwaiter().GetResult();
         _dispatcher = _ownedDispatcher;
     }
 
     /// <summary>Shut down only a dispatcher thread we created. No-op when reusing the host's.</summary>
     public void Stop()
     {
-        Dispatcher? owned = _ownedDispatcher;
-        if (owned is not null)
+        Dispatcher? owned;
+        lock (_gate)
         {
-            try { owned.InvokeShutdown(); } catch { /* already gone */ }
+            owned = _ownedDispatcher;
             _ownedDispatcher = null;
+            _dispatcher = null;
+            _thread = null;
         }
-        _dispatcher = null;
-        _thread = null;
+        // A caller may be FL's main thread, which the hosted UI is waiting on during detach.
+        // Posting shutdown avoids blocking that thread while still draining the owned dispatcher.
+        try { owned?.BeginInvokeShutdown(DispatcherPriority.Normal); }
+        catch { /* already gone */ }
     }
 }

@@ -70,24 +70,39 @@ public sealed partial class FlInjectBridge
         => (uint)(((track * 0x40 + slot) << 16) + paramIndex) + 0x70008000u;
 
     /// <summary>Set a mixer track volume 0..12800 (track 0 = master). Live-verified.</summary>
-    public Task SetMixerVolumeAsync(int track, int value, CancellationToken ct = default)
-        => SetParamAsync(MixerTrackParamId(track, MixerVolOffset), Math.Clamp(value, 0, 12800), ct);
+    public async Task SetMixerVolumeAsync(int track, int value, CancellationToken ct = default)
+    {
+        await ValidateAddressableMixerTrackAsync(track, ct);
+        await SetParamAsync(MixerTrackParamId(track, MixerVolOffset), Math.Clamp(value, 0, 12800), ct);
+    }
 
     /// <summary>Read a mixer track volume 0..12800.</summary>
-    public Task<long> GetMixerVolumeAsync(int track, CancellationToken ct = default)
-        => GetParamAsync(MixerTrackParamId(track, MixerVolOffset), ct);
+    public async Task<long> GetMixerVolumeAsync(int track, CancellationToken ct = default)
+    {
+        await ValidateAddressableMixerTrackAsync(track, ct);
+        return await GetParamAsync(MixerTrackParamId(track, MixerVolOffset), ct);
+    }
 
     /// <summary>Set a mixer track pan 0..12800 (6400 = center).</summary>
-    public Task SetMixerPanAsync(int track, int value, CancellationToken ct = default)
-        => SetParamAsync(MixerTrackParamId(track, MixerPanOffset), Math.Clamp(value, 0, 12800), ct);
+    public async Task SetMixerPanAsync(int track, int value, CancellationToken ct = default)
+    {
+        await ValidateAddressableMixerTrackAsync(track, ct);
+        await SetParamAsync(MixerTrackParamId(track, MixerPanOffset), Math.Clamp(value, 0, 12800), ct);
+    }
 
     /// <summary>Read a mixer track pan 0..12800 (bus GET; symmetric with the setter).</summary>
     public async Task<int> GetMixerPanAsync(int track, CancellationToken ct = default)
-        => (int)await GetParamAsync(MixerTrackParamId(track, MixerPanOffset), ct);
+    {
+        await ValidateAddressableMixerTrackAsync(track, ct);
+        return (int)await GetParamAsync(MixerTrackParamId(track, MixerPanOffset), ct);
+    }
 
     /// <summary>Set a mixer FX-slot plugin parameter (normalized fixed-point value).</summary>
-    public Task SetMixerFxParamAsync(int track, int slot, int paramIndex, long value, CancellationToken ct = default)
-        => SetParamAsync(MixerFxParamId(track, slot, paramIndex), value, ct);
+    public async Task SetMixerFxParamAsync(int track, int slot, int paramIndex, long value, CancellationToken ct = default)
+    {
+        await ValidateAddressableMixerTrackAsync(track, ct);
+        await SetParamAsync(MixerFxParamId(track, slot, paramIndex), value, ct);
+    }
 
     // ---- channel rack (cmd = (channel<<16) + paramIndex; recTag==index for normal projects) -----
     // Live-verified: vol/pan/pitch/mute on channels 0..3.
@@ -129,9 +144,12 @@ public sealed partial class FlInjectBridge
     public async Task<bool> GetChannelMutedAsync(int channel, CancellationToken ct = default)
         => await GetParamAsync(ChannelParamId(channel, ChanMute), ct) == 0;
 
-    /// <summary>Route a channel to a mixer track (0..125). </summary>
-    public Task SetChannelFxRouteAsync(int channel, int mixerTrack, CancellationToken ct = default)
-        => SetParamAsync(ChannelParamId(channel, ChanFxRoute), Math.Clamp(mixerTrack, 0, 500), ct);
+    /// <summary>Route a channel to an existing Master or ordinary mixer insert.</summary>
+    public async Task SetChannelFxRouteAsync(int channel, int mixerTrack, CancellationToken ct = default)
+    {
+        await ValidateAddressableMixerTrackAsync(mixerTrack, ct);
+        await SetParamAsync(ChannelParamId(channel, ChanFxRoute), mixerTrack, ct);
+    }
 
     /// <summary>Read a channel's mixer-track route (bus GET; symmetric with the setter).</summary>
     public async Task<int> GetChannelFxRouteAsync(int channel, CancellationToken ct = default)

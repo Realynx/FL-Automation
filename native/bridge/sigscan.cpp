@@ -8,12 +8,15 @@
 #include <windows.h>
 #include <psapi.h>
 #include "sigscan.h"
+#include "version_scanner.h"
 
 #include <stdio.h>
 #include <stdarg.h>
 #include <string.h>
 #include <string>
 #include <vector>
+#include <atomic>
+#include <mutex>
 
 #pragma comment(lib, "psapi.lib")
 #pragma comment(lib, "version.lib")
@@ -35,16 +38,17 @@ static void sig_logf(const char* fmt, ...)
     sig_logline(buf);
 }
 
-// ================================ signature table (STARTER) ================================
-// ADDITIVE + fail-safe by design: only verified rows, and all patterns are "" (fallback-only) for now —
-// the real signatures come from a separate Ghidra pass. ghidra[] is indexed by FlVersion; the 2025
-// column comes from the hardcoded inventory (Delphi RTL is stable-placed; the two FL fns are the 2025
-// addresses). On a 2025 build these resolve via fallback; on any unknown version they REFUSE
-// (RS_VersionLocked). Nothing here changes existing behavior — no call site references these yet.
-static SymEntry g_syms[] = {
+// ================================ signature table ================================
+// ghidra[] contains verified addresses for the exact binaries identified by FlVersion. Patterns
+// resolve across builds; fallback-only entries remain unavailable on unverified binaries.
+static const SymEntry g_symbolDefinitions[] = {
+    { "NativeWindowClassRef", "", SK_DataRef, 0, 0, 0, 0, { 0, 0x721BA0ULL, 0 }, 0, RS_Unresolved },
+    { "FLui_ControlSetVisible", "57 56 53 48 83 EC 20 48 89 CB 40 89 D6 40 38 B3 A9 00 00 00 74 5F", SK_Function, 0, 0, 0, 0, { 0, 0x5D08C0ULL, 0 }, 0, RS_Unresolved },
     // name / pattern (IDA sig) / kind / dispOff / instrEnd / dispSize / dataDelta / ghidra[Unknown,2025,2026] / addr / status
     { "FLui_CreateFormFromClassRef", "48 83 EC 28 48 8B 05 ?? ?? ?? ?? 48 8B 00 49 89 C8 49 89 D1", SK_Function, 0, 0, 0, 0, { 0, 0x10C2AA0ULL, 0x11C2870ULL }, 0, RS_Unresolved },
-    { "FLwp_SetFormCaption",         "57 56 53 48 83 EC 20 48 89 CB 48 89 D6 48 8B 8B 10 01 00 00", SK_Function, 0, 0, 0, 0, { 0, 0x841690ULL,  0x869370ULL }, 0, RS_Unresolved },
+    // RTTI identifies TApplication.Title, NOT a form caption. The old name remains lookup-only below.
+    // Use FLwp_SetButtonCaption (TControl.Caption, Delphi UnicodeString) for form/control captions.
+    { "FLapp_SetTitle",             "57 56 53 48 83 EC 20 48 89 CB 48 89 D6 48 8B 8B 10 01 00 00", SK_Function, 0, 0, 0, 0, { 0, 0x841690ULL,  0x869370ULL }, 0, RS_Unresolved },
     { "FLwp_SetVisible",             "57 56 53 48 83 EC 20 48 89 CB 40 89 D6 48 0F B6 83 6C 06 00 00", SK_Function, 0, 0, 0, 0, { 0, 0x833EC0ULL,  0x85BBA0ULL }, 0, RS_Unresolved },
     { "FLui_ZOrderRefresh",          "56 53 48 83 EC 28 48 89 CB 48 89 D9 66 BA CE FF E8 ?? ?? ?? ?? 48 89 C6 48 89 D9 B2 01", SK_Function, 0, 0, 0, 0, { 0, 0x5D0EA0ULL,  0x60A780ULL }, 0, RS_Unresolved },
     { "FLui_WP_GetHandle",           "53 48 83 EC 20 48 89 CB 48 89 D9 E8 ?? ?? ?? ?? 48 8B 83 5C 04 00 00", SK_Function, 0, 0, 0, 0, { 0, 0x5DDF70ULL,  0x617850ULL }, 0, RS_Unresolved },
@@ -90,8 +94,13 @@ static SymEntry g_syms[] = {
     { "FLcr_GetEventIDName",         "55 56 53 48 81 EC 60 01 00 00 48 8B EC 89 55 34", SK_Function, 0, 0, 0, 0, { 0, 0xF5CA00ULL,  0x1049E60ULL }, 0, RS_Unresolved },
     { "Delphi_DynArraySetLength",    "55 53 48 83 EC 28 48 8B EC 4C 89 4D 58 48 89 4D 40", SK_Function, 0, 0, 0, 0, { 0, 0x417FC0ULL,  0x417FC0ULL }, 0, RS_Unresolved },
     { "FLac_DeletePoint",            "41 55 57 56 53 48 83 EC 28 48 89 CB 41 89 D5 48 89 D9 44 89 EA 48 8B 03 FF 50 30 84 C0", SK_Function, 0, 0, 0, 0, { 0, 0xB30AD0ULL,  0xB97E30ULL }, 0, RS_Unresolved },
+    { "FLac_CreateForEvent",         "55 53 48 81 EC 58 01 00 00 48 8B EC 48 C7 45 30 00 00 00 00 48 C7 45 38 00 00 00 00 48 C7 45 40", SK_Function, 0, 0, 0, 0, { 0, 0x108A1A0ULL, 0 }, 0, RS_Unresolved },
     { "FLmx_RefreshRouting",         "53 48 83 EC 20 48 89 CB E8 ?? ?? ?? ?? 48 8B 05 ?? ?? ?? ?? 8B 08 BA 1A 00 00 00 41 B0 01", SK_Function, 0, 0, 0, 0, { 0, 0x11A5D20ULL, 0x12A0D50ULL }, 0, RS_Unresolved },
     { "FLpl_SetCurrentArrangement",  "55 56 53 48 83 EC 60 48 8B EC 89 4D 34 48 C7 45 50 ?? ?? ?? ??", SK_Function, 0, 0, 0, 0, { 0, 0x11FC880ULL, 0x12F8BC0ULL }, 0, RS_Unresolved },
+    // FLpl_GetCurrentArrangement — leaf `return *(arrArray + curIdx*8)`; EVERY playlist/clip tool calls it
+    // (PlaylistRootAsync). Was the one function genuinely missing from this table → list_clips/list_playlist_
+    // tracks refused on 2026. 2026 addr 0x12DF5D0 (RE 2026-07-10). Unique sig in both images (leaf, no prologue).
+    { "FLpl_GetCurrentArrangement",  "48 8B 05 ?? ?? ?? ?? 48 63 0D ?? ?? ?? ?? 48 8B 04 C8 C3", SK_Function, 0, 0, 0, 0, { 0, 0x11E32C0ULL, 0x12DF5D0ULL }, 0, RS_Unresolved },
     { "FLpl_SetTrackNameColor",      "55 53 48 83 EC 48 48 8B EC 4C 89 45 28 44 89 4D 34", SK_Function, 0, 0, 0, 0, { 0, 0x11E7940ULL, 0x12E3C40ULL }, 0, RS_Unresolved },
     { "FLpl_SetTrackSolo",           "55 41 55 57 56 53 48 83 EC 50 48 8B EC 48 89 4D 30 89 55 3C 44 89 C3 44 89 CE 48 8B 4D 30", SK_Function, 0, 0, 0, 0, { 0, 0x11E9810ULL, 0x12E5B10ULL }, 0, RS_Unresolved },
     { "FLpl_SetTrackSelection",      "53 48 83 EC 20 4D 0F B6 C0 41 83 F8 05 7F 51", SK_Function, 0, 0, 0, 0, { 0, 0x11E9C30ULL, 0x12E5F30ULL }, 0, RS_Unresolved },
@@ -134,23 +143,43 @@ static SymEntry g_syms[] = {
     { "MixerTrackCount",             "48 8B 05 ?? ?? ?? ?? 8B 8D ?? ?? ?? ?? 3B 08 7C 38", SK_DataRef,  3, 7, 0, 0, { 0, 0x14A9850ULL, 0x15D9B08ULL }, 0, RS_Unresolved },
     { "RoutingMgr",                  "48 8B 05 ?? ?? ?? ?? 48 8B 08 E8 ?? ?? ?? ?? 8B 8D ?? ?? ?? ?? E8 ?? ?? ?? ?? 8B 85 ?? ?? ?? ??", SK_DataRef,  3, 7, 0, 0, { 0, 0x14A99A0ULL, 0x15D9C68ULL }, 0, RS_Unresolved },
     { "SongObject",                  "48 8B 05 ?? ?? ?? ?? 48 8B 00 48 8B 80 04 03 00 00 48 8B B8 B4 00 00 00 48 89 F8 F3 0F 10 40 0C", SK_DataRef,  3, 7, 0, 0, { 0, 0x14AAB88ULL, 0x15DAF40ULL }, 0, RS_Unresolved },
+    // Recent-projects MRU array base (static array of 49 Delphi-string ptrs, stride 8; read by list_recent_
+    // projects as base+i*8 → also listed in kArrays[] for the range-aware reverse lookup). LEA target; the
+    // FIRST `LEA RCX` in FLproj_SetProjectPath. 2026 base 0x16B3D20 (RE 2026-07-10).
+    { "RecentProjectsArray",         "48 8D 0D ?? ?? ?? ?? 48 8B 15 ?? ?? ?? ?? E8 ?? ?? ?? ?? B9 04 00 00 00 33 D2 E8 ?? ?? ?? ??", SK_DataRef,  3, 7, 0, 0, { 0, 0x1581320ULL, 0x16B3D20ULL }, 0, RS_Unresolved },
     { "ProjectController",           "48 8B 05 ?? ?? ?? ?? 48 8B 00 48 83 78 08 00 75 1C", SK_DataRef,  3, 7, 0, 0, { 0, 0x14ABCA8ULL, 0x15DC110ULL }, 0, RS_Unresolved },
     { "LoadInProgress",              "48 8B 05 ?? ?? ?? ?? 80 38 00 0F 85 ?? ?? ?? ?? 48 0F ?? ?? ?? ?? 22 05 ?? ?? ?? ?? 3A 05 ?? ?? ?? ??", SK_DataRef,  3, 7, 0, 0, { 0, 0x14A8748ULL, 0x15D8960ULL }, 0, RS_Unresolved },
     { "QuickEditVMT",                "48 8B 15 ?? ?? ?? ?? E8 ?? ?? ?? ?? 84 C0 74 38 90", SK_DataRef,  3, 7, 0, 200, { 0, 0x7466B8ULL, 0x7661E8ULL }, 0, RS_Unresolved },
     { "DynArrayTypeInfo",            "4C 8B 05 ?? ?? ?? ?? 4D 33 C9 48 ?? ?? ?? ?? E8 ?? ?? ?? ?? 48 8B 45 30 48 8B 40 30 48 85 C0", SK_DataRef,  3, 7, 0, 8, { 0, 0xB2C678ULL, 0xB93928ULL }, 0, RS_Unresolved },
     // ---- window-host embed classRef (load-bearing; window-host wire path opts in via symAddr("HostClassRef")) ----
-    // FALLBACK-ONLY (per-version hardcoded, no cross-version pattern): this is a Delphi classRef embedded in
-    // const .text, not reachable by a clean single-instr RIP xref. 2026 addr recovered via VMT-slot
-    // disambiguation (2026-07-09): the TScriptDialog-unique virtual override `paint` (2025 0xcf46f0 → 2026
-    // 0xd9a030, VMT slot 0x1b8) occurs in exactly ONE 2026 VMT slot (0xd99530) → VMT_2026 0xd99360 → classRef
-    // = VMT+0x18 = 0xd99378. Verified at 6 offsets + the classRef self-check (*(0xcf3888)=0x5df850 ⟷
-    // *(0xd99378)=0x619130, same method cross-version). Refuses only on UNKNOWN versions (fail-safe).
+    // The selected scanner recovers this through validated Delphi class/VMT metadata, not a prologue.
+    // These recorded addresses provide an additional agreement check on exact known builds.
     { "HostClassRef",                "", SK_DataRef, 0, 0, 0, 0, { 0, 0xCF3888ULL, 0xD99378ULL }, 0, RS_Unresolved },
+    // Legacy consumers formerly bypassed the catalog on 2025; list every alias so failures on other
+    // builds are visible to capability diagnostics. Unverified recipes stay unavailable.
+    { "FLmx_SetRouteActiveCore", "55 41 55 57 56 53 48 83 EC 70 48 8B EC 48 89 4D 38 89 55 ?? 44 89 45 ?? 44 89 4D ?? 48 C7 45 68 00 00 00 00 48 C7 45 60 00 00 00 00 48 C7 45 58 00 00 00 00 90 8B 4D ?? 8B 55 ?? E8 ?? ?? ?? ?? 84 C0 0F 84 ?? ?? ?? ??", SK_Function, 0, 0, 0, 0, { 0, 0x11A67F0ULL, 0 }, 0, RS_Unresolved },
+    { "FLpl_RepaintPlaylist", "57 56 53 48 83 EC 20 48 89 CB 48 8B B3 ?? 0D 00 00 48 8B 83 18 08 00 00 48 85 C0 74 ?? 48 89 F1 8B 80 C0 03 00 00", SK_Function, 0, 0, 0, 0, { 0, 0xDA40C0ULL, 0 }, 0, RS_Unresolved },
+    { "FLpl_SetClipMuted", "84 D2 74 ?? 80 49 13 20 EB ?? 80 61 13 DF C3 CC 55 56 53 48 83 EC 60 48 8B EC 66 44 0F 7F 45 50 66 0F 7F 7D 40 66 0F 7F 75 30 48 89 CB", SK_Function, 0, 0, 0, 0, { 0, 0xF71A60ULL, 0 }, 0, RS_Unresolved },
+    { "SongArrangement", "48 8B 0D ?? ?? ?? ?? 48 8B 09 89 C2 48 8B 45 40 44 8B 40 30 41 B1 01 C6 44 24 20 01 E8 ?? ?? ?? ?? 90 48 8B 4D 70 48 8B 55 58 E8 ?? ?? ?? ??", SK_DataRef, 3, 7, 0, 0, { 0, 0x14ABA80ULL, 0 }, 0, RS_Unresolved },
+    { "FLpr_SaveProjectToFlp", "55 53 48 81 EC ?? 00 00 00 48 8B EC 48 C7 45 30 00 00 00 00 48 C7 45 68 00 00 00 00 48 C7 45 60 00 00 00 00 48 C7 45 58 00 00 00 00 48 C7 45 50 00 00 00 00 48 C7 45 38 00 00 00 00 48 C7 45 70 00 00 00 00 48 C7 45 78 00 00 00 00 48 C7 85 88 00 00 00 00 00 00 00", SK_Function, 0, 0, 0, 0, { 0, 0x10D6190ULL, 0 }, 0, RS_Unresolved },
+    { "FLpl_GetArrangementCount", "48 8B 05 ?? ?? ?? ?? 48 85 C0 74 ?? 48 8B 40 F8 C3", SK_Function, 0, 0, 0, 0, { 0, 0x11FB1A0ULL, 0 }, 0, RS_Unresolved },
+    { "FLui_MarkKbCapture",          "", SK_Function, 0, 0, 0, 0, { 0, 0x802820ULL, 0 }, 0, RS_Unresolved },
+    { "FLbrz_SelectTabById",         "", SK_Function, 0, 0, 0, 0, { 0, 0x9AC590ULL, 0 }, 0, RS_Unresolved },
+    { "TQuickEdit_SetText",          "", SK_Function, 0, 0, 0, 0, { 0, 0x74C260ULL, 0 }, 0, RS_Unresolved },
+    { "TQuickEdit_Refresh",          "", SK_Function, 0, 0, 0, 0, { 0, 0x74BB70ULL, 0 }, 0, RS_Unresolved },
+    { "LoadingFlag",                "", SK_DataRef, 0, 0, 0, 0, { 0, 0x157F667ULL, 0 }, 0, RS_Unresolved },
+    // SelectionRefresh snapshots the real loop bounds independently of the toolbar seek domain.
+    { "TransportRangeStart", "57 56 53 48 83 EC 30 48 8B 05 ?? ?? ?? ?? 8B 18 48 8B 05 ?? ?? ?? ?? 8B 30 48 8B 0D ?? ?? ?? ?? E8 ?? ?? ?? ?? 48 8B 05 ?? ?? ?? ?? C7 00 00 00 00 00", SK_DataRef, 10, 14, 0, 0, { 0, 0x14A95F8ULL, 0 }, 0, RS_Unresolved },
+    { "TransportRangeEnd", "57 56 53 48 83 EC 30 48 8B 05 ?? ?? ?? ?? 8B 18 48 8B 05 ?? ?? ?? ?? 8B 30 48 8B 0D ?? ?? ?? ?? E8 ?? ?? ?? ?? 48 8B 05 ?? ?? ?? ?? C7 00 00 00 00 00", SK_DataRef, 19, 23, 0, 0, { 0, 0x14ABB38ULL, 0 }, 0, RS_Unresolved },
+    { "FLmx_InsertTracks", "55 41 56 41 55 57 56 53 48 83 EC 58 48 8B EC 89 4D 24 89 55 28 48 C7 45 30 00 00 00 00 48 C7 45 38 00 00 00 00 48 C7 45 40 00 00 00 00 48 C7 45 48 00 00 00 00 44 88 85 A0 00 00 00 90 B8 F6 01 00 00", SK_Function, 0, 0, 0, 0, { 0, 0x11A7B30ULL, 0 }, 0, RS_Unresolved },
 };
-static const int g_symCount = (int)(sizeof(g_syms) / sizeof(g_syms[0]));
+static const int g_symCount = (int)(sizeof(g_symbolDefinitions) / sizeof(g_symbolDefinitions[0]));
+static std::vector<SymEntry> g_syms(g_symbolDefinitions, g_symbolDefinitions + g_symCount);
 
-static bool      g_symsResolved = false;
-static FlVersion g_flVersion    = FLV_Unknown;
+static std::atomic<bool> g_symsResolved{false};
+static std::mutex g_resolveMutex;
+static FlFileVersion g_fileVersion{};
+static std::unique_ptr<IFlSignatureScanner> g_scanner;
 
 // ================================ pattern parsing ================================
 static int sig_hexNib(char c)
@@ -169,9 +198,10 @@ bool parsePattern(const char* ida, Pattern& out)
     out.len = 0; out.anchorIdx = -1; out.anchorVal = 0; out.valid = false;
     if (!ida) return false;
     const char* p = ida;
-    while (*p && out.len < 96) {
+    while (*p) {
         while (*p == ' ' || *p == '\t') p++;
         if (!*p) break;
+        if (out.len == 96) return false; // never silently truncate a signature
         if (*p == '?') {
             out.bytes[out.len] = 0; out.mask[out.len] = false; out.len++;
             p++; if (*p == '?') p++;                 // accept "?" or "??"
@@ -182,6 +212,7 @@ bool parsePattern(const char* ida, Pattern& out)
             out.mask[out.len] = true; out.len++;
             p += 2;
         }
+        if (*p && *p != ' ' && *p != '\t') return false;
     }
     if (out.len == 0) return false;
     // anchor = first fixed byte that is NOT a common/high-frequency value
@@ -201,23 +232,40 @@ bool parsePattern(const char* ida, Pattern& out)
 // ================================ PE section walk ================================
 // HMODULE == image base. Collect every section that is MEM_EXECUTE + CNT_CODE. POD-only + SEH-guarded so
 // a malformed/partial header can never fault the resolver. Returns the number of ranges written.
-int getExecRanges(HMODULE mod, ExecRange* out, int maxOut)
+static uint64_t loadedImageSize(HMODULE mod)
 {
+    MODULEINFO mi{};
+    return mod && GetModuleInformation(GetCurrentProcess(), mod, &mi, sizeof(mi)) ? mi.SizeOfImage : 0;
+}
+
+int getExecRanges(HMODULE mod, ExecRange* out, int maxOut, uint64_t imageSize)
+{
+    if (!mod || !out || maxOut <= 0) return 0;
+    if (!imageSize) imageSize = loadedImageSize(mod);
+    if (imageSize < sizeof(IMAGE_DOS_HEADER)) return 0;
     int count = 0;
     __try {
         const unsigned char* base = (const unsigned char*)mod;
         const IMAGE_DOS_HEADER* dos = (const IMAGE_DOS_HEADER*)base;
         if (dos->e_magic != IMAGE_DOS_SIGNATURE) return 0;
+        if (dos->e_lfanew <= 0 || imageSize < sizeof(IMAGE_NT_HEADERS64) ||
+            (DWORD)dos->e_lfanew > imageSize - sizeof(IMAGE_NT_HEADERS64)) return 0;
         const IMAGE_NT_HEADERS64* nt = (const IMAGE_NT_HEADERS64*)(base + dos->e_lfanew);
-        if (nt->Signature != IMAGE_NT_SIGNATURE) return 0;
+        if (nt->Signature != IMAGE_NT_SIGNATURE || nt->OptionalHeader.Magic != IMAGE_NT_OPTIONAL_HDR64_MAGIC)
+            return 0;
         const IMAGE_SECTION_HEADER* sec = IMAGE_FIRST_SECTION(nt);
         int n = nt->FileHeader.NumberOfSections;
-        for (int i = 0; i < n && count < maxOut; i++) {
+        size_t sectionOffset = (const unsigned char*)sec - base;
+        if (sectionOffset > imageSize || (size_t)n > (imageSize - sectionOffset) / sizeof(*sec))
+            return 0;
+        for (int i = 0; i < n; i++) {
             DWORD ch = sec[i].Characteristics;
             if ((ch & IMAGE_SCN_MEM_EXECUTE) && (ch & IMAGE_SCN_CNT_CODE)) {
                 DWORD vsize = sec[i].Misc.VirtualSize;
                 if (vsize == 0) vsize = sec[i].SizeOfRawData;
                 if (vsize == 0) continue;
+                if (count == maxOut || sec[i].VirtualAddress >= imageSize ||
+                    vsize > imageSize - sec[i].VirtualAddress) return 0; // incomplete scan is unsafe
                 out[count].begin = base + sec[i].VirtualAddress;
                 out[count].end   = out[count].begin + vsize;
                 count++;
@@ -238,11 +286,12 @@ bool matchAt(const Pattern& pat, const unsigned char* p)
 // Scan one range for the pattern using memchr on the anchor byte. Increments *count (capped: it stops as
 // soon as *count reaches 2 — the caller only needs "unique or not") and records the first hit. POD-only +
 // SEH-guarded.
-static void scanRange(const ExecRange& r, const Pattern& pat, uint64_t* firstAddr, int* count)
+static bool scanRange(const ExecRange& r, const Pattern& pat, uint64_t* firstAddr, int* count)
 {
     __try {
         int L = pat.len, ai = pat.anchorIdx;
-        if (!r.begin || !r.end || r.end < r.begin + L) return;
+        if (!r.begin || !r.end || r.end < r.begin) return false;
+        if ((size_t)(r.end - r.begin) < (size_t)L) return true;
         const unsigned char* qMin = r.begin + ai;
         const unsigned char* qMax = r.end - L + ai;         // inclusive last anchor position
         const unsigned char* p = qMin;
@@ -253,19 +302,23 @@ static void scanRange(const ExecRange& r, const Pattern& pat, uint64_t* firstAdd
             if (matchAt(pat, S)) {
                 if (*count == 0) *firstAddr = (uint64_t)S;
                 (*count)++;
-                if (*count >= 2) return;                    // early-out: ambiguity already proven
+                if (*count >= 2) return true;               // early-out: ambiguity already proven
             }
             p = q + 1;
         }
-    } __except (EXCEPTION_EXECUTE_HANDLER) { /* leave count as-is */ }
+    } __except (EXCEPTION_EXECUTE_HANDLER) { return false; }
+    return true;
 }
 
 // Resolve to a UNIQUE match address across all ranges. 0 hits = NotFound, >1 = Ambiguous (both FAIL).
 ResolveStatus resolveUnique(const Pattern& pat, const ExecRange* ranges, int nRanges, uint64_t* outAddr)
 {
-    if (!pat.valid || nRanges <= 0) return RS_NotFound;
+    if (!outAddr) return RS_SelfCheckFail;
+    *outAddr = 0;
+    if (!pat.valid || !ranges || nRanges <= 0) return RS_NotFound;
     uint64_t first = 0; int count = 0;
-    for (int i = 0; i < nRanges && count < 2; i++) scanRange(ranges[i], pat, &first, &count);
+    for (int i = 0; i < nRanges && count < 2; i++)
+        if (!scanRange(ranges[i], pat, &first, &count)) return RS_SelfCheckFail;
     if (count == 0) return RS_NotFound;
     if (count > 1)  return RS_Ambiguous;
     *outAddr = first;
@@ -276,6 +329,10 @@ ResolveStatus resolveUnique(const Pattern& pat, const ExecRange* ranges, int nRa
 ResolveStatus resolveDataRef(const Pattern& pat, const ExecRange* ranges, int nRanges,
                              int dispOff, int instrEnd, int dataDelta, uint64_t* outAddr)
 {
+    if (!outAddr) return RS_SelfCheckFail;
+    *outAddr = 0;
+    if (dispOff < 0 || instrEnd < dispOff + 4 || instrEnd > pat.len || dispOff > pat.len - 4)
+        return RS_SelfCheckFail;
     uint64_t matchStart = 0;
     ResolveStatus st = resolveUnique(pat, ranges, nRanges, &matchStart);
     if (st != RS_Ok) return st;
@@ -294,6 +351,10 @@ ResolveStatus resolveDataRef(const Pattern& pat, const ExecRange* ranges, int nR
 ResolveStatus resolveVtableSlot(const Pattern& pat, const ExecRange* ranges, int nRanges,
                                 int dispOff, int dispSize, int64_t* outOffset)
 {
+    if (!outOffset) return RS_SelfCheckFail;
+    *outOffset = 0;
+    if ((dispSize != 1 && dispSize != 4) || dispOff < 0 || dispOff > pat.len - dispSize)
+        return RS_SelfCheckFail;
     uint64_t matchStart = 0;
     ResolveStatus st = resolveUnique(pat, ranges, nRanges, &matchStart);
     if (st != RS_Ok) return st;
@@ -308,56 +369,27 @@ ResolveStatus resolveVtableSlot(const Pattern& pat, const ExecRange* ranges, int
     return RS_Ok;
 }
 
-// ================================ version detect ================================
-// Authoritative signal = the FileVersion resource major number (25 → 2025, 26 → 2026). Image size is a
-// secondary SANITY signal only (logged on mismatch, never overriding — do NOT assume newer=smaller).
-FlVersion detectFlVersion(HMODULE mod)
-{
-    char path[MAX_PATH];
-    if (GetModuleFileNameA(mod, path, MAX_PATH) == 0) return FLV_Unknown;
-
-    FlVersion ver = FLV_Unknown; WORD major = 0;
-    DWORD handle = 0;
-    DWORD sz = GetFileVersionInfoSizeA(path, &handle);
-    if (sz) {
-        std::vector<unsigned char> buf(sz);
-        if (GetFileVersionInfoA(path, 0, sz, buf.data())) {
-            VS_FIXEDFILEINFO* ffi = NULL; UINT len = 0;
-            if (VerQueryValueA(buf.data(), "\\", (void**)&ffi, &len) && ffi) {
-                major = HIWORD(ffi->dwFileVersionMS);
-                if      (major == 25) ver = FLV_2025_25_2_5;
-                else if (major == 26) ver = FLV_2026_26_1_0;
-            }
-        }
-    }
-
-    // secondary image-size sanity (2025 ≈ 51MB, 2026 ≈ 22MB) — log only, never override.
-    MODULEINFO mi{};
-    if (GetModuleInformation(GetCurrentProcess(), mod, &mi, sizeof(mi))) {
-        double mb = (double)mi.SizeOfImage / (1024.0 * 1024.0);
-        if (ver == FLV_2025_25_2_5 && mb < 30.0)
-            sig_logf("sigscan: WARN version=2025 but image=%.1fMB (expected ~51MB)", mb);
-        if (ver == FLV_2026_26_1_0 && mb > 40.0)
-            sig_logf("sigscan: WARN version=2026 but image=%.1fMB (expected ~22MB)", mb);
-    }
-    sig_logf("sigscan: detectFlVersion major=%u -> ver=%d", (unsigned)major, (int)ver);
-    return ver;
-}
-
 // ================================ fallback + self-check ================================
 // mod + (ghidra[ver] - 0x400000). Returns 0 (refuse) on an unknown version or an unknown-for-this-version
 // address — a fallback is NEVER trusted on FLV_Unknown.
+static uint64_t fallbackInImage(const SymEntry& e, HMODULE mod, FlVersion ver, uint64_t imageSize)
+{
+    if (!mod || ver <= FLV_Unknown || ver >= FLV_COUNT) return 0;
+    uint64_t g = e.ghidra[ver];
+    if (g < SIG_GHIDRA_BASE) return 0;
+    if (g - SIG_GHIDRA_BASE >= imageSize) return 0;
+    return (uint64_t)mod + (g - SIG_GHIDRA_BASE);
+}
+
 uint64_t fallbackAddr(const SymEntry& e, HMODULE mod, FlVersion ver)
 {
-    if (ver <= FLV_Unknown || ver >= FLV_COUNT) return 0;
-    uint64_t g = e.ghidra[ver];
-    if (!g) return 0;
-    return (uint64_t)mod + (g - SIG_GHIDRA_BASE);
+    return fallbackInImage(e, mod, ver, loadedImageSize(mod));
 }
 
 // SEH-guarded masked byte compare of the pattern at addr (used to self-check a fallback / a match).
 bool verifyBytes(uint64_t addr, const Pattern& pat)
 {
+    if (!addr || !pat.valid || pat.len <= 0) return false;
     bool ok = false;
     __try {
         const unsigned char* p = (const unsigned char*)addr;
@@ -383,70 +415,78 @@ const char* sig_statusStr(ResolveStatus s)
     }
 }
 
+void resolveSymbol(SymEntry& e, HMODULE mod, FlVersion ver, const ExecRange* ranges, int nRanges, uint64_t imageSize)
+{
+    if (!imageSize) imageSize = loadedImageSize(mod);
+    e.addr = 0;
+    ResolveStatus sigStatus = RS_Unresolved;
+    uint64_t      sigAddr   = 0;
+    Pattern       pat{};
+    bool          havePat   = (e.pattern && e.pattern[0]);
+    if (havePat) {
+        if (parsePattern(e.pattern, pat)) {
+            if (e.kind == SK_Function) {
+                sigStatus = resolveUnique(pat, ranges, nRanges, &sigAddr);
+            } else if (e.kind == SK_DataRef) {
+                sigStatus = resolveDataRef(pat, ranges, nRanges, e.dispOff, e.instrEnd, e.dataDelta, &sigAddr);
+            } else { // SK_VtableSlot
+                int64_t off = 0;
+                sigStatus = resolveVtableSlot(pat, ranges, nRanges, e.dispOff, e.dispSize, &off);
+                sigAddr = (uint64_t)off;
+            }
+        } else {
+            sigStatus = RS_SelfCheckFail;
+        }
+    }
+
+    uint64_t fbAddr = fallbackInImage(e, mod, ver, imageSize);
+    if (sigStatus == RS_Ok) {
+        // On an exact known binary, disagreement with the verified address means the signature
+        // matched the wrong function/global. A unique match alone does not prove identity.
+        if (fbAddr && e.kind != SK_VtableSlot && fbAddr != sigAddr) {
+            sig_logf("sigscan: DRIFT %s sig=0x%llx fb=0x%llx (refused)",
+                     e.name, (unsigned long long)sigAddr, (unsigned long long)fbAddr);
+            e.status = RS_SelfCheckFail;
+            return;
+        }
+        // RIP displacements and anchor deltas must still land inside the FL image.
+        if (e.kind == SK_DataRef && (sigAddr < (uint64_t)mod ||
+            sigAddr - (uint64_t)mod >= imageSize)) {
+            e.status = RS_SelfCheckFail;
+            return;
+        }
+        e.addr = sigAddr; e.status = RS_Ok;
+    } else if (havePat) {
+        // Never turn an ambiguous, incomplete or invalid scan into success through a fallback.
+        e.status = sigStatus;
+    } else if (fbAddr) {
+        e.addr = fbAddr; e.status = RS_Ok;
+    } else {
+        e.status = (ver == FLV_Unknown) ? RS_VersionLocked : RS_NotFound;
+    }
+}
+
 void sig_resolveAll()
 {
-    if (g_symsResolved) return;
+    if (g_symsResolved.load(std::memory_order_acquire)) return;
+    std::lock_guard<std::mutex> lock(g_resolveMutex);
+    if (g_symsResolved.load(std::memory_order_relaxed)) return;
     HMODULE mod = GetModuleHandleA("FLEngine_x64.dll");
-    if (!mod) return;                                    // FL engine not loaded yet → retry on next call
-    g_symsResolved = true;                               // commit: the module is present
+    if (!mod) return; // no commit: retry once FL has loaded the engine
 
-    FlVersion ver = detectFlVersion(mod);
-    g_flVersion = ver;
-
-    ExecRange ranges[16];
-    int nr = getExecRanges(mod, ranges, 16);
-    sig_logf("sigscan: FLEngine=%p ver=%d execRanges=%d syms=%d", (void*)mod, (int)ver, nr, g_symCount);
+    const FlFileVersion version = readFlModuleVersion(mod);
+    auto scanner = createFlSignatureScanner(version);
+    const uint64_t imageSize = loadedImageSize(mod);
+    ExecRange ranges[96];
+    const int nr = getExecRanges(mod, ranges, _countof(ranges), imageSize);
+    const FlScanContext context{mod, imageSize, ranges, nr};
+    sig_logf("sigscan: FLEngine=%p file=%s scanner=%s execRanges=%d syms=%d",
+             (void*)mod, version.text().c_str(), scanner->name(), nr, g_symCount);
+    resolveSymbols(*scanner, context, g_syms.data(), g_symCount);
 
     int okN = 0, failN = 0;
     for (int i = 0; i < g_symCount; i++) {
         SymEntry& e = g_syms[i];
-
-        // 1) try the signature (if any).
-        ResolveStatus sigStatus = RS_Unresolved;
-        uint64_t      sigAddr   = 0;
-        Pattern       pat;       pat.valid = false;
-        bool          havePat   = (e.pattern && e.pattern[0]);
-        if (havePat) {
-            if (parsePattern(e.pattern, pat) && nr > 0) {
-                if (e.kind == SK_Function) {
-                    sigStatus = resolveUnique(pat, ranges, nr, &sigAddr);
-                } else if (e.kind == SK_DataRef) {
-                    sigStatus = resolveDataRef(pat, ranges, nr, e.dispOff, e.instrEnd, e.dataDelta, &sigAddr);
-                } else { // SK_VtableSlot
-                    int64_t off = 0;
-                    sigStatus = resolveVtableSlot(pat, ranges, nr, e.dispOff, e.dispSize, &off);
-                    sigAddr = (uint64_t)off;
-                }
-            } else {
-                sigStatus = RS_NotFound;                 // unparsable / no ranges
-            }
-        }
-
-        // 2) per-version hardcoded fallback (0 = refuse: unknown version or unknown address).
-        uint64_t fbAddr = fallbackAddr(e, mod, ver);
-
-        // 3) decide — signature wins; fallback only when trustworthy.
-        if (sigStatus == RS_Ok) {
-            e.addr = sigAddr; e.status = RS_Ok;
-            if (fbAddr && e.kind != SK_VtableSlot && fbAddr != sigAddr)
-                sig_logf("sigscan: DRIFT %s sig=0x%llx fb=0x%llx (using sig)",
-                         e.name, (unsigned long long)sigAddr, (unsigned long long)fbAddr);
-        } else if (fbAddr) {
-            if (havePat && e.kind == SK_Function) {
-                // We have a signature but it didn't resolve uniquely — only trust the fallback if its
-                // bytes still match the signature (self-check); otherwise REFUSE (never guess).
-                if (verifyBytes(fbAddr, pat)) { e.addr = fbAddr; e.status = RS_Ok; }
-                else { e.addr = 0; e.status = RS_SelfCheckFail; }
-            } else {
-                // fallback-only entry (no signature yet) — the fallback is the only info; trust it (it is
-                // version-keyed and only produced on a known version).
-                e.addr = fbAddr; e.status = RS_Ok;
-            }
-        } else {
-            e.addr = 0;
-            e.status = (ver == FLV_Unknown) ? RS_VersionLocked
-                     : (sigStatus != RS_Unresolved ? sigStatus : RS_NotFound);
-        }
 
         if (e.status == RS_Ok) {
             okN++;
@@ -455,21 +495,36 @@ void sig_resolveAll()
             sig_logf("sigscan: UNRESOLVED %s (%s)", e.name, sig_statusStr(e.status));
         }
     }
-    sig_logf("sigscan: resolved ok=%d fail=%d ver=%d", okN, failN, (int)ver);
+    g_fileVersion = version;
+    g_scanner = std::move(scanner);
+    g_symsResolved.store(true, std::memory_order_release); // publish only the complete table
+    sig_logf("sigscan: resolved ok=%d fail=%d scanner=%s", okN, failN, g_scanner->name());
 }
 
 // ================================ lookup + diagnostics ================================
-SymEntry* sig_findSym(const char* name)
+const SymEntry* sig_findSym(const char* name)
 {
-    if (!name) return NULL;
+    if (!name) return nullptr;
+    // Compatibility for existing diagnostic clients; catalogue metadata carries the corrected name.
+    if (strcmp(name, "FLwp_SetFormCaption") == 0) name = "FLapp_SetTitle";
+    // Before publication return immutable unresolved definitions, never a partly filled live row.
+    const SymEntry* entries = g_symsResolved.load(std::memory_order_acquire)
+        ? g_syms.data() : g_symbolDefinitions;
     for (int i = 0; i < g_symCount; i++)
-        if (g_syms[i].name && strcmp(g_syms[i].name, name) == 0) return &g_syms[i];
-    return NULL;
+        if (entries[i].name && strcmp(entries[i].name, name) == 0) return &entries[i];
+    return nullptr;
 }
+
+#ifdef FRUITYLINK_SCANNER_TESTS
+// Standalone tests seed symbol outcomes without loading FL. Never compiled into the bridge DLL.
+void sig_testSetResolved(bool complete) { g_symsResolved.store(complete, std::memory_order_release); }
+#endif
 
 uint64_t sig_addr(const char* name)
 {
-    SymEntry* e = sig_findSym(name);
+    sig_resolveAll();
+    if (!g_symsResolved.load(std::memory_order_acquire)) return 0;
+    const SymEntry* e = sig_findSym(name);
     return (e && e->status == RS_Ok) ? e->addr : 0;
 }
 
@@ -477,37 +532,185 @@ uint64_t sig_addr(const char* name)
 // return its RESOLVED (version-correct) runtime address if that address is a known symbol's 2025 slot,
 // else 0. This makes the entire un-migrated hardcoded-hex call surface version-correct without editing
 // every call site — a table hit yields the right address on ANY resolved version.
-uint64_t sig_addrByGhidra2025(uint64_t ghidra25)
+static const SymEntry* findLegacySymbol(uint64_t ghidra25, uint64_t* offset)
 {
+    *offset = 0;
+    // 1) EXACT symbol match — functions, data-global bases, and any read that offsets a RESOLVED runtime
+    //    pointer (mixer/pattern arrays resolve the base here, then do their index math in runtime space).
     for (int i = 0; i < g_symCount; i++) {
         SymEntry& e = g_syms[i];
-        if (e.ghidra[FLV_2025_25_2_5] == ghidra25 && e.status == RS_Ok && e.addr) return e.addr;
+        if (e.ghidra[FLV_2025_25_2_5] == ghidra25) return &e;
     }
-    return 0;
+    // 2) INSIDE a known static ARRAY. The C# reads FL's per-pattern static arrays by sending a COMPUTED
+    //    ghidra address (base + patIdx*0xC0) — e.g. GetNotes/ListPatterns read the note-recorder + name
+    //    arrays this way — which never exactly matches a symbol base, so step 1 misses it and the address
+    //    would (correctly) be refused as unmapped on 2026. These arrays have an IDENTICAL element stride
+    //    across versions, so the offset carries over verbatim: map any address within an array's extent to
+    //    resolved_base + (queried - base_2025). Pick the CLOSEST base <= queried (tightest delta; also
+    //    correct when co-located arrays' extents overlap, since they share the same cross-version shift).
+    static const struct { const char* name; uint64_t extent; } kArrays[] = {
+        { "NoteRecorderArrayBase", 0xC0ULL * 1024 },   // per-pattern note-recorder ptr array (patterns 1..999)
+        { "PatternNameArrayBase",  0xC0ULL * 1024 },   // per-pattern name-string ptr array (same struct block)
+        { "RecentProjectsArray",   8ULL * 49 },        // recent-projects MRU (49 entries, stride 8)
+    };
+    const SymEntry* best = nullptr;
+    uint64_t bestBase = 0;
+    for (size_t k = 0; k < sizeof(kArrays) / sizeof(kArrays[0]); k++) {
+        const SymEntry* e = sig_findSym(kArrays[k].name);
+        if (!e) continue;
+        uint64_t b = e->ghidra[FLV_2025_25_2_5];
+        if (ghidra25 >= b && ghidra25 - b < kArrays[k].extent && b > bestBase) {
+            bestBase = b;
+            best = e;
+            *offset = ghidra25 - b;
+        }
+    }
+    return best;
 }
 
-FlVersion sig_version() { return g_flVersion; }
+uint64_t sig_addrByGhidra2025(uint64_t ghidra25)
+{
+    if (!g_symsResolved.load(std::memory_order_acquire)) return 0;
+    uint64_t offset = 0;
+    const SymEntry* e = findLegacySymbol(ghidra25, &offset);
+    return e && e->status == RS_Ok && e->addr ? e->addr + offset : 0;
+}
 
-std::string sig_symsJson()
+uint64_t sig_legacyAddr(HMODULE mod, FlVersion ver, uint64_t ghidra25)
+{
+    if (!mod || !g_symsResolved.load(std::memory_order_acquire)) return 0;
+    uint64_t offset = 0;
+    const SymEntry* e = findLegacySymbol(ghidra25, &offset);
+    if (e) return e->status == RS_Ok && e->addr ? e->addr + offset : 0;
+    if (ver != FLV_2025_25_2_5) return 0;
+    SymEntry legacy{};
+    legacy.ghidra[FLV_2025_25_2_5] = ghidra25;
+    return fallbackAddr(legacy, mod, ver);
+}
+
+FlVersion sig_version()
+{
+    return g_symsResolved.load(std::memory_order_acquire) ? g_scanner->fallbackVersion() : FLV_Unknown;
+}
+
+const FlWindowLayout* sig_windowLayout()
+{
+    return g_symsResolved.load(std::memory_order_acquire) ? g_scanner->windowLayout() : nullptr;
+}
+
+const FlMenuLayout* sig_menuLayout()
+{
+    return g_symsResolved.load(std::memory_order_acquire) ? g_scanner->menuLayout() : nullptr;
+}
+
+bool sig_legacyBrowserSupported()
+{
+    return g_symsResolved.load(std::memory_order_acquire) && g_scanner->legacyBrowserSupported();
+}
+
+static std::string mixerLayoutJson(const FlMixerLayout* layout)
+{
+    if (!layout) return "null";
+    const struct { const char* name; unsigned value; } fields[] = {
+        {"trackStride", layout->trackStride}, {"nameOffset", layout->nameOffset},
+        {"typeOffset", layout->typeOffset}, {"enabledOffset", layout->enabledOffset},
+        {"soloOffset", layout->soloOffset}, {"sendTableOffset", layout->sendTableOffset},
+        {"effectSlotsOffset", layout->effectSlotsOffset}, {"sendStride", layout->sendStride},
+        {"sendLevelOffset", layout->sendLevelOffset}, {"sendActiveOffset", layout->sendActiveOffset},
+        {"effectSlotStride", layout->effectSlotStride}, {"effectIndexOffset", layout->effectIndexOffset},
+        {"effectNameOffset", layout->effectNameOffset}, {"effectLoadVtableOffset", layout->effectLoadVtableOffset}
+    };
+    std::string json = "{";
+    for (const auto& field : fields) {
+        if (json.size() > 1) json += ",";
+        json += "\"" + std::string(field.name) + "\":" + std::to_string(field.value);
+    }
+    return json + "}";
+}
+
+static std::string timelineLayoutJson(const FlTimelineLayout* layout)
+{
+    if (!layout) return "null";
+    return "{\"markerManagerOffset\":" + std::to_string(layout->markerManagerOffset)
+        + ",\"markerStride\":" + std::to_string(layout->markerStride)
+        + ",\"markerTickOffset\":" + std::to_string(layout->markerTickOffset)
+        + ",\"markerNameOffset\":" + std::to_string(layout->markerNameOffset) + "}";
+}
+
+const FlMixerLayout* sig_mixerLayout()
+{
+    return g_symsResolved.load(std::memory_order_acquire) ? g_scanner->mixerLayout() : nullptr;
+}
+
+const FlAutomationLayout* sig_automationLayout()
+{
+    return g_symsResolved.load(std::memory_order_acquire) ? g_scanner->automationLayout() : nullptr;
+}
+
+static std::string scannerJson(FlFileVersion version, const IFlSignatureScanner& scanner)
+{
+    return "\"ver\":" + std::to_string((int)scanner.fallbackVersion())
+         + ",\"fileVersion\":\"" + version.text() + "\""
+         + ",\"scanner\":\"" + scanner.name() + "\""
+         + ",\"supported\":" + (scanner.supported() ? "true" : "false")
+         + ",\"complete\":true"
+         + ",\"mixerTrackStride\":" + (scanner.mixerTrackStride()
+             ? std::to_string(scanner.mixerTrackStride()) : "null")
+         + ",\"windowEmbedding\":" + (scanner.windowLayout() ? "true" : "false")
+         + ",\"legacyBrowserUi\":" + (scanner.legacyBrowserSupported() ? "true" : "false")
+         + ",\"pluginMenu\":" + (scanner.menuLayout() ? "true" : "false")
+         + ",\"mixerLayout\":" + mixerLayoutJson(scanner.mixerLayout())
+         + ",\"timelineLayout\":" + timelineLayoutJson(scanner.timelineLayout())
+         + ",\"automationClips\":" + (scanner.automationLayout() ? "true" : "false");
+}
+
+static std::string symsJson(const SymEntry* entries, int count, FlFileVersion version,
+                            const IFlSignatureScanner& scanner)
 {
     int ok = 0, fail = 0;
-    for (int i = 0; i < g_symCount; i++) (g_syms[i].status == RS_Ok ? ok : fail)++;
-
-    std::string s = "{\"ver\":" + std::to_string((int)g_flVersion)
+    for (int i = 0; i < count; i++) (entries[i].status == RS_Ok ? ok : fail)++;
+    std::string s = "{" + scannerJson(version, scanner)
                   + ",\"ok\":" + std::to_string(ok)
                   + ",\"fail\":" + std::to_string(fail)
                   + ",\"unresolved\":[";
     bool first = true;
-    for (int i = 0; i < g_symCount; i++) {
-        if (g_syms[i].status == RS_Ok) continue;
+    for (int i = 0; i < count; i++) {
+        if (entries[i].status == RS_Ok) continue;
         if (!first) s += ",";
         first = false;
         s += "{\"name\":\"";
-        s += (g_syms[i].name ? g_syms[i].name : "");
+        s += (entries[i].name ? entries[i].name : "");
         s += "\",\"why\":\"";
-        s += sig_statusStr(g_syms[i].status);
+        s += sig_statusStr(entries[i].status);
         s += "\"}";
     }
     s += "]}";
     return s;
+}
+
+std::string sig_symsJson()
+{
+    sig_resolveAll();
+    // No module means all entries are still unresolved. Do not inspect partially published entries.
+    if (!g_symsResolved.load(std::memory_order_acquire))
+        return "{\"ver\":0,\"ok\":0,\"fail\":0,\"complete\":false,\"unresolved\":[]}";
+    return symsJson(g_syms.data(), g_symCount, g_fileVersion, *g_scanner);
+}
+
+std::string sig_inspectImage(HMODULE imageBase, uint64_t imageSize, FlFileVersion version)
+{
+    auto scanner = createFlSignatureScanner(version);
+    ExecRange ranges[96];
+    const int count = getExecRanges(imageBase, ranges, _countof(ranges), imageSize);
+    // getExecRanges validates the headers before we read ImageBase in the private file image.
+    uint64_t pointerBase = 0;
+    if (count > 0) {
+        const auto* dos = reinterpret_cast<const IMAGE_DOS_HEADER*>(imageBase);
+        const auto* nt = reinterpret_cast<const IMAGE_NT_HEADERS64*>((const unsigned char*)imageBase + dos->e_lfanew);
+        pointerBase = nt->OptionalHeader.ImageBase;
+    }
+    const FlScanContext context{imageBase, imageSize, ranges, count, pointerBase};
+    std::vector<SymEntry> entries(g_symbolDefinitions, g_symbolDefinitions + g_symCount);
+    resolveSymbols(*scanner, context, entries.data(), (int)entries.size());
+    return symsJson(entries.data(), (int)entries.size(), version, *scanner);
 }

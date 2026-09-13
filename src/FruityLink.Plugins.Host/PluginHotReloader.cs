@@ -2,37 +2,32 @@ using System.Diagnostics;
 
 namespace FruityLink.Plugins.Host;
 
-/// <summary>
-/// Watches the plugins directory and feeds debounced, file-stable change batches to the
-/// <see cref="PluginManager"/> for live reload. Editors and build tools emit a storm of events and
-/// briefly lock the output dll mid-write, so events are coalesced over a short quiet window and each
-/// changed dll is confirmed unlocked + size-stable before the reload fires (never mid-write).
-/// </summary>
+/// <summary>Coalesces package changes and reloads only after changed files stop being written.</summary>
 internal sealed class PluginHotReloader : IDisposable
 {
-    private const int DebounceMs = 600;       // quiet window after the last event before processing
-    private const int StableWaitMaxMs = 8000; // give up waiting for an unlocked/stable file after this
-    private const int PollMs = 150;
-
     private readonly FileSystemWatcher _watcher;
     private readonly Func<IReadOnlyCollection<string>, bool, Task> _onBatch;
     private readonly Action<string> _log;
     private readonly Timer _debounce;
-
-    private readonly object _lock = new();
-    private readonly HashSet<string> _pendingDlls = new(StringComparer.OrdinalIgnoreCase);
+    private readonly int _debounceMs;
+    private readonly int _stableWaitMaxMs;
+    private readonly int _pollMs;
+    private readonly SemaphoreSlim _processing = new(1, 1);
+    private readonly CancellationTokenSource _shutdown = new();
+    private readonly object _sync = new();
+    private readonly HashSet<string> _pendingPaths = new(StringComparer.OrdinalIgnoreCase);
     private bool _structureChanged;
     private volatile bool _disposed;
 
-    /// <param name="dir">Plugins directory to watch (created if missing).</param>
-    /// <param name="onBatch">Invoked with (changed dll paths, structureChanged) after debounce.</param>
-    /// <param name="log">Diagnostic sink.</param>
-    public PluginHotReloader(string dir, Func<IReadOnlyCollection<string>, bool, Task> onBatch, Action<string> log)
+    public PluginHotReloader(string dir, Func<IReadOnlyCollection<string>, bool, Task> onBatch, Action<string> log,
+        int debounceMs = 600, int stableWaitMaxMs = 8000, int pollMs = 150)
     {
         _onBatch = onBatch;
         _log = log;
+        _debounceMs = debounceMs;
+        _stableWaitMaxMs = stableWaitMaxMs;
+        _pollMs = pollMs;
         Directory.CreateDirectory(dir);
-
         _watcher = new FileSystemWatcher(dir)
         {
             IncludeSubdirectories = true,
@@ -43,8 +38,11 @@ internal sealed class PluginHotReloader : IDisposable
         _watcher.Created += OnChanged;
         _watcher.Deleted += OnChanged;
         _watcher.Renamed += OnRenamed;
-        _watcher.Error += (_, e) => _log("hot-reload: watcher error: " + e.GetException().Message);
-
+        _watcher.Error += (_, e) =>
+        {
+            _log("hot-reload: watcher error: " + e.GetException().Message);
+            Enqueue(dir); // events may have been lost; reconcile the whole root
+        };
         _debounce = new Timer(Fire, null, Timeout.Infinite, Timeout.Infinite);
         _watcher.EnableRaisingEvents = true;
         _log($"hot-reload: watching '{dir}'");
@@ -60,72 +58,96 @@ internal sealed class PluginHotReloader : IDisposable
 
     private void Enqueue(string path)
     {
-        if (_disposed) return;
-        lock (_lock)
+        lock (_sync)
         {
-            if (path.EndsWith(".dll", StringComparison.OrdinalIgnoreCase))
-                _pendingDlls.Add(path);
-            else
-                _structureChanged = true; // folder add/remove/rename, deps.json, etc.
+            if (_disposed) return;
+            _pendingPaths.Add(path);
+            if (!path.EndsWith(".dll", StringComparison.OrdinalIgnoreCase)) _structureChanged = true;
+            try { _debounce.Change(_debounceMs, Timeout.Infinite); }
+            catch (ObjectDisposedException) { /* shutdown raced a file event */ }
         }
-        try { _debounce.Change(DebounceMs, Timeout.Infinite); }
-        catch (ObjectDisposedException) { /* disposed mid-event */ }
     }
 
-    private void Fire(object? _)
+    private void Fire(object? state)
     {
-        if (_disposed) return;
-        string[] dlls;
+        string[] paths;
         bool structure;
-        lock (_lock)
+        lock (_sync)
         {
-            dlls = _pendingDlls.ToArray();
-            _pendingDlls.Clear();
+            if (_disposed) return;
+            paths = _pendingPaths.ToArray();
+            _pendingPaths.Clear();
             structure = _structureChanged;
             _structureChanged = false;
         }
-        if (dlls.Length == 0 && !structure) return;
-        _ = ProcessAsync(dlls, structure);
+        if (paths.Length > 0) _ = ProcessAsync(paths, structure);
     }
 
-    private async Task ProcessAsync(string[] dlls, bool structure)
+    private async Task ProcessAsync(string[] paths, bool structure)
     {
         try
         {
-            foreach (string d in dlls)
-                if (File.Exists(d)) WaitUntilStable(d);
-            await _onBatch(dlls, structure).ConfigureAwait(false);
+            await _processing.WaitAsync(_shutdown.Token).ConfigureAwait(false);
+            try { await ProcessStableBatchAsync(paths, structure).ConfigureAwait(false); }
+            finally { _processing.Release(); }
         }
+        catch (OperationCanceledException) when (_disposed) { /* shutdown */ }
         catch (Exception ex) { _log("hot-reload: batch failed: " + ex.Message); }
     }
 
-    // Block until the file opens (no writer lock) and its size is stable across two polls, or timeout.
-    private void WaitUntilStable(string path)
+    private async Task ProcessStableBatchAsync(string[] paths, bool structure)
     {
-        var sw = Stopwatch.StartNew();
-        long lastLen = -1;
-        int stableHits = 0;
-        while (sw.ElapsedMilliseconds < StableWaitMaxMs)
+        foreach (string path in paths)
         {
-            try
-            {
-                long len = new FileInfo(path).Length;
-                using (File.Open(path, FileMode.Open, FileAccess.Read, FileShare.Read)) { /* opened => no exclusive writer */ }
-                if (len == lastLen) { if (++stableHits >= 2) return; }
-                else { stableHits = 0; lastLen = len; }
-            }
-            catch { stableHits = 0; /* still being written/locked */ }
-            Thread.Sleep(PollMs);
+            if (await WaitUntilStableAsync(path, _shutdown.Token).ConfigureAwait(false)) continue;
+            // Retain the complete batch until a long rebuild finishes, even if no new event arrives.
+            foreach (string retry in paths) Enqueue(retry);
+            return;
         }
-        _log($"hot-reload: '{Path.GetFileName(path)}' still busy after {StableWaitMaxMs}ms; proceeding anyway");
+        if (!_disposed) await _onBatch(paths, structure).ConfigureAwait(false);
+    }
+
+    private async Task<bool> WaitUntilStableAsync(string path, CancellationToken ct)
+    {
+        var elapsed = Stopwatch.StartNew();
+        (long Length, DateTime LastWrite)? previous = null;
+        int stableHits = 0;
+        while (elapsed.ElapsedMilliseconds < _stableWaitMaxMs)
+        {
+            ct.ThrowIfCancellationRequested();
+            if (!File.Exists(path)) return true; // deletion or directory event
+            var current = TryReadStamp(path);
+            stableHits = current is not null && current == previous ? stableHits + 1 : 0;
+            if (stableHits >= 2) return true;
+            previous = current;
+            await Task.Delay(_pollMs, ct).ConfigureAwait(false);
+        }
+        _log($"hot-reload: '{Path.GetFileName(path)}' still busy after {_stableWaitMaxMs}ms; retrying later");
+        return false;
+    }
+
+    private static (long Length, DateTime LastWrite)? TryReadStamp(string path)
+    {
+        try
+        {
+            using var stream = File.Open(path, FileMode.Open, FileAccess.Read, FileShare.Read);
+            return (stream.Length, File.GetLastWriteTimeUtc(path));
+        }
+        catch (IOException) { return null; }
+        catch (UnauthorizedAccessException) { return null; }
     }
 
     public void Dispose()
     {
-        if (_disposed) return;
-        _disposed = true;
-        try { _watcher.EnableRaisingEvents = false; } catch { /* ignore */ }
-        try { _watcher.Dispose(); } catch { /* ignore */ }
-        try { _debounce.Dispose(); } catch { /* ignore */ }
+        lock (_sync)
+        {
+            if (_disposed) return;
+            _disposed = true;
+            _pendingPaths.Clear();
+        }
+        _shutdown.Cancel();
+        _watcher.Dispose();
+        _debounce.Dispose();
+        // In-flight batches still use the cancellation token and release the semaphore.
     }
 }

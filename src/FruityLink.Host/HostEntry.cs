@@ -14,6 +14,7 @@ namespace FruityLink.Host;
 /// </summary>
 public static class HostEntry
 {
+    private static int _bootstrapStarted;
     /// <summary>
     /// Unmanaged entry called by FlClrHost via hostfxr (UnmanagedCallersOnly). Must not throw across
     /// the native boundary. Returns quickly after spinning up the UI thread; 0 = ok.
@@ -21,6 +22,7 @@ public static class HostEntry
     [UnmanagedCallersOnly]
     public static int Bootstrap(IntPtr arg, int argLength)
     {
+        if (Interlocked.CompareExchange(ref _bootstrapStarted, 1, 0) != 0) return 0;
         try
         {
             Log($"managed Bootstrap entered (pid={Environment.ProcessId}, mtid={Environment.CurrentManagedThreadId})");
@@ -31,6 +33,7 @@ public static class HostEntry
         }
         catch (Exception ex)
         {
+            Volatile.Write(ref _bootstrapStarted, 0);
             Log("Bootstrap FAILED: " + ex);
             return -1;
         }
@@ -45,6 +48,10 @@ public static class HostEntry
             TryLoadBridge();
             FlInjectBridge.UseInProcessTransport();
             Log("in-process bridge transport enabled (named pipe bypassed)");
+
+            // Publish the host dispatcher before starting plugin pre-warm. A WPF plugin can then
+            // reuse it instead of racing Application creation and starting an unnecessary UI thread.
+            _app = new Application { ShutdownMode = ShutdownMode.OnExplicitShutdown };
 
             // TEST hook: stand up a fake plugin manager so the native "Plugins" dropdown can be
             // exercised end-to-end before the real plugin host registers one. Opt-in + never ships on.
@@ -73,7 +80,6 @@ public static class HostEntry
             // SetDebugVisible (FL Plugins ▸ Settings ▸ Show Debug Output, or the debug_show command).
             // OnExplicitShutdown keeps the app + this STA thread + dispatcher alive across the debug
             // window's show/hide/close so it can be re-shown on demand.
-            _app = new Application { ShutdownMode = ShutdownMode.OnExplicitShutdown };
             Log("diagnostic window hidden by default (toggle via FL Plugins ▸ Settings ▸ Show Debug Output)");
             _app.Run();   // no window argument -> nothing visible; dispatcher loop keeps the host alive
             Log("UI thread exited (application shut down)");
@@ -88,6 +94,7 @@ public static class HostEntry
     // SetDebugVisible/GetDebugVisible marshal to _app.Dispatcher to touch the window safely.
     private static Application? _app;
     private static HostWindow? _debugWindow;
+    private static volatile bool _debugVisible;
 
     /// <summary>
     /// Poll the native FL-readiness check, then run the FL-state diagnostic probes (to the file log,
@@ -114,7 +121,8 @@ public static class HostEntry
                 // Skia init + first paint) is usually already done by now, so only the FL embed remains —
                 // this hint is typically brief. FlAgentPlugin clears it ("ready") once the UI is embedded.
                 SetLoadingHint("FL Automate — loading plugin host…");
-                RunProbesToLog();                          // diagnostic probes -> file log (window hidden)
+                // Opt-in diagnostics must never make automatic native calls during ordinary startup.
+                if (Environment.GetEnvironmentVariable("FRUITYLINK_STARTUP_PROBES") == "1") RunProbesToLog();
                 if (!useStub) InitializeRealPluginHost();  // restore-enable may touch FL/UI -> after readiness
             }
             catch (Exception ex) { Log("readiness-gated init FAILED: " + ex); }
@@ -125,15 +133,16 @@ public static class HostEntry
 
     /// <summary>
     /// Poll the bridge's <c>fl_ready</c> command (native double-deref of mainForm/toolbarForm/songObj/
-    /// chanList; see re/20) every 50 ms up to a 30 s timeout. Returns when FL reports ready, or logs a
-    /// timeout and proceeds degraded. Reads "1" = ready.
+    /// chanList plus the actual FL main HWND) until ready. Warns after 30 seconds, then keeps polling
+    /// slowly so legitimate long project loads can finish without activating plugins prematurely.
     /// </summary>
     private static void WaitForFlReady()
     {
         const int timeoutMs = 30000, intervalMs = 50;
         var sw = System.Diagnostics.Stopwatch.StartNew();
         bool loggedError = false;
-        while (sw.ElapsedMilliseconds < timeoutMs)
+        bool warnedSlowStart = false;
+        while (true)
         {
             try
             {
@@ -147,9 +156,13 @@ public static class HostEntry
             {
                 if (!loggedError) { Log("fl_ready probe error (will keep polling): " + ex.Message); loggedError = true; }
             }
-            Thread.Sleep(intervalMs);
+            if (!warnedSlowStart && sw.ElapsedMilliseconds >= timeoutMs)
+            {
+                Log($"FL readiness still pending after {timeoutMs}ms — waiting before plugin activation");
+                warnedSlowStart = true;
+            }
+            Thread.Sleep(warnedSlowStart ? 500 : intervalMs);
         }
-        Log($"FL readiness timeout ({timeoutMs}ms) — proceeding degraded");
     }
 
     /// <summary>
@@ -205,7 +218,8 @@ public static class HostEntry
                     if (_debugWindow is null)
                     {
                         _debugWindow = new HostWindow();
-                        _debugWindow.Closed += (_, _) => _debugWindow = null; // allow re-create after a manual close
+                        _debugWindow.IsVisibleChanged += (_, _) => _debugVisible = _debugWindow?.IsVisible == true;
+                        _debugWindow.Closed += (_, _) => { _debugWindow = null; _debugVisible = false; };
                     }
                     _debugWindow.Show();
                     _debugWindow.Activate();
@@ -220,14 +234,8 @@ public static class HostEntry
         });
     }
 
-    /// <summary>Whether the diagnostic window currently exists and is visible (UI-thread query).</summary>
-    internal static bool GetDebugVisible()
-    {
-        Application? app = _app;
-        if (app is null) return false;
-        try { return app.Dispatcher.Invoke(() => _debugWindow is { IsVisible: true }); }
-        catch (Exception ex) { Log("GetDebugVisible failed: " + ex.Message); return false; }
-    }
+    /// <summary>Visibility snapshot; native menu queries never block FL's main thread on WPF.</summary>
+    internal static bool GetDebugVisible() => _debugVisible;
 
     /// <summary>
     /// Send a raw command over the in-proc bridge, logging failures instead of throwing. Returns the
@@ -338,13 +346,13 @@ public static class HostEntry
             // rebuild FL's native menus so the entries + ✓ checkmarks stay current.
             if (mgr is FruityLink.Plugins.Host.PluginManager pm)
             {
-                pm.MenuRegistry.Changed += () => TryRaw("menu_contrib_refresh", "menu_contrib_refresh");
+                pm.MenuRegistry.Changed += () => QueueRefresh("menu_contrib_refresh");
 
                 // Same for toolbar buttons: whenever a plugin's toolbar contributions change (added/
                 // removed on enable/disable, or a plugin calls IFlToolbarRegistrar.Refresh because a
                 // tracked window's visibility changed), rebuild FL's native toolbar so the buttons + lit
                 // states stay current. Toolbar uses one refresh command for both materialize and update.
-                pm.ToolbarRegistry.Changed += () => TryRaw("toolbar_button_refresh", "toolbar_button_refresh");
+                pm.ToolbarRegistry.Changed += () => QueueRefresh("toolbar_button_refresh");
             }
 
             // Refresh the Tools > FL Plugins submenu with the real list right away (idempotent).
@@ -359,6 +367,13 @@ public static class HostEntry
         catch (Exception ex) { Log("InitializeRealPluginHost FAILED: " + ex); }
     }
 
+    private static void QueueRefresh(string command)
+    {
+        // Registrations may change on the embedded UI thread. FL rebuilds menus by calling back
+        // into plugin state queries; leave that UI thread pumping while the bridge request runs.
+        _ = Task.Run(() => TryRaw(command, command));
+    }
+
     /// <summary>Minimal empty <see cref="IServiceProvider"/> for hosts with no DI container at the call
     /// site (the plugin host + plugins tolerate a provider that returns null for everything).</summary>
     private sealed class EmptyServiceProvider : IServiceProvider
@@ -371,7 +386,9 @@ public static class HostEntry
     {
         try
         {
-            string dir = AppContext.BaseDirectory;
+            // In a native CoreCLR host AppContext.BaseDirectory may be FL's executable directory.
+            // The bridge ships beside this managed assembly in the FruityLink subdirectory.
+            string dir = Path.GetDirectoryName(typeof(HostEntry).Assembly.Location) ?? AppContext.BaseDirectory;
             string p = Path.Combine(dir, "FlBridge.dll");
             if (File.Exists(p)) { NativeLibrary.Load(p); Log("FlBridge.dll loaded from " + p); }
             else Log("WARNING: FlBridge.dll not found next to host (" + dir + ") — in-proc bridge unavailable");

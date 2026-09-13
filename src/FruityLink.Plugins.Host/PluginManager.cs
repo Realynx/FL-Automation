@@ -17,7 +17,7 @@ namespace FruityLink.Plugins.Host;
 ///   <item>Per-plugin folder (recommended): <c>&lt;plugins&gt;\&lt;pluginId&gt;\MyPlugin.dll</c> (+ its
 ///   private deps next to it). The whole folder is shadow-copied per load.</item>
 ///   <item>Flat: <c>&lt;plugins&gt;\MyPlugin.dll</c> directly in the plugins dir (the dll + its
-///   .deps.json/.pdb sidecars are shadow-copied).</item>
+///   sibling dependencies and assets are shadow-copied).</item>
 /// </list>
 ///
 /// <para><b>Shadow-copy loading:</b> every plugin assembly is loaded from a private copy under the
@@ -53,7 +53,7 @@ public sealed class PluginManager : IPluginManager, IDisposable
     private readonly Dictionary<string, PluginEntry> _plugins = new(StringComparer.OrdinalIgnoreCase);
 
     private PluginHotReloader? _reloader;
-    private bool _disposed;
+    private volatile bool _disposed;
 
     /// <param name="fl">Safe FL control surface handed to plugins via their <see cref="IPluginContext"/>.</param>
     /// <param name="services">Host service provider exposed to plugins.</param>
@@ -78,7 +78,7 @@ public sealed class PluginManager : IPluginManager, IDisposable
         _menu = new MenuContributionRegistry(_log);
         _toolbar = new ToolbarContributionRegistry(_log);
         _state = new EnabledStateStore(stateFile, _log);
-        _shadow = new ShadowCopyStore(shadowRoot, _pluginsDir, _log);   // reclaims stale copies from a crashed session
+        _shadow = new ShadowCopyStore(shadowRoot, _pluginsDir, _log);
     }
 
     /// <summary>The directory this manager scans for plugins.</summary>
@@ -119,12 +119,24 @@ public sealed class PluginManager : IPluginManager, IDisposable
     /// </summary>
     public void Discover()
     {
+        _gate.Wait();
+        try
+        {
+            if (!_disposed) Discover_NoLock();
+        }
+        finally { _gate.Release(); }
+    }
+
+    private void Discover_NoLock()
+    {
         HashSet<string> enabledIds = _state.LoadPersistedEnabled();
         int before;
         lock (_sync) before = _plugins.Count;
 
         foreach (string dll in EnumerateCandidateDlls())
         {
+            lock (_sync)
+                if (_plugins.Values.Any(e => ShadowCopyStore.PathEquals(e.Owner.Path, dll))) continue;
             try { DiscoverDll(dll, enabledIds); }
             catch (Exception ex) { _log($"discover: unexpected failure on '{dll}': {ex.Message}"); }
         }
@@ -192,13 +204,13 @@ public sealed class PluginManager : IPluginManager, IDisposable
 
     private IEnumerable<string> SafeEnumerate(string dir, SearchOption opt)
     {
-        try { return Directory.EnumerateFiles(dir, "*.dll", opt); }
+        try { return Directory.GetFiles(dir, "*.dll", opt); }
         catch (Exception ex) { _log($"discover: cannot enumerate '{dir}': {ex.Message}"); return Array.Empty<string>(); }
     }
 
     private IEnumerable<string> SafeEnumerateDirs(string dir)
     {
-        try { return Directory.EnumerateDirectories(dir); }
+        try { return Directory.GetDirectories(dir); }
         catch (Exception ex) { _log($"discover: cannot enumerate sub-dirs of '{dir}': {ex.Message}"); return Array.Empty<string>(); }
     }
 
@@ -206,8 +218,7 @@ public sealed class PluginManager : IPluginManager, IDisposable
     private static bool IsPluginCandidate(string path)
     {
         string name = Path.GetFileNameWithoutExtension(path);
-        if (name.Equals("FruityLink.Plugins.Abstractions", StringComparison.OrdinalIgnoreCase)) return false;
-        if (name.Equals("FruityLink.Core", StringComparison.OrdinalIgnoreCase)) return false;
+        if (PluginLoadContext.IsSharedAssemblyName(name)) return false;
         if (name.StartsWith("System.", StringComparison.OrdinalIgnoreCase)) return false;
         if (name.StartsWith("Microsoft.", StringComparison.OrdinalIgnoreCase)) return false;
         return true;
@@ -216,21 +227,33 @@ public sealed class PluginManager : IPluginManager, IDisposable
     // Loads the dll (shadow-copied) into a fresh collectible context and registers any plugin types.
     private void DiscoverDll(string dllPath, HashSet<string> enabledIds)
     {
-        PluginLoadContext alc;
-        Assembly asm;
-        string shadowDir;
-        try
-        {
-            (shadowDir, string shadowDll) = _shadow.ShadowCopy(dllPath);
-            alc = new PluginLoadContext(shadowDll);
-            asm = alc.LoadFromAssemblyPath(shadowDll);
-        }
+        PluginAssembly? owner = DiscoverAssembly(dllPath, enabledIds);
+        if (owner is not null) RegisterAssembly(owner);
+    }
+
+    private PluginAssembly? DiscoverAssembly(string dllPath, HashSet<string> enabledIds)
+    {
+        PluginAssembly owner;
+        try { owner = LoadAssembly(dllPath); }
         catch (Exception ex)
         {
             _log($"discover: cannot load '{dllPath}': {ex.Message}");
-            return;
+            return null;
         }
 
+        foreach (Type type in GetPluginTypes(owner.Assembly!, dllPath))
+        {
+            PluginEntry? entry = CreatePluginEntry(type, owner, enabledIds);
+            if (entry is not null) owner.Entries.Add(entry);
+        }
+
+        if (owner.Entries.Count > 0) return owner;
+        UnloadAlc(owner);
+        return null;
+    }
+
+    private Type[] GetPluginTypes(Assembly asm, string dllPath)
+    {
         Type[] types;
         try
         {
@@ -246,69 +269,63 @@ public sealed class PluginManager : IPluginManager, IDisposable
         catch (Exception ex)
         {
             _log($"discover: GetTypes failed for '{dllPath}': {ex.Message}");
-            SafeUnload(alc, dllPath, shadowDir);
-            return;
+            return Array.Empty<Type>();
         }
+        return types.Where(IsLoadablePluginType).ToArray();
+    }
 
-        List<Type> pluginTypes = types.Where(IsLoadablePluginType).ToList();
-        if (pluginTypes.Count == 0)
+    private PluginEntry? CreatePluginEntry(Type t, PluginAssembly owner, HashSet<string> enabledIds)
+    {
+        string dllPath = owner.Path;
+        try
         {
-            SafeUnload(alc, dllPath, shadowDir); // not a plugin assembly — reclaim the context + shadow
-            return;
-        }
-
-        var owner = new PluginAssembly(dllPath) { Alc = alc, Assembly = asm, ShadowDir = shadowDir };
-        int added = 0;
-        foreach (Type t in pluginTypes)
-        {
-            try
+            var instance = (IFlPlugin)Activator.CreateInstance(t)!;
+            string id = instance.Id;
+            if (string.IsNullOrWhiteSpace(id))
             {
-                var instance = (IFlPlugin)Activator.CreateInstance(t)!;
-                string id = instance.Id;
-                if (string.IsNullOrWhiteSpace(id))
+                _log($"discover: skipping '{t.FullName}' in '{Path.GetFileName(dllPath)}' (empty Id)");
+                return null;
+            }
+            return new PluginEntry
+            {
+                Id = id,
+                Name = string.IsNullOrWhiteSpace(instance.Name) ? id : instance.Name,
+                Description = instance.Description ?? string.Empty,
+                Version = instance.Version ?? string.Empty,
+                TypeFullName = t.FullName!,
+                Owner = owner,
+                Instance = instance,
+                EnabledDesired = enabledIds.Contains(id),
+            };
+        }
+        catch (Exception ex)
+        {
+            _log($"discover: failed to instantiate '{t.FullName}' in '{Path.GetFileName(dllPath)}': {ex.Message}");
+            return null;
+        }
+    }
+
+    private void RegisterAssembly(PluginAssembly owner)
+    {
+        foreach (PluginEntry entry in owner.Entries.ToArray())
+        {
+            lock (_sync)
+            {
+                if (!_plugins.TryAdd(entry.Id, entry))
                 {
-                    _log($"discover: skipping '{t.FullName}' in '{Path.GetFileName(dllPath)}' (empty Id)");
+                    owner.Entries.Remove(entry);
+                    _log($"discover: duplicate plugin id '{entry.Id}' from '{Path.GetFileName(owner.Path)}' ignored");
                     continue;
                 }
-
-                var entry = new PluginEntry
-                {
-                    Id = id,
-                    Name = string.IsNullOrWhiteSpace(instance.Name) ? id : instance.Name,
-                    Description = instance.Description ?? string.Empty,
-                    Version = instance.Version ?? string.Empty,
-                    TypeFullName = t.FullName!,
-                    Owner = owner,
-                    Instance = instance,
-                    EnabledDesired = enabledIds.Contains(id),
-                };
-
-                lock (_sync)
-                {
-                    if (_plugins.ContainsKey(id))
-                    {
-                        _log($"discover: duplicate plugin id '{id}' from '{Path.GetFileName(dllPath)}' ignored");
-                        continue;
-                    }
-                    owner.Entries.Add(entry);
-                    _plugins[id] = entry;
-                }
-                added++;
-                _log($"discovered '{id}' ({entry.Name} v{entry.Version}) from '{Path.GetFileName(dllPath)}'");
             }
-            catch (Exception ex)
-            {
-                _log($"discover: failed to instantiate '{t.FullName}' in '{Path.GetFileName(dllPath)}': {ex.Message}");
-            }
+            _log($"discovered '{entry.Id}' ({entry.Name} v{entry.Version}) from '{Path.GetFileName(owner.Path)}'");
         }
-
-        if (added == 0)
-            SafeUnload(alc, dllPath, shadowDir); // every type failed/duplicate — reclaim the context
+        if (owner.Entries.Count == 0) UnloadAlc(owner);
     }
 
     private static bool IsLoadablePluginType(Type t) =>
         t is { IsClass: true, IsAbstract: false }
-        && (t.IsPublic || t.IsNestedPublic)
+        && t.IsVisible && !t.ContainsGenericParameters
         && typeof(IFlPlugin).IsAssignableFrom(t)
         && t.GetConstructor(Type.EmptyTypes) is not null;
 
@@ -343,6 +360,7 @@ public sealed class PluginManager : IPluginManager, IDisposable
         await _gate.WaitAsync(ct).ConfigureAwait(false);
         try
         {
+            if (_disposed) return false;
             PluginEntry? entry;
             lock (_sync) _plugins.TryGetValue(id, out entry);
             if (entry is null) { _log($"enable: unknown plugin '{id}'"); return false; }
@@ -377,6 +395,7 @@ public sealed class PluginManager : IPluginManager, IDisposable
         await _gate.WaitAsync(ct).ConfigureAwait(false);
         try
         {
+            if (_disposed) return false;
             PluginEntry? entry;
             lock (_sync) _plugins.TryGetValue(id, out entry);
             if (entry is null) { _log($"disable: unknown plugin '{id}'"); return false; }
@@ -384,6 +403,7 @@ public sealed class PluginManager : IPluginManager, IDisposable
             bool ok = await DeactivateAsync_NoLock(entry, ct).ConfigureAwait(false);
             lock (_sync) entry.EnabledDesired = false;
             PersistSafe();
+            if (entry.WindowCleanupFailed) return false;
             UnloadAlc(entry.Owner);
             _log($"disabled '{id}' (ALC unload requested; physical unmap is lazy)");
             return ok;
@@ -413,7 +433,8 @@ public sealed class PluginManager : IPluginManager, IDisposable
             {
                 PluginEntry? entry;
                 lock (_sync) _plugins.TryGetValue(id, out entry);
-                if (entry is null || entry.Active || entry.Prewarmed) continue;
+                if (_disposed) return;
+                if (entry is null || !entry.EnabledDesired || entry.Active || entry.Prewarmed || entry.WindowCleanupFailed) continue;
 
                 try
                 {
@@ -421,6 +442,7 @@ public sealed class PluginManager : IPluginManager, IDisposable
                     if (instance is IFlPreWarmPlugin prewarm)
                     {
                         IPluginContext context = GetOrCreateContext_NoLock(entry);
+                        lock (_sync) entry.NeedsCleanup = true;
                         await prewarm.PrepareAsync(context, ct).ConfigureAwait(false);
                         _log($"pre-warmed '{id}'");
                     }
@@ -463,7 +485,7 @@ public sealed class PluginManager : IPluginManager, IDisposable
     {
         lock (_sync)
         {
-            if (_reloader is not null) return;
+            if (_disposed || _reloader is not null) return;
             try
             {
                 _reloader = new PluginHotReloader(
@@ -490,6 +512,7 @@ public sealed class PluginManager : IPluginManager, IDisposable
     /// </summary>
     public async Task<bool> ReloadAsync(string id, CancellationToken ct = default)
     {
+        if (string.IsNullOrWhiteSpace(id)) return false;
         string? path;
         lock (_sync) path = _plugins.TryGetValue(id, out PluginEntry? e) ? e.Owner.Path : null;
         if (path is null) { _log($"reload: unknown plugin '{id}'"); return false; }
@@ -500,18 +523,21 @@ public sealed class PluginManager : IPluginManager, IDisposable
     public async Task<bool> ReloadDllAsync(string originalDllPath, CancellationToken ct = default)
     {
         await _gate.WaitAsync(ct).ConfigureAwait(false);
-        try { return await ReloadDll_NoLock(originalDllPath, ct).ConfigureAwait(false); }
+        try { return !_disposed && await ReloadDll_NoLock(originalDllPath, ct).ConfigureAwait(false); }
         finally { _gate.Release(); }
     }
 
     // Watcher batch entry point: reload each changed dll, then reconcile adds/removes if the directory
     // structure changed. One gate acquisition for the whole batch.
-    private async Task ReloadFromWatcherAsync(IReadOnlyCollection<string> changedDllPaths, bool structureChanged, CancellationToken ct = default)
+    private async Task ReloadFromWatcherAsync(IReadOnlyCollection<string> changedPaths, bool structureChanged, CancellationToken ct = default)
     {
         await _gate.WaitAsync(ct).ConfigureAwait(false);
         try
         {
-            foreach (string p in changedDllPaths)
+            if (_disposed) return;
+            string[] known;
+            lock (_sync) known = _plugins.Values.Select(e => e.Owner.Path).Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
+            foreach (string p in PluginReloadTargets.Resolve(_pluginsDir, known, changedPaths))
             {
                 try { await ReloadDll_NoLock(p, ct).ConfigureAwait(false); }
                 catch (Exception ex) { _log($"hot-reload: reloading '{p}' failed: {ex.Message}"); }
@@ -532,38 +558,46 @@ public sealed class PluginManager : IPluginManager, IDisposable
         lock (_sync) affected = _plugins.Values.Where(e => ShadowCopyStore.PathEquals(e.Owner.Path, originalDllPath)).ToList();
 
         // Ignore contract/framework dlls a folder-wide rebuild may touch (unless we already track them).
-        if (affected.Count == 0 && !IsPluginCandidate(originalDllPath))
+        if (affected.Count == 0 && (!IsPluginCandidate(originalDllPath) || !ReferencesPluginContract(originalDllPath)))
             return true;
-
-        var keepEnabled = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        foreach (PluginEntry e in affected)
-            if (e.EnabledDesired) keepEnabled.Add(e.Id);
-
-        PluginAssembly? owner = affected.Count > 0 ? affected[0].Owner : null;
-        foreach (PluginEntry e in affected)
-            await DeactivateAsync_NoLock(e, ct).ConfigureAwait(false); // stop + drop instance; keep EnabledDesired
-        if (owner is not null) UnloadAlc(owner);
-        lock (_sync) foreach (PluginEntry e in affected) _plugins.Remove(e.Id);
 
         if (!File.Exists(originalDllPath))
         {
+            if (!await RemoveEntries_NoLock(affected, ct).ConfigureAwait(false)) return false;
             if (affected.Count > 0)
                 _log($"hot-reload: removed [{string.Join(", ", affected.Select(a => a.Id))}] — file gone: {Path.GetFileName(originalDllPath)}");
             return true;
         }
 
-        // Re-discover the (possibly rebuilt) dll into a fresh context; restore the enabled choices.
+        // Validate the replacement before stopping a working plugin. A compiler may have closed a
+        // truncated/invalid dll, which is stable on disk but cannot be used as a replacement.
         HashSet<string> enabledIds = _state.LoadPersistedEnabled();
-        foreach (string id in keepEnabled) enabledIds.Add(id);
-        DiscoverDll(originalDllPath, enabledIds);
+        enabledIds.UnionWith(affected.Where(e => e.EnabledDesired).Select(e => e.Id));
+        PluginAssembly? replacement = DiscoverAssembly(originalDllPath, enabledIds);
+        if (replacement is null) return false;
+        if (!await RemoveEntries_NoLock(affected, ct).ConfigureAwait(false))
+        {
+            UnloadAlc(replacement);
+            return false;
+        }
+        RegisterAssembly(replacement);
 
         await ActivateFreshFromPath_NoLock(originalDllPath, ct).ConfigureAwait(false);
 
         List<PluginEntry> fresh;
         lock (_sync) fresh = _plugins.Values.Where(e => ShadowCopyStore.PathEquals(e.Owner.Path, originalDllPath)).ToList();
-        if (affected.Count > 0 || fresh.Count > 0)
-            _log($"hot-reload: reloaded '{Path.GetFileName(originalDllPath)}' -> [{string.Join(", ", fresh.Select(f => $"{f.Id} v{f.Version}"))}]"
-               + (keepEnabled.Count > 0 ? $" (re-enabled: {string.Join(", ", keepEnabled)})" : ""));
+        _log($"hot-reload: reloaded '{Path.GetFileName(originalDllPath)}' -> [{string.Join(", ", fresh.Select(f => $"{f.Id} v{f.Version}"))}]");
+        return fresh.Count > 0 && fresh.All(e => !e.EnabledDesired || e.Active);
+    }
+
+    private async Task<bool> RemoveEntries_NoLock(List<PluginEntry> entries, CancellationToken ct)
+    {
+        foreach (PluginEntry entry in entries)
+            await DeactivateAsync_NoLock(entry, ct).ConfigureAwait(false);
+        if (entries.Any(entry => entry.WindowCleanupFailed)) return false;
+        foreach (PluginAssembly owner in entries.Select(e => e.Owner).Distinct()) UnloadAlc(owner);
+        lock (_sync)
+            foreach (PluginEntry entry in entries) _plugins.Remove(entry.Id);
         return true;
     }
 
@@ -610,10 +644,24 @@ public sealed class PluginManager : IPluginManager, IDisposable
 
     private async Task ActivateAsync_NoLock(PluginEntry entry, CancellationToken ct)
     {
+        if (entry.WindowCleanupFailed)
+            throw new InvalidOperationException("The plugin's embedded window has not closed. Retry disabling it before enabling or reloading.");
         IFlPlugin instance = EnsureLoaded_NoLock(entry);
         IPluginContext context = GetOrCreateContext_NoLock(entry);
-        await instance.EnableAsync(context, ct).ConfigureAwait(false);
-        lock (_sync) entry.Active = true;
+        lock (_sync) entry.NeedsCleanup = true;
+        try
+        {
+            await instance.EnableAsync(context, ct).ConfigureAwait(false);
+            lock (_sync) entry.Active = true;
+        }
+        catch
+        {
+            // Enable may register callbacks or allocate UI before throwing. Cleanup must still run,
+            // even when activation was cancelled, and a retry must receive a fresh instance/context.
+            await DeactivateAsync_NoLock(entry, CancellationToken.None).ConfigureAwait(false);
+            UnloadAlc(entry.Owner);
+            throw;
+        }
     }
 
     // The per-plugin context, built once and cached on the entry so a plugin's PrepareAsync (pre-warm)
@@ -623,7 +671,9 @@ public sealed class PluginManager : IPluginManager, IDisposable
     private IPluginContext GetOrCreateContext_NoLock(PluginEntry entry)
     {
         if (entry.Context is not null) return entry.Context;
-        var context = new PluginContext(_fl, _services, _log, _menu.ScopeFor(entry.Id), _toolbar.ScopeFor(entry.Id), _windows);
+        IFlWindowHost windows = _windows is IFlWindowHostFactory factory
+            ? factory.CreateWindowHost(entry.Id, entry.Name) : _windows;
+        var context = new PluginContext(_fl, _services, _log, _menu.ScopeFor(entry.Id), _toolbar.ScopeFor(entry.Id), windows);
         lock (_sync) entry.Context = context;
         return context;
     }
@@ -631,23 +681,57 @@ public sealed class PluginManager : IPluginManager, IDisposable
     private async Task<bool> DeactivateAsync_NoLock(PluginEntry entry, CancellationToken ct)
     {
         IFlPlugin? inst;
-        bool active;
-        lock (_sync) { inst = entry.Instance; active = entry.Active; }
+        bool needsCleanup;
+        lock (_sync) { inst = entry.Instance; needsCleanup = entry.NeedsCleanup; }
 
         bool ok = true;
-        if (active && inst is not null)
+        if (needsCleanup && inst is not null)
         {
             try { await inst.DisableAsync(ct).ConfigureAwait(false); }
             catch (Exception ex) { ok = false; _log($"disable: plugin '{entry.Id}' DisableAsync threw: {ex}"); }
         }
+        bool windowReleased = await ReleaseWindowAsync_NoLock(entry).ConfigureAwait(false);
         // Belt-and-suspenders: drop ALL of this plugin's menu + toolbar contributions even if its
         // DisableAsync forgot to dispose them (or threw). Covers disable, reload, and shutdown-deactivate.
         _menu.RemoveByPlugin(entry.Id);
         _toolbar.RemoveByPlugin(entry.Id);
+        if (!ok || !windowReleased)
+        {
+            lock (_sync) { entry.WindowCleanupFailed = true; entry.Active = false; }
+            _log($"disable: keeping '{entry.Id}' loaded until its lifecycle cleanup succeeds.");
+            return false;
+        }
         // Drop the instance ref so the ALC can unload; also drop the cached context + pre-warm flag so a
         // later re-activation builds a FRESH context/scope and (if applicable) re-prepares cleanly.
-        lock (_sync) { entry.Active = false; entry.Instance = null; entry.Context = null; entry.Prewarmed = false; }
+        lock (_sync)
+        {
+            entry.Active = false;
+            entry.Instance = null;
+            entry.Context = null;
+            entry.Prewarmed = false;
+            entry.NeedsCleanup = false;
+        }
         return ok;
+    }
+
+    private async Task<bool> ReleaseWindowAsync_NoLock(PluginEntry entry)
+    {
+        if (entry.Context is not PluginContext context) return true;
+        try
+        {
+            await context.DisposeAsync().ConfigureAwait(false);
+            entry.WindowCleanupFailed = false;
+            return true;
+        }
+        catch (Exception ex)
+        {
+            // Keep the instance, context, ALC and shadow assets rooted while native UI may still
+            // call them. A later Disable retries disposal; reload must not replace the live owner.
+            entry.WindowCleanupFailed = true;
+            entry.Active = false;
+            _log($"disable: plugin '{entry.Id}' window cleanup failed; keeping its load context for retry: {ex.Message}");
+            return false;
+        }
     }
 
     private IFlPlugin EnsureLoaded_NoLock(PluginEntry entry)
@@ -660,17 +744,33 @@ public sealed class PluginManager : IPluginManager, IDisposable
 
         if (asm is null)
         {
-            (string shadowDir, string shadowDll) = _shadow.ShadowCopy(owner.Path);
-            var alc = new PluginLoadContext(shadowDll);
-            Assembly loaded = alc.LoadFromAssemblyPath(shadowDll);
-            lock (_sync) { owner.Alc = alc; owner.Assembly = loaded; owner.ShadowDir = shadowDir; }
-            asm = loaded;
+            PluginAssembly loaded = LoadAssembly(owner.Path);
+            lock (_sync) { owner.Alc = loaded.Alc; owner.Assembly = loaded.Assembly; owner.ShadowDir = loaded.ShadowDir; }
+            asm = loaded.Assembly!;
         }
 
         Type type = asm.GetType(entry.TypeFullName, throwOnError: true)!;
         var instance = (IFlPlugin)Activator.CreateInstance(type)!;
         lock (_sync) entry.Instance = instance;
         return instance;
+    }
+
+    private PluginAssembly LoadAssembly(string dllPath)
+    {
+        (string shadowDir, string shadowDll) = _shadow.ShadowCopy(dllPath);
+        PluginLoadContext? alc = null;
+        try
+        {
+            alc = new PluginLoadContext(shadowDll);
+            Assembly assembly = alc.LoadFromAssemblyPath(shadowDll);
+            return new PluginAssembly(dllPath) { Alc = alc, Assembly = assembly, ShadowDir = shadowDir };
+        }
+        catch
+        {
+            if (alc is not null) SafeUnload(alc, dllPath, shadowDir);
+            else _shadow.TryDeleteDir(shadowDir);
+            throw;
+        }
     }
 
     // Unload an assembly's context once every plugin instance from it is gone. Best-effort + lazy.
@@ -733,13 +833,14 @@ public sealed class PluginManager : IPluginManager, IDisposable
     // Lifetime
     // ----------------------------------------------------------------------------------------------
 
-    /// <summary>Stop the watcher and release the operation semaphore. Does not unload plugins.</summary>
+    /// <summary>Stop the watcher and reject new operations. Does not unload plugins.</summary>
     public void Dispose()
     {
         if (_disposed) return;
         _disposed = true;
         DisableHotReload();
-        _gate.Dispose();
+        // An in-flight plugin callback may still release the gate. SemaphoreSlim has no unmanaged
+        // resource unless its wait handle is requested; leave disposal to GC instead of racing it.
     }
 
     // ----------------------------------------------------------------------------------------------
@@ -771,6 +872,8 @@ public sealed class PluginManager : IPluginManager, IDisposable
         public IPluginContext? Context { get; set; } // built once, reused across PrepareAsync + EnableAsync
         public bool Active { get; set; }            // EnableAsync completed, DisableAsync not yet
         public bool Prewarmed { get; set; }         // IFlPreWarmPlugin.PrepareAsync has run (pre-warm phase)
+        public bool NeedsCleanup { get; set; }      // prepare/enable started, including a partial failure
+        public bool WindowCleanupFailed { get; set; } // retain any unconfirmed plugin teardown, including toolkit cleanup
         public bool EnabledDesired { get; set; }    // persisted user choice
         public bool Loaded => Instance is not null;
     }

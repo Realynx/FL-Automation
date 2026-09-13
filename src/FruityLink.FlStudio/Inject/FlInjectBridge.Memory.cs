@@ -26,6 +26,13 @@ public sealed partial class FlInjectBridge
     private static ulong ParseHexRet(JsonElement root, string prop)
         => Convert.ToUInt64((root.GetProperty(prop).GetString() ?? "0x0").Replace("0x", string.Empty), 16);
 
+    private static JsonDocument ParseBridgeResponse(string response)
+    {
+        if (response.StartsWith("err", StringComparison.Ordinal))
+            throw new InvalidOperationException("Native bridge rejected the request: " + response);
+        return JsonDocument.Parse(response);
+    }
+
     /// <summary>Decodes a hex-string bridge reply into bytes, throwing on the bridge's "err…" envelope.
     /// <paramref name="context"/> names the command for the "<c>{context} failed: …</c>" message.</summary>
     private static byte[] DecodeHexResponse(string hex, string context)
@@ -44,7 +51,7 @@ public sealed partial class FlInjectBridge
     {
         string msg = "call " + ghidraHexAddr + string.Concat(args.Select(a => " " + a.ToString("x")));
         string resp = await RawAsync(msg, 5000, ct);
-        using var doc = JsonDocument.Parse(resp);
+        using var doc = ParseBridgeResponse(resp);
         var root = doc.RootElement;
         EnsureOk(root, $"bridge call faulted (ok:0): {msg}");
         return ParseHexRet(root, "ret");
@@ -59,7 +66,7 @@ public sealed partial class FlInjectBridge
     {
         string hex = Convert.ToHexString(data).ToLowerInvariant();
         string resp = await RawAsync($"poke {ghidraHexAddr} {hex}", 4000, ct);
-        using var doc = JsonDocument.Parse(resp);
+        using var doc = ParseBridgeResponse(resp);
         EnsureOk(doc.RootElement, $"poke failed at {ghidraHexAddr}: {resp}");
     }
 
@@ -68,7 +75,7 @@ public sealed partial class FlInjectBridge
     {
         string hex = Convert.ToHexString(data).ToLowerInvariant();
         string resp = await RawAsync($"pokeabs {absAddr:x} {hex}", 4000, ct);
-        using var doc = JsonDocument.Parse(resp);
+        using var doc = ParseBridgeResponse(resp);
         EnsureOk(doc.RootElement, $"pokeabs failed at 0x{absAddr:x}: {resp}");
     }
 
@@ -82,21 +89,36 @@ public sealed partial class FlInjectBridge
 
     /// <summary>Scratch-buffer slot at <paramref name="offset"/>, zeroed as a valid (empty) 8-byte
     /// out-param — the prep every Delphi hidden-out-param call needs (a garbage slot faults the assign).</summary>
-    private async Task<ulong> ZeroedScratchSlotAsync(ulong offset, CancellationToken ct)
+    private async Task<ulong> ZeroedScratchSlotAsync(ulong offset, ScratchLease scratch, CancellationToken ct)
     {
-        ulong slot = await ScratchAsync(ct) + offset;
+        if (offset > ScratchBufferSize - sizeof(ulong)) throw new ArgumentOutOfRangeException(nameof(offset));
+        ulong slot = scratch.Address + offset;
         await PokeAbsAsync(slot, new byte[8], ct);
         return slot;
     }
 
     private async Task<byte[]> PeekAbsAsync(ulong addr, int len, CancellationToken ct = default)
-        => DecodeHexResponse((await RawAsync($"peekabs {addr:x} {len}", 4000, ct)).Trim(), "peekabs");
+    {
+        // The native hexDump endpoint accepts at most 4096 bytes. Note pages and full note
+        // stores can exceed that limit; keep the transport constraint in this shared reader.
+        if (len < 0 || len > 64 * 1024 * 1024) throw new ArgumentOutOfRangeException(nameof(len));
+        byte[] result = new byte[len];
+        for (int offset = 0; offset < len; offset += 4096)
+        {
+            int take = Math.Min(4096, len - offset);
+            ulong address = checked(addr + (ulong)offset);
+            byte[] chunk = DecodeHexResponse((await RawAsync($"peekabs {address:x} {take}", 4000, ct)).Trim(), "peekabs");
+            if (chunk.Length != take) throw new InvalidOperationException("Native memory read returned an incomplete response.");
+            chunk.CopyTo(result, offset);
+        }
+        return result;
+    }
 
     private async Task<ulong> CallAbsAsync(ulong addr, ulong[] args, CancellationToken ct = default, int timeoutMs = 5000)
     {
         string msg = "callabs " + addr.ToString("x") + string.Concat(args.Select(a => " " + a.ToString("x")));
         string resp = await RawAsync(msg, timeoutMs, ct);
-        using var doc = JsonDocument.Parse(resp);
+        using var doc = ParseBridgeResponse(resp);
         var root = doc.RootElement;
         EnsureOk(root, $"callabs faulted (ok:0): {msg}");
         return ParseHexRet(root, "ret");
@@ -118,12 +140,18 @@ public sealed partial class FlInjectBridge
     /// raw 8-byte XMM0 (use <see cref="XmmFloat"/>; a 64-bit double comes back the same way via
     /// <c>BitConverter.Int64BitsToDouble</c>). For float-arg/float-return engine fns.</summary>
     private async Task<(ulong rax, ulong xmm0)> CallFAbsAsync(ulong addr, ulong[] argBits, CancellationToken ct = default)
+        => await CallFloatAsync("callfabs", addr.ToString("x"), argBits, ct);
+
+    private Task<(ulong rax, ulong xmm0)> CallFSymbolAsync(string symbol, ulong[] argBits, CancellationToken ct)
+        => CallFloatAsync("callf", "sym:" + symbol, argBits, ct);
+
+    private async Task<(ulong rax, ulong xmm0)> CallFloatAsync(string verb, string address, ulong[] argBits, CancellationToken ct)
     {
-        string msg = "callfabs " + addr.ToString("x") + string.Concat(argBits.Select(a => " " + a.ToString("x")));
+        string msg = verb + " " + address + string.Concat(argBits.Select(a => " " + a.ToString("x")));
         string resp = await RawAsync(msg, 5000, ct);
-        using var doc = JsonDocument.Parse(resp);
+        using var doc = ParseBridgeResponse(resp);
         var root = doc.RootElement;
-        EnsureOk(root, $"callfabs faulted (ok:0): {msg}");
+        EnsureOk(root, $"{verb} faulted (ok:0): {msg}");
         return (ParseHexRet(root, "ret"), ParseHexRet(root, "xmm0"));
     }
 
@@ -133,11 +161,12 @@ public sealed partial class FlInjectBridge
     private static float XmmFloat(ulong xmm0) => BitConverter.Int32BitsToSingle(unchecked((int)(uint)xmm0));
 
     /// <summary>Builds a Delphi UnicodeString (refcnt -1 constant) in the scratch buffer; returns the chars ptr.
-    /// TRANSIENT: safe only for args CONSUMED during the call. For a name FL STORES (renames), use
-    /// <see cref="MakeOwnedDelphiStringAsync"/> — FL's UStrAsg setters SHARE (don't copy) a refcnt-(-1) const,
-    /// so this pointer would dangle into scratch once reused.</summary>
-    private async Task<ulong> WriteDelphiStringAsync(string s, CancellationToken ct)
+    /// The lease must span consumption of the temporary pointer. Rename setters must copy it into
+    /// FL-owned storage via UStrAsg; see <see cref="MakeOwnedDelphiStringAsync"/>.</summary>
+    private async Task<ulong> WriteDelphiStringAsync(string s, ScratchLease scratch, CancellationToken ct)
     {
+        if (s.Length > ((int)ScratchOutputSlotOffset - 14) / sizeof(char))
+            throw new ArgumentOutOfRangeException(nameof(s), "The string exceeds the native scratch buffer capacity.");
         byte[] chars = Encoding.Unicode.GetBytes(s);
         var buf = new byte[12 + chars.Length + 2];
         BitConverter.GetBytes((ushort)0x04B0).CopyTo(buf, 0);  // codePage 1200
@@ -145,7 +174,7 @@ public sealed partial class FlInjectBridge
         BitConverter.GetBytes(-1).CopyTo(buf, 4);              // refCnt = -1 (constant)
         BitConverter.GetBytes(s.Length).CopyTo(buf, 8);        // length
         chars.CopyTo(buf, 12);
-        ulong sc = await ScratchAsync(ct);
+        ulong sc = scratch.Address;
         await PokeAbsAsync(sc, buf, ct);
         return sc + 12;
     }
@@ -160,8 +189,8 @@ public sealed partial class FlInjectBridge
     /// "makeUStr"; it is NOT, and it FAULTED (confirmed live: native_set_pattern_name → "call 54c5e0" ok:0).
     /// The const alone is the fix; the setter does the owning copy. Kept as a helper so every rename shares it.
     /// </summary>
-    private Task<ulong> MakeOwnedDelphiStringAsync(string name, CancellationToken ct)
-        => WriteDelphiStringAsync(name ?? string.Empty, ct);
+    private Task<ulong> MakeOwnedDelphiStringAsync(string name, ScratchLease scratch, CancellationToken ct)
+        => WriteDelphiStringAsync(name ?? string.Empty, scratch, ct);
 
     /// <summary>Delphi_UStrAsg(&amp;destField, srcConst) @0x4133F0 — deep-copies a refcount-(-1) const into an
     /// FL-owned heap string at the <paramref name="destFieldAddr"/> string-pointer field. This is FL's own
@@ -172,11 +201,16 @@ public sealed partial class FlInjectBridge
         => CallAsync("4133f0", new ulong[] { destFieldAddr, srcConstChars }, ct);
 
     // ---- shared helper ----
-    private async Task<string> ReadDelphiStringAsync(ulong ptr, CancellationToken ct)
+    private async Task<string> ReadDelphiStringAsync(ulong ptr, CancellationToken ct, int maximumLength = 256, bool strict = false)
     {
         if (ptr == 0) return "";
         int len = BitConverter.ToInt32(await PeekAbsAsync(ptr - 4, 4, ct), 0);
-        if (len <= 0 || len > 256) return "";
+        if (len < 0 || len > maximumLength)
+        {
+            if (strict) throw new InvalidOperationException("Native string length is outside the supported range.");
+            return "";
+        }
+        if (len == 0) return "";
         return System.Text.Encoding.Unicode.GetString(await PeekAbsAsync(ptr, len * 2, ct));
     }
 
@@ -200,10 +234,25 @@ public sealed partial class FlInjectBridge
 
     private static (ulong b, ulong e) FlEngineRange()
     {
-        var m = Process.GetProcessesByName("FL64").FirstOrDefault()?.Modules.Cast<ProcessModule>()
-            .FirstOrDefault(x => x.ModuleName.StartsWith("FLEngine", StringComparison.OrdinalIgnoreCase));
-        ulong b = m != null ? (ulong)m.BaseAddress.ToInt64() : 0;
-        return (b, m != null ? b + (ulong)m.ModuleMemorySize : 0);
+        // Production runs inside the target FL process. Another installed/running FL version must
+        // never supply the address range used to validate this process's virtual function pointers.
+        using var current = Process.GetCurrentProcess();
+        var local = FindEngineRange(current);
+        if (local.b != 0) return local;
+
+        // The legacy external debugger has no PID in its pipe name. Refuse an ambiguous target.
+        Process[] candidates = Process.GetProcessesByName("FL64");
+        try { return candidates.Length == 1 ? FindEngineRange(candidates[0]) : (0, 0); }
+        finally { foreach (Process candidate in candidates) candidate.Dispose(); }
+    }
+
+    private static (ulong b, ulong e) FindEngineRange(Process process)
+    {
+        var module = process.Modules.Cast<ProcessModule>()
+            .FirstOrDefault(item => item.ModuleName.StartsWith("FLEngine", StringComparison.OrdinalIgnoreCase));
+        if (module is null) return (0, 0);
+        ulong address = (ulong)module.BaseAddress.ToInt64();
+        return (address, address + (ulong)module.ModuleMemorySize);
     }
 
     // Cached FLEngine range for the in-module guards (hot paths like ListPluginParams check per item).
@@ -228,9 +277,12 @@ public sealed partial class FlInjectBridge
                     $"{what} resolution invalid (0x{fn:x} not in FLEngine 0x{_modBase:x}..0x{_modEnd:x}); aborting to avoid crashing FL.");
     }
 
-    private static ulong GhidraToRuntime(ulong ghidra)
+    private async Task<ulong> ResolveSymbolAddressAsync(string symbol, CancellationToken ct)
     {
-        (ulong b, ulong e) = FlEngineRange();
-        return b == 0 ? 0 : b + (ghidra - 0x400000);
+        string reply = (await RawAsync("resolve sym:" + symbol, 4000, ct)).Trim();
+        if (!ulong.TryParse(reply, System.Globalization.NumberStyles.HexNumber,
+            System.Globalization.CultureInfo.InvariantCulture, out ulong address) || address == 0)
+            throw new InvalidOperationException($"Native symbol {symbol} is unavailable: {reply}");
+        return address;
     }
 }

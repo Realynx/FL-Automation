@@ -104,6 +104,19 @@ whichever is convenient — prefer the bulk form for many edits.
 otherwise a mixer track + FX slot; values are normalized `0..1`. `ListAvailablePluginsAsync(effects)`
 lists installed generators (`effects=false`) or effects (`effects=true`).
 
+These methods and `QueryPluginParametersAsync` require a hosted-plugin parameter interface,
+as provided by generators such as 3xOsc and hosted VST plugins. The built-in Sampler does not
+expose its envelopes or sample settings through this SDK interface. A Sampler channel can
+still contain and play a sample when parameter enumeration reports that the interface is
+unavailable. Use the channel volume, pan, mute, mixer-routing and sample-loading methods for
+those supported controls; the SDK does not substitute them for plugin parameter indices.
+The text list returns an explanatory message; structured queries and writes fail with that
+same diagnostic. An empty mixer effect slot receives a separate slot-specific diagnostic.
+
+Mixer track indices must fit `GetMixerTrackCountAsync()`, which includes Master and Current.
+For example, a project with 16 inserts has 18 tracks and valid indices `0..17`; callers must
+not assume that every project has 125 inserts.
+
 **Automation clips.** For a channel hosting the Automation Clip generator:
 `ListAutomationPointsAsync`, `AddAutomationPointAsync(channel, timeBeats, value, tension)`,
 `DeleteAutomationPointAsync`.
@@ -134,12 +147,39 @@ if (ctx.Fl is IFlSymbolResolution res)
     FlSymbolStatus? status = await res.GetSymbolStatusAsync();
     // status?.Unresolved names the symbols that did NOT resolve on this FL build.
     // status is null => unknown; treat as "gate nothing" (fail OPEN).
+    // status is { Complete: true, Supported: false } => completed unsupported scan;
+    // honor its unresolved symbols instead of treating zero resolved symbols as unknown.
 }
 ```
 
 Feature-detect and **fail open**: only the real injected bridge implements this — mocks/tests do not — so
 when the cast fails or `GetSymbolStatusAsync` returns null, assume everything is available. Resolution is
 computed once after FL loads and never changes for the process.
+
+Newer bridges report optional metadata on `FlSymbolStatus`: `FileVersion` contains the full engine
+file version, `Scanner` identifies the selected scanner profile, `Supported` indicates whether a
+profile supports scanning that engine, and `Complete` distinguishes finished scanning from startup.
+`Supported=true` does not mean every symbol resolved or every object layout is verified.
+
+An explicitly completed scan is authoritative even with `Resolved=0`, including an unsupported engine
+whose symbols all fail. `Complete=false` is pending and is re-queried. Legacy responses without the
+completion field retain the earlier rule: at least one resolved symbol is needed for an authoritative
+result. Completed results are cached only for their in-process transport; pipe queries are never cached
+because reconnecting can reach a different FL process. Malformed metadata or unavailable transport
+returns unknown, and caller cancellation still propagates.
+
+`MixerLayout` is an optional complete `FlMixerLayout` record supplied by the native profile. It carries
+the track stride and the field/table offsets for names, types, state, sends, and effects. All 14 fields
+are required together, with positive strides, nonnegative offsets, and checked containment for fixed
+track/send fields. Missing, partial, or null layout metadata cannot authorize raw mixer operations;
+the bridge must be upgraded when an older diagnostic lacks this object. Consumers also validate dynamic
+track/send indices before accessing memory.
+
+`MixerTrackStride` remains an optional diagnostic value, separate from the full layout. For old bridge
+responses that omit this scalar field entirely, the central parser adapts exact legacy version 1 to
+`0x1474` and version 2 to `0x1478`. An explicitly null scalar never inherits a stride. Neither this
+compatibility scalar nor a version/year can create a missing `MixerLayout`. The original four-argument
+`FlSymbolStatus` constructor and deconstruction remain available.
 
 ## Error behavior and the trust boundary
 

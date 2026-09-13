@@ -45,6 +45,11 @@ from a **shadow copy** rather than the original file. This buys two things:
   (default `%LocalAppData%\FruityLink\plugin-shadow`), the **original file stays writable** — a
   `dotnet build` over it succeeds and triggers the watcher.
 
+Both layouts copy private dependencies and assets. Flat plugins share the files alongside their
+entry assemblies; separate package folders are preferable when dependencies differ. Startup does
+not delete the shared shadow root: another FL process may still need its files. Each load cleans
+up its own copy; copies left by a process crash may require manual cleanup after all hosts exit.
+
 ### Shared (unified) assemblies
 
 The contract assemblies are deliberately **shared** between the host and every plugin's load context, so
@@ -52,15 +57,26 @@ their types have a single identity across the boundary:
 
 - `FruityLink.Plugins.Abstractions`
 - `FruityLink.Core`
+- `FruityLink.Scripting`
 
-`PluginLoadContext` hands back the host's exact `Assembly` instance for those two. Without this, casting
+`PluginLoadContext` hands back the host's exact `Assembly` instance for each shared assembly. Without this, casting
 the plugin instance to `IFlPlugin`, or passing an `IPluginContext` across, would fail with a
 type-identity mismatch (the classic "unify the contract" ALC gotcha). **Everything else** — your
 plugin's own code and its private dependencies — loads privately from the plugin folder via the
 `deps.json`-driven dependency resolver.
 
+Packages without a dependency manifest also probe sibling managed and native DLLs in their shadow
+directory. The shared assemblies still resolve to the host's exact assembly instances.
+
 Practical consequence: do not ship your own copy of the contract assemblies with a plugin expecting to
 override the host's; they are always resolved from the host.
+
+`FruityLink.Scripting` owns the embedded CPython interpreter for the lifetime of the FL process.
+Sharing it prevents each collectible plugin context from initializing another interpreter or
+releasing native callback code during reload. A plugin disposes its interpreter lease to cancel
+and drain its active scripts and release its SDK callback. The Python DLL stays loaded; changing
+the runtime or installed Python library requires restarting FL Studio. Cancellation is cooperative,
+so a blocking native extension must return before the lease can finish draining.
 
 ## Enable / disable and persistence
 
@@ -70,6 +86,10 @@ override the host's; they are always resolved from the host.
   suspenders, even if `DisableAsync` forgot), drops the instance + context, and requests the ALC unload.
 - A plugin that throws from `EnableAsync`/`DisableAsync` is caught and logged — it never takes the host
   down. All state-changing operations are serialized.
+
+Failed activation invokes `DisableAsync` and sweeps contributions before releasing the failed
+instance. A later enable starts with a fresh instance. `DisableAsync` must therefore tolerate partial
+initialization, including resources created during pre-warm before activation began.
 
 The set of enabled plugin ids is persisted to `%LocalAppData%\FruityLink\plugins.json`, rewritten on
 every enable/disable. At startup the host re-activates every persisted-enabled plugin.
@@ -105,8 +125,11 @@ Hot reload is driven by a `FileSystemWatcher` over the plugins directory (includ
 - Editors and build tools emit a storm of events and briefly lock the output dll mid-write, so events
   are **coalesced over a ~600 ms debounce window** and each changed dll is confirmed **unlocked and
   size-stable** before the reload fires (never mid-write).
-- On reload the host stops the affected plugin(s), unloads the old ALC, loads the current bytes into a
-  **fresh** context, and re-enables anything that was enabled — preserving state.
+- Dependency and sidecar changes reload their owning plugin packages. If build output remains busy,
+  the batch is retried; an expired wait does not authorize loading a half-written DLL.
+- Before stopping a working plugin, reload validates its replacement in a **fresh** context. Invalid
+  replacement bytes leave the working instance active. Once validated, the old plugin is disabled
+  and the replacement is enabled when the previous instance was enabled.
 - Structural changes (added/removed folders, `deps.json`, etc.) trigger a reconcile that discovers new
   plugins and drops entries whose backing file vanished.
 

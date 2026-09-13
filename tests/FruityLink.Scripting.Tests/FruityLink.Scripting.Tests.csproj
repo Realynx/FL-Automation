@@ -1,0 +1,20 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net9.0-windows</TargetFramework>
+    <IsTestProject>true</IsTestProject>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <PackageReference Include="xunit" />
+    <PackageReference Include="xunit.runner.visualstudio" />
+    <ProjectReference Include="../../src/FruityLink.Scripting/FruityLink.Scripting.csproj" />
+    <ProjectReference Include="../FruityLink.EmbeddedPython.TestHost/FruityLink.EmbeddedPython.TestHost.csproj" ReferenceOutputAssembly="false" />
+  </ItemGroup>
+  <Target Name="CopyEmbeddedPythonTestHost" AfterTargets="Build">
+    <ItemGroup>
+      <EmbeddedHostFiles Include="../FruityLink.EmbeddedPython.TestHost/bin/$(Configuration)/net9.0-windows/*" />
+    </ItemGroup>
+    <Copy SourceFiles="@(EmbeddedHostFiles)" DestinationFolder="$(OutDir)embedded-test-host" SkipUnchangedFiles="true" />
+  </Target>
+</Project>

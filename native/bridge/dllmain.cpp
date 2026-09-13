@@ -28,8 +28,17 @@
 #include <stdarg.h>
 #include <string>
 #include <vector>
+#include <atomic>
+#include <cstdlib>
+#include <climits>
+#include <memory>
 
-#include "sigscan.h"   // runtime signature-scanning subsystem (FL version portability; additive)
+#include "sigscan.h"
+#include "fl_window_factory.h"
+#include "mixer_track_insertion.h"
+#include "automation_clip.h"
+#include "delphi_string.h"
+#include "version_scanner.h"   // runtime signature-scanning subsystem (FL version portability; additive)
 
 #pragma comment(lib, "psapi.lib")
 #pragma comment(lib, "user32.lib")
@@ -68,8 +77,11 @@ static const UINT WM_BRIDGE_WINHOST_MAX        = WM_APP + 0x1CA; // toggle maxim
 static const UINT WM_BRIDGE_WINHOST_DOCK       = WM_APP + 0x1CB; // toggle dock/float the FL host form
 static const UINT WM_BRIDGE_TOOLBARINSTALL     = WM_APP + 0x1CC; // (re)materialize plugin toolbar toggle buttons
 static const UINT WM_BRIDGE_TOOLBARREMOVE      = WM_APP + 0x1CD; // eject-safe removal of contributed toolbar buttons
-static HWND     g_mainWnd  = NULL;
-static WNDPROC  g_origProc = NULL;
+static const UINT WM_BRIDGE_MIXERADD           = WM_APP + 0x1CE; // atomic native mixer insertion
+static const UINT WM_BRIDGE_AUTOMATION         = WM_APP + 0x1CF;
+static std::atomic<HWND>    g_mainWnd{NULL};
+static std::atomic<WNDPROC> g_origProc{NULL};
+static SRWLOCK  g_subclassLock = SRWLOCK_INIT;
 
 // ---- in-FL chat tab (re/14): native browser tab + content-switch vtbl[0xd0] hook ----
 static void*  g_browser          = NULL; // *DAT_0157ffb8 (main TVirtualDataBrowser)
@@ -116,6 +128,8 @@ typedef int (*PluginListFn)(char*, int);             // managed PluginGlue.ListJ
 typedef int (*PluginToggleFn)(const char*, int, int);// managed PluginGlue.Toggle
 static PluginListFn   g_pluginListFn   = NULL;
 static PluginToggleFn g_pluginToggleFn = NULL;
+static std::atomic<bool> g_bridgeStopping{false};
+static std::atomic<bool> g_pluginTogglePending{false};
 
 // ---- Settings submenu (task #61) ----
 // A nested "Settings" submenu inside "FL Plugins" (above the plugin list, after a separator). Its
@@ -140,7 +154,6 @@ struct PendingCall {
     bool        useXmm; // route through fl_call_xmm and capture XMM0
     double      xmm0;   // XMM0 return (raw bits) when useXmm
 };
-static PendingCall g_pending; // serialized by the single worker thread
 
 static void logline(const char* s)
 {
@@ -210,18 +223,23 @@ static BOOL CALLBACK enumProc(HWND h, LPARAM lp)
 {
     DWORD pid = 0; GetWindowThreadProcessId(h, &pid);
     if (pid != GetCurrentProcessId()) return TRUE;
-    if (!IsWindowVisible(h)) return TRUE;
-    if (GetWindow(h, GW_OWNER) != NULL) return TRUE;      // top-level only
-    if (GetWindowTextLengthW(h) == 0) return TRUE;        // has a title
-    *(HWND*)lp = h; return FALSE;                          // take the first match
+    // Splash screens, dialogs and our WPF/Avalonia windows are not FL's dispatch
+    // thread. Hidden/minimized FL windows remain valid for headless automation.
+    wchar_t className[128]{};
+    if (!GetClassNameW(h, className, _countof(className)) ||
+        wcscmp(className, L"TFruityLoopsMainForm") != 0) return TRUE;
+    *(HWND*)lp = h; return FALSE;
 }
 static HWND findMainWindow()
 { HWND r = NULL; EnumWindows(enumProc, (LPARAM)&r); return r; }
 
 // ===================== in-FL chat tab (re/14 §1-§9) =====================
-// Rebase a ghidra addr (image base 0x400000) onto the live FLEngine module.
+// Internal legacy addresses obey the same version and symbol gates as wire commands.
 static void* rb(unsigned long long g)
-{ HMODULE e = GetModuleHandleA("FLEngine_x64.dll"); return e ? (void*)((unsigned long long)e + (g - GHIDRA_BASE)) : NULL; }
+{
+    sig_resolveAll();
+    return (void*)(uintptr_t)sig_legacyAddr(GetModuleHandleA("FLEngine_x64.dll"), sig_version(), g);
+}
 
 // Version-portable resolver for the window-host slice. Mirrors rb()'s void* shape but resolves NAME
 // through the runtime signature scanner (sigscan.*) instead of the hardcoded 0x400000 rebase, so the AI
@@ -229,7 +247,7 @@ static void* rb(unsigned long long g)
 // signature miss / not in the table) — every call site must therefore fail-safe on NULL exactly like
 // rb()==NULL (invokeGuarded's __try catches a NULL call; direct data derefs are already SEH-guarded).
 // sig_resolveAll() is idempotent + a no-op until FLEngine is loaded, so this is safe (and cheap: a single
-// bool check after the first resolve) to call from any window-host path regardless of ordering.
+// atomic check after the first resolve) to call from any window-host path regardless of ordering.
 static void* symAddr(const char* name)
 { sig_resolveAll(); return (void*)(uintptr_t)sig_addr(name); }
 
@@ -475,6 +493,9 @@ static void __fastcall ContentSwitchThunk(void* browser, int contentId, char p3,
 // on repeat. (Prevents the duplicate-tab accumulation from repeated opens.)
 static bool DoChatTabOpen()
 {
+    // QuickEdit fields move in 2026 independently of constructor signatures. Refuse before cloning
+    // tabs, creating controls, installing callbacks, or writing any unverified widget field.
+    if (!sig_legacyBrowserSupported()) return false;
     __try {
         void* gb = *(void**)symAddr("MainBrowserPtr");                 // *DAT_0157ffb8 (main browser)
         if (!gb) return false;
@@ -651,6 +672,14 @@ static void __fastcall SendButtonClick(void* data, void* sender)
     (void)data; (void)sender;
     __try { takeInput(true); } __except (EXCEPTION_EXECUTE_HANDLER) {}
 }
+static bool setControlCaption(void* control, const wchar_t* text)
+{
+    DelphiString caption(text);
+    bool ok = false;
+    ULONG_PTR args[2] = { reinterpret_cast<ULONG_PTR>(control), reinterpret_cast<ULONG_PTR>(caption.data()) };
+    invokeGuarded(symAddr("FLwp_SetButtonCaption"), args, 2, &ok);
+    return ok;
+}
 // Create a native "Send" TQuickBtn on the panel + hook its onClick TMethod (+0x144 code / +0x14c data).
 static void* makeButton(void* panel)
 {
@@ -661,7 +690,7 @@ static void* makeButton(void* panel)
     ULONG_PTR pa[2] = { (ULONG_PTR)btn, (ULONG_PTR)panel }; invokeGuarded(*(void**)((char*)vt + 0x138), pa, 2, &ok); // SetParent
     ULONG_PTR c1[2] = { (ULONG_PTR)btn, 0 }; invokeGuarded(symAddr("FLwp_SetterB"), c1, 2, &ok);                                 // (match FLbrz button setup)
     ULONG_PTR c2[2] = { (ULONG_PTR)btn, 0 }; invokeGuarded(symAddr("FLwp_SetterA"), c2, 2, &ok);
-    ULONG_PTR lab[2] = { (ULONG_PTR)btn, (ULONG_PTR)L"Send" }; invokeGuarded(symAddr("FLwp_SetButtonCaption"), lab, 2, &ok);               // caption text
+    ok = setControlCaption(btn, L"Send");               // caption text
     ULONG_PTR ce[2] = { (ULONG_PTR)btn, 6 }; invokeGuarded(symAddr("FLui_WP_SetAlign"), ce, 2, &ok);  // role 6 = clickable button — THIS lays it out/renders (was missing → invisible)
     ULONG_PTR r[1] = { (ULONG_PTR)btn }; invokeGuarded(symAddr("FLwp_Render"), r, 1, &ok);        // render
     __try {                                                            // hook button onClick @+0x1e4 code / +0x1ec data
@@ -711,6 +740,49 @@ static int callPluginToggle(const std::string& id, bool enable)
 {
     if (!resolvePluginFns()) return -2;
     return callToggleRaw(id.c_str(), (int)id.size(), enable ? 1 : 0);
+}
+
+struct PluginToggleRequest {
+    std::string id;
+    bool enable;
+    HWND refreshWindow;
+    HMODULE bridgeModule;
+};
+
+static void CALLBACK pluginToggleWorker(PTP_CALLBACK_INSTANCE instance, void* context)
+{
+    std::unique_ptr<PluginToggleRequest> request(static_cast<PluginToggleRequest*>(context));
+    // A temporary module reference protects the callback during unload, and is released by Windows
+    // only after the callback has returned. No permanent pin or teardown wait on FL's thread.
+    FreeLibraryWhenCallbackReturns(instance, request->bridgeModule);
+    try {
+        if (!g_bridgeStopping.load()) {
+            callPluginToggle(request->id, request->enable);
+            if (!g_bridgeStopping.load() && request->refreshWindow)
+                PostMessageW(request->refreshWindow, WM_BRIDGE_PLUGINSINSTALL, 0, 0);
+        }
+    } catch (...) { logline("plugin menu toggle failed"); }
+    g_pluginTogglePending.store(false);
+}
+
+static void queuePluginToggle(const std::string& id, bool enable)
+{
+    if (g_bridgeStopping.load() || g_pluginTogglePending.exchange(true)) return;
+    HMODULE module = nullptr;
+    if (!GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS,
+                           reinterpret_cast<LPCWSTR>(&pluginToggleWorker), &module)) {
+        g_pluginTogglePending.store(false);
+        return;
+    }
+    try {
+        auto request = std::make_unique<PluginToggleRequest>(PluginToggleRequest{id, enable, g_mainWnd, module});
+        if (TrySubmitThreadpoolCallback(pluginToggleWorker, request.get(), nullptr)) {
+            request.release();
+            return;
+        }
+    } catch (...) { logline("could not queue plugin menu toggle"); }
+    FreeLibrary(module);
+    g_pluginTogglePending.store(false);
 }
 
 // ---- Settings glue (task #61): debug-output window visibility via FlClr_GetSettingsFns ----
@@ -890,19 +962,23 @@ static void pluginItemSetFields(void* item, int tag, bool /*checked*/, bool /*di
 // object = *(void**)slot.
 static void* getActionListPtr()
 {
+    const FlMenuLayout* layout = sig_menuLayout();
+    if (!layout) return NULL;
     __try {
         void* slot = *(void**)symAddr("MainFormPtr");                // PTR_DAT_014a8750 -> &mainForm
         void* mainForm = slot ? *(void**)slot : NULL;                // the main form
-        return mainForm ? *(void**)((char*)mainForm + 0x760) : NULL; // mainForm+0x760 = action list
+        return mainForm ? *(void**)((char*)mainForm + layout->mainMenuOffset) : NULL;
     } __except (EXCEPTION_EXECUTE_HANDLER) { return NULL; }
 }
 static void readToolbarPtrs(void** tf, void** bar)
 {
     *tf = NULL; *bar = NULL;
+    const FlMenuLayout* layout = sig_menuLayout();
+    if (!layout) return;
     __try {
         void* slot = *(void**)symAddr("ToolbarFormPtr");                         // PTR_DAT_014aa4c8 -> &toolbarForm
         void* t = slot ? *(void**)slot : NULL;                       // the toolbar form
-        *tf = t; if (t) *bar = *(void**)((char*)t + 0x878);          // toolbarForm+0x878 = NewMainMenu bar
+        *tf = t; if (t) *bar = *(void**)((char*)t + layout->toolbarMenuOffset);
     } __except (EXCEPTION_EXECUTE_HANDLER) {}
 }
 
@@ -958,7 +1034,7 @@ static bool flIsReady(void)
     void* toolbarForm = derefReady(toolbarSlot);
     void* songObj     = derefReady(songSlot);
     void* chanList    = derefReady(chanSlot);
-    return mainForm && toolbarForm && songObj && chanList;
+    return mainForm && toolbarForm && songObj && chanList && findMainWindow();
 }
 
 // Append one item to the popup root. tag>=0 = a real plugin (checkable, clickable); tag<0 with
@@ -990,9 +1066,9 @@ static void __fastcall PluginItemClick(void* data, void* item)
         long long tag = *(long long*)((char*)item + 0x18);
         if (tag >= 0 && (size_t)tag < g_pluginCache.size()) {
             PluginEntry& e = g_pluginCache[(size_t)tag];
-            callPluginToggle(e.id, !e.enabled);
-            // Rebuild the submenu (refresh checkmarks) AFTER the popup closes — async + main thread.
-            if (g_mainWnd) PostMessageW(g_mainWnd, WM_BRIDGE_PLUGINSINSTALL, 0, 0);
+            // Plugin enable/disable can call back into FL's main thread. Keep the UI callback free
+            // while managed code waits for completion; the worker posts the eventual menu refresh.
+            queuePluginToggle(e.id, !e.enabled);
         }
     } __except (EXCEPTION_EXECUTE_HANDLER) {}
 }
@@ -1534,7 +1610,7 @@ static void* makeToolbarButton(void* panel, const ToolbarBtn& c, int idx, int s,
         __try { *(int*)((char*)btn + 0x48a) |= 0x4001; } __except (EXCEPTION_EXECUTE_HANDLER) {}          // toggle/latch flags
     }
     // Caption/glyph — FUN_005d0ae0 takes a raw PWideChar (proven by makeButton's L"Send"); c_str() matches.
-    { ULONG_PTR lab[2] = { (ULONG_PTR)btn, (ULONG_PTR)c.caption.c_str() }; invokeGuarded(symAddr("FLwp_SetButtonCaption"), lab, 2, &ok); }
+    ok = setControlCaption(btn, c.caption.c_str());
     // Parent onto the ALWAYS-present primary top panel (NOT the .tpr customizable area).
     { ULONG_PTR pa[2] = { (ULONG_PTR)btn, (ULONG_PTR)panel }; invokeGuarded(*(void**)((char*)vt + 0x138), pa, 2, &ok); }
     // Square bounds; anchor fix-right so it stays pinned as the toolbar reflows.
@@ -1610,510 +1686,35 @@ static bool DoToolbarInstall()
 // Eject-safe removal (MAIN thread): teardown every materialized button. Clone of DoMenuContribRemove.
 static bool DoToolbarRemove() { removeToolbarButtons(); return true; }
 
-// ===================== Window-host embed (task #22, Phase 1; re/22-window-host-plan.md) =====================
-// Reparent OUR existing Win32/WPF chat window (a child HWND handed over by the managed FL Agent plugin)
-// INSIDE a real FL window-host form (TCustomWPForm) so the chat sits inside FL's own skinned chrome.
-// Sequence (all FL/UI work on FL's MAIN thread via WM_BRIDGE_WINHOST_*):
-//   1) create an FL host form via the factory (repurpose a simple form class) → HWND @ form+0x2b0;
-//   2) caption it "FL Automate" (FLwp_SetFormCaption@0x841690), pre-show AND post-show (FL can stamp its
-//      class-default "configure scripts" during Realign, so we re-set it after the form is realized);
-//   3) style-strip our child to WS_CHILD|WS_VISIBLE|WS_CLIPSIBLINGS, SetParent it onto the host HWND,
-//      size it to the host client rect;
-//   4) subclass the host HWND so WM_SIZE keeps the child glued to the client rect;
-//   5) show the host form (FLwp_FormSetAppWindowVisible@0x82FBB0).
-// FAIL-SAFE: any failure returns not-ok so the managed side keeps its EXTERNAL top-level window.
-// EJECT-SAFE: teardown SetParent(child,NULL) + restores the host subclass BEFORE unload; the FL host
-// form object itself is left for FL to own/free (the WP-form free fn isn't RE'd — safe-minimal hide).
-//
-// Default host: TScriptDialog (VMT 0xcf3870 → classRef +0x18 = 0xcf3888), descriptor forms.pianorollscriptform.
-// Per the overnight UI RE (re/ui-03-forms.md, re/ui-reuse-cookbook.md R1/R2): TScriptDialog is the ONLY concrete
-// wpform whose FormCreate@0xcf42c0 bakes ZERO child widgets → its content area is a clean canvas to overlay our
-// child, wrapped in a real skinned WP titlebar/border (size 0x7f8, TVectorForm-derived). Realized via
-// FUN_005ddf30 HandleNeeded (see DoWinHostEmbed) → valid host HWND@+0x2b0. The earlier "embed unavailable" was
-// the missing realize step, NOT a bad class. Override at runtime WITHOUT a rebuild via env
-// FRUITYLINK_EMBED_CLASSREF (ghidra hex) to try another clean wpform: TTestForm 0xe35588 | TMsgForm 0xa86548 |
-// TPluginMonitorForm 0xc27820 | TTapTempoForm 0xe3e5f8 | add-channel picker 0xdae368.
-static const unsigned long long EMBED_CLASSREF_DEFAULT = 0xcf3888ULL;   // TScriptDialog — clean empty FL shell
-static unsigned long long g_embedClassRef = 0;          // resolved host-form classRef (default or env override)
-static void*    g_embedHostForm   = NULL;               // FL host form instance (factory slot)
-static HWND     g_embedHostHwnd   = NULL;               // *(form+0x45c) — the FL host form's own top-level window
-static WNDPROC  g_embedHostProc   = NULL;               // host form's original WndProc (for subclass restore)
-static HWND     g_embedChildHwnd  = NULL;               // our reparented child (the managed chat window)
-static LONG_PTR g_embedChildStyle = 0, g_embedChildExStyle = 0; // saved child styles (restore on detach)
-static bool     g_embedActive     = false;             // child currently parented into the host
-static int      g_embedShow       = 0;                 // last requested host visibility
-static HWND     g_embedHostHwnd45c= NULL;              // diagnostic: probe of *(form+0x45c) (WP-control HWND)
-// FL content rect (inside the skinned chrome) in the host client coords — where the child is inset so it sits
-// BELOW the titlebar. Read from the content container *(form+0x11c) at +0x90/0x94/0x98/0x9c after the show/
-// Realign. g_embedContentY doubles as the titlebar height (drag hit-region). (RE 2026-07-01.)
-static int      g_embedContentX = 0, g_embedContentY = 0, g_embedContentW = 0, g_embedContentH = 0;
-// The TBridgedEditorForm content control's HWND — the Win32 parent our child reparents into. FL keeps the
-// content control laid out inside the form chrome (below the titlebar), so the child lands in the right area.
-static HWND     g_embedContentHwnd     = NULL;
-static char     g_embedScriptStub[512] = { 0 };   // zeroed stand-in for TScriptDialog's missing script subcontrols
-// pending request args (set by the worker before SendMessage; read by the main-thread handler)
-static HWND     g_embedReqChild   = NULL;
-static int      g_embedReqShow    = 1;
-static bool     g_embedResultOk   = false;
-static bool     g_winhostOpOk     = false;   // result of the last min/max/dock op (main-thread handler → command)
-// Per-step embed diagnostic: the last step reached / which step FAILED, with values. Surfaced in the
-// winhost_embed / winhost_status JSON ("diag") AND written to %TEMP%/fruitylink-bridge.log via logline,
-// so a failing run is diagnosable from the log without a live debugger. Kept free of '"' / '\\' so it
-// drops into JSON unescaped. SEH-safe (plain char buffer, no allocation on the embed path).
-static char     g_embedDiag[256]  = "none";
-static void embedLog(const char* fmt, ...)
+// Native forms are owned by FL's main thread; the registry and callbacks live for the process.
+// Each command carries isolated request/response state through synchronous main-thread dispatch.
+static HWND windowHostMainWindow() { return g_mainWnd.load(); }
+static NativeWindowRegistry& windowHosts()
 {
-    char b[256];
-    va_list ap; va_start(ap, fmt);
-    _vsnprintf_s(b, sizeof(b), _TRUNCATE, fmt, ap);
-    va_end(ap);
-    for (char* p = b; *p; ++p) if (*p == '"' || *p == '\\') *p = '\'';   // keep JSON-safe
-    strcpy_s(g_embedDiag, sizeof(g_embedDiag), b);
-    char line[300]; sprintf_s(line, sizeof(line), "[winhost] %s", b);
-    logline(line);
+    static auto* factory = new FlWindowFactory(symAddr, invokeGuarded, windowHostMainWindow);
+    static auto* registry = new NativeWindowRegistry(*factory);
+    return *registry;
 }
-
-// Create an FL form via the factory; returns the form instance (slot) or NULL. MAIN thread.
-// `classRef` is an ALREADY-RESOLVED runtime metaclass pointer (from symAddr("HostClassRef") or an env
-// override), NOT a ghidra address — the caller does the resolution so this stays version-agnostic.
-// FAIL-SAFE: a null/unmapped classRef or an unresolved CreateFormFromClassRef both refuse cleanly (a
-// bogus classRef would otherwise AV deep inside FL's factory), so nothing is created on an unknown FL build.
-static void* flCreateForm(void* classRef)
-{
-    void* createFn = symAddr("FLui_CreateFormFromClassRef");
-    if (!classRef || !inFlEngine(classRef) || !createFn) return NULL;
-    void* slot = NULL; bool ok;
-    ULONG_PTR a[2] = { (ULONG_PTR)classRef, (ULONG_PTR)&slot };
-    invokeGuarded(createFn, a, 2, &ok);                // FLui_CreateFormFromClassRef(classRef, &slot)
-    return ok ? slot : NULL;
-}
-
-// Null the OnShow/OnClose/OnKeyDown/OnKeyPress event TMethods (Code@off, Data@off+8) on a form so FL's
-// show/close/key dispatch SKIPS handlers that AV on a bare instance. RE 2026-07-01: TScriptDialog binds
-// OnShow@+0x5d4 (FormShow@0xcf44c0 derefs the missing script-editor subcontrol form+0x7b8 → AV @0xcf44d5),
-// OnClose@+0x564, OnKeyDown@+0x3e0, OnKeyPress@+0x3f0. The dispatch is `if(Code!=0) call` so zeroing Code is
-// enough; we zero Data too. Chrome (titlebar/border) is WM_PAINT-driven off the skin (+0x304/+0x6e8) — it
-// does NOT depend on OnShow, so nulling these keeps the FL chrome + kills the crash. MAIN thread; SEH-safe.
-static void embedNullFormEvents(void* form)
-{
-    __try {
-        // Null EVERY TCustomForm event TMethod (Code@off, Data@off+8). A bare TScriptDialog binds several that
-        // deref its missing script-editor subcontrols (OnShow@0x5d4 → AV @0xcf44d5, plus OnResize/OnActivate/
-        // OnPaint/OnClose/OnKey*/OnHide/OnDestroy). Zeroing all of them makes it a pure passive skinned shell.
-        // Chrome is WM_PAINT/skin-driven (NOT OnPaint), so it still renders. (RE 2026-07-01; propinfo offsets.)
-        const int offs[] = { 0x194, 0x3e0, 0x3f0, 0x400, 0x534, 0x564, 0x574, 0x5a4, 0x5b4, 0x5d4, 0x5f4 };
-        for (int i = 0; i < (int)(sizeof(offs) / sizeof(offs[0])); i++) {
-            *(void**)((char*)form + offs[i])     = NULL;   // TMethod.Code
-            *(void**)((char*)form + offs[i] + 8) = NULL;   // TMethod.Data
-        }
-        // TScriptDialog's paint/region vtable overrides (e.g. FUN_00cf46f0 @0xcf470f) deref script-editor
-        // subcontrols the bare form lacks with NO null-guard on the pointer (only on the field): *(*(form+SLOT)
-        // + 0x78). Point those slots at a zeroed stub so `*(stub+off)==0` makes the guards skip instead of
-        // AV'ing on *(null+off). (RE 2026-07-01: FormShow/region derefs at 0x760/0x770/0x788/0x7a8/0x7b0/0x7b8.)
-        // VERSION-KEY (2026 re-RE 2026-07-09): the struct is byte-identical 25→26 EXCEPT the script-editor
-        // subcontrol pointer, which moved 0x7b8 (2025) → 0x7c0 (2026) — an 8-byte field was inserted before it.
-        // On 2026 the 2026 paint (0xd9a030) derefs [form+0x7c0]; stubbing the stale 0x7b8 there hits a NEW,
-        // unrelated field and leaves the real subcontrol NULL → the [NULL+0x78] AV we saw. The other five slots
-        // are unchanged. (Verified: paint MOV RAX,[form+0x7c0]; CMP [RAX+0x78],0 at the 2026 fault site.)
-        const int scriptEdOff = (sig_version() == FLV_2026_26_1_0) ? 0x7c0 : 0x7b8;
-        const int subctrls[] = { 0x760, 0x770, 0x788, 0x7a8, 0x7b0, scriptEdOff };
-        for (int i = 0; i < (int)(sizeof(subctrls) / sizeof(subctrls[0])); i++)
-            *(void**)((char*)form + subctrls[i]) = g_embedScriptStub;
-    } __except (EXCEPTION_EXECUTE_HANDLER) {}
-}
-
-// Read the TScriptDialog content-area rect (form client coords, BELOW the skinned titlebar) from the content
-// container *(form+0x11c) (WP bounds x/y/w/h @ +0x90/0x94/0x98/0x9c). Sanity-checked; false if not laid out.
-static bool embedReadFormContentRect(int* x, int* y, int* w, int* h)
-{
-    bool ok = false;
-    __try {
-        void* cont = g_embedHostForm ? *(void**)((char*)g_embedHostForm + 0x11c) : NULL;
-        if (cont) {
-            int cx = *(int*)((char*)cont + 0x90), cy = *(int*)((char*)cont + 0x94);
-            int cw = *(int*)((char*)cont + 0x98), ch = *(int*)((char*)cont + 0x9c);
-            if (cw > 16 && ch > 16 && cx >= 0 && cy >= 0 && cx < 10000 && cy < 10000 && cw < 20000 && ch < 20000)
-                { *x = cx; *y = cy; *w = cw; *h = ch; ok = true; }
-        }
-    } __except (EXCEPTION_EXECUTE_HANDLER) { ok = false; }
-    return ok;
-}
-
-// ---- native caption buttons REMOVED (2026-07-09, user request: "didn't fit") ----
-// We previously drew our OWN minimize + maximize/restore glyph buttons onto FL's skinned caption and
-// hit-tested clicks to DoWinHostMinimize/DoWinHostMaximizeToggle. Per the user those didn't fit the chrome,
-// so the caption now carries ONLY FL's own native close (X) button. The programmatic DoWinHostMinimize /
-// DoWinHostMaximizeToggle helpers + the winhost_min/winhost_max commands are KEPT (they are not caption
-// buttons); only the on-caption drawing + hit-testing is gone.
-
-// Forward decls: the represent kick + its one-shot timer are driven from the host subclass below but defined
-// after it (they need g_embedChildHwnd/embedReadFormContentRect helpers). See embedRepresentChild.
-static void embedRepresentChild();
-static const UINT_PTR EMBED_REPRESENT_TIMER = 0xB1D6;
-static int g_representTicks = 0;
-
-// Host-FORM subclass: keep our reparented child at the CONTENT rect (below the skinned titlebar) as FL resizes
-// the form. MAIN thread. SWP_ASYNCWINDOWPOS: our child is on the WPF thread — POST the resize, never block.
-// Falls back to a titlebar-inset of the client if the content container isn't readable.
-static LRESULT CALLBACK embedHostSubProc(HWND h, UINT msg, WPARAM w, LPARAM l)
-{
-    if (msg == WM_CLOSE) {   // native close (X) → HIDE the form (keep it + the child alive so View can re-show it)
-        ShowWindow(h, SW_HIDE); g_embedShow = 0;
-        return 0;            // consume — do NOT let FL destroy the form
-    }
-    if (msg == WM_TIMER && w == EMBED_REPRESENT_TIMER) {   // delayed re-present after a max/restore/dock resize
-        embedRepresentChild();
-        if (++g_representTicks >= 8) KillTimer(h, EMBED_REPRESENT_TIMER);   // fire ~120..960ms, then stop
-        return 0;
-    }
-    WNDPROC orig = g_embedHostProc;
-    LRESULT r = orig ? CallWindowProcW(orig, h, msg, w, l) : DefWindowProcW(h, msg, w, l);
-    if ((msg == WM_SIZE || msg == WM_WINDOWPOSCHANGED) && g_embedChildHwnd && IsWindow(g_embedChildHwnd)) {
-        int cx, cy, cw, ch;
-        if (!embedReadFormContentRect(&cx, &cy, &cw, &ch)) {
-            RECT rc; if (!GetClientRect(h, &rc)) return r;
-            cx = 2; cy = 24; cw = (rc.right - rc.left) - 4; ch = (rc.bottom - rc.top) - 26;
-            if (cw < 1) cw = 1; if (ch < 1) ch = 1;
-        }
-        g_embedContentX = cx; g_embedContentY = cy; g_embedContentW = cw; g_embedContentH = ch;
-        SetWindowPos(g_embedChildHwnd, NULL, cx, cy, cw, ch, SWP_NOACTIVATE | SWP_NOZORDER | SWP_ASYNCWINDOWPOS);
-    }
-    return r;
-}
-
-// Re-fit our reparented child to the CURRENT content rect (after a min/max/dock state change). The host
-// subclass already does this on WM_SIZE/WM_WINDOWPOSCHANGED, but FL's SetWindowState/dock reposition may
-// not always produce a WM_SIZE for the client we care about, so we force one re-fit. MAIN thread; async
-// SetWindowPos (child is on the WPF thread → POST, never block). SEH-safe.
-static void embedRefitChild()
-{
-    __try {
-        if (!g_embedChildHwnd || !IsWindow(g_embedChildHwnd)) return;
-        int cx, cy, cw, ch;
-        if (!embedReadFormContentRect(&cx, &cy, &cw, &ch)) {
-            RECT rc; if (!g_embedHostHwnd || !GetClientRect(g_embedHostHwnd, &rc)) return;
-            cx = 2; cy = 24; cw = (rc.right - rc.left) - 4; ch = (rc.bottom - rc.top) - 26;
-            if (cw < 1) cw = 1; if (ch < 1) ch = 1;
-        }
-        g_embedContentX = cx; g_embedContentY = cy; g_embedContentW = cw; g_embedContentH = ch;
-        SetWindowPos(g_embedChildHwnd, NULL, cx, cy, cw, ch, SWP_NOACTIVATE | SWP_NOZORDER | SWP_ASYNCWINDOWPOS);
-    } __except (EXCEPTION_EXECUTE_HANDLER) {}
-}
-
-// Force the WPF child to actually RE-PRESENT after a max/restore/dock state change. Our child renders in
-// SOFTWARE mode inside FL's foreign parent; after a RESIZE, WPF leaves the enlarged area transparent (FL's
-// form shows through) until a real input event — the classic airspace bug. The verified-live kick is a full
-// Win32 InvalidateRect PLUS a POSTED WM_MOUSEMOVE (queued, so it does NOT move the OS cursor and never
-// clicks). We run this on FL's MAIN thread AFTER FL's synchronous maximize relayout has finished and AFTER
-// the async child re-fit was queued, so the messages arrive at the child at its FINAL size → it presents the
-// fresh frame. (RDW_UPDATENOW / mouse-move alone are NOT enough — they present the pre-relayout frame.)
-static void embedRepresentChild()
-{
-    __try {
-        if (!g_embedChildHwnd || !IsWindow(g_embedChildHwnd)) return;
-        InvalidateRect(g_embedChildHwnd, NULL, TRUE);
-        // WM_MOUSEMOVE (0x0200) at client (20,20); LPARAM = (y<<16)|x. Posted → async, cursor untouched.
-        PostMessageW(g_embedChildHwnd, WM_MOUSEMOVE, 0, (LPARAM)((20 << 16) | 20));
-    } __except (EXCEPTION_EXECUTE_HANDLER) {}
-}
-
-// Schedule the re-present to fire a few times SHORTLY AFTER the state change, on FL's MAIN thread, via a
-// one-shot timer on the host. Running the represent INLINE (right after FUN_00836600) is too early: FL's
-// maximize relayout + our async child re-fit haven't settled, so WPF re-blanks. The timer lets everything
-// settle (verified: the same InvalidateRect+WM_MOUSEMOVE presents cleanly once idle). Fires ~3x then stops;
-// extra fires are harmless (a no-op repaint once presented). SEH-safe; non-blocking. (Timer id + tick
-// counter are declared above embedHostSubProc, which handles the WM_TIMER.)
-static void embedScheduleRepresent()
-{
-    __try {
-        if (!g_embedHostHwnd || !IsWindow(g_embedHostHwnd)) return;
-        g_representTicks = 0;
-        SetTimer(g_embedHostHwnd, EMBED_REPRESENT_TIMER, 120, NULL);   // ~120/240/360ms
-    } __except (EXCEPTION_EXECUTE_HANDLER) {}
-}
-
-// Read the SetWindowState gates for diagnostics (uncertainty #4: a maximize no-op is one of these).
-//   winstate = form+0x4c2 (0 normal / 1 min / 2 max) ; gate34 = (form+0x34 & 0x10) (must be 0) ;
-//   gate389  = form+0x389 (handle/shown gate, must be != 0). -1 = unreadable. SEH-safe.
-static void embedReadGates(int* winstate, int* gate34, int* gate389, void** parent)
-{
-    *winstate = -1; *gate34 = -1; *gate389 = -1; *parent = (void*)-1;
-    __try {
-        if (g_embedHostForm) {
-            *winstate = *(unsigned char*)((char*)g_embedHostForm + 0x4c2);
-            *gate34   = (*(unsigned short*)((char*)g_embedHostForm + 0x34) & 0x10) ? 1 : 0;
-            *gate389  = *(unsigned char*)((char*)g_embedHostForm + 0x389);
-            *parent   = *(void**)((char*)g_embedHostForm + 0x78);   // FL form-parent (0 = floating)
-        }
-    } __except (EXCEPTION_EXECUTE_HANDLER) {}
-}
-
-// Promote a freshly-created floating TScriptDialog into a dockable / maximizable child, exactly like FL's
-// own plugin-editor host. PURE INTEROP: we only set flags on our OWN form object + call FL's own layout/
-// style helpers. No DRM/anti-tamper is touched. Idempotent; runs once at form creation (flags persist on
-// the reused form). Each step is individually SEH-guarded so a bad write can't take FL down. (RE 2026-07-01.)
-//   +0x6d0 |= 2         : dockable-child flag (base 0x801 -> 0x803)
-//   FUN_007e6170(+0x6d2 | 2) : dock/layout style bit + mirror to skin ctx + relayout (vtbl[0x318])
-//   FUN_005de3e0(1)     : focusable/tabstop + set WS_MAXIMIZEBOX (0x10000) on form+0x45c (needed for maximize)
-static void embedPromoteForm(void* form)
-{
-    if (!form) return;
-    __try { *(unsigned short*)((char*)form + 0x6d0) |= 2; } __except (EXCEPTION_EXECUTE_HANDLER) {}
-    {
-        unsigned int cur = 0;
-        __try { cur = *(unsigned int*)((char*)form + 0x6d2); } __except (EXCEPTION_EXECUTE_HANDLER) { cur = 0; }
-        bool ok; ULONG_PTR a[2] = { (ULONG_PTR)form, (ULONG_PTR)(cur | 2u) };
-        invokeGuarded(symAddr("FLui_DockLayout"), a, 2, &ok);                 // dock/layout style + relayout
-        embedLog("promote dockstyle(+0x6d2) ok=%d cur=0x%x", ok ? 1 : 0, cur);
-    }
-    {
-        bool ok; ULONG_PTR a[2] = { (ULONG_PTR)form, 1 };
-        invokeGuarded(symAddr("FLui_Focusable"), a, 2, &ok);                 // focusable/tabstop + WS_MAXIMIZEBOX
-        embedLog("promote focusable(0x5de3e0) ok=%d", ok ? 1 : 0);
-    }
-}
-
-// MAIN thread: ensure the host form exists (create + REALIZE its HWND + subclass + caption once,
-// reused across enable/disable cycles) then style-strip + reparent our child onto it and show it.
-// SEH-guarded throughout; every step writes a diagnostic line (embedLog → g_embedDiag + the bridge log)
-// so a failing run pinpoints the failing step from the log alone.
-//
-// ROOT-CAUSE FIX (was: silent "embed unavailable"): FL forms create their Win32 HWND LAZILY. The form
-// factory (FLui_CreateFormCore@0x841EF0) only realizes the handle for the FIRST/main form (it calls
-// FL's HandleNeeded `FUN_005ddf30@0x5ddf30` then uses form+0x2b0). When FL is already running, the
-// factory skips that path entirely, so a freshly factory-created form has *(form+0x2b0)==0 (unrealized)
-// — the old code read +0x2b0 immediately, saw no window, and bailed → external fallback every time. We
-// now replicate FL's own step: after create, realize the handle (HandleNeeded 0x5ddf30 → HWND at form+0x45c;
-// +0x2b0 is the dead VCL slot, always 0) and read it back. Per the VST-embed RE (2026-07-01): FL only ever
-// SetParents a window from that window's OWN owning thread, and when threads differ it POSTs, never blocks.
-// So this MAIN-thread command ONLY creates/realizes/shows the FL host form and hands back its HWND — it does
-// NOT reparent our WPF child (that would deadlock: our thread blocks in the bridge SendMessage while the main
-// thread's SetParent needs our thread to pump). The managed side does the reparent on the CHILD's own thread.
-// We also do NOT call FormShow (its vtbl[0x358] bring-to-front activates cross-thread); visibility is a plain
-// Win32 ShowWindow(SW_SHOWNOACTIVATE) in DoWinHostShow. The env override FRUITYLINK_EMBED_CLASSREF still lets
-// a different host class be tried live without a rebuild.
-static bool DoWinHostEmbed()
-{
-    g_embedResultOk = false;
-    __try {
-        HWND child = g_embedReqChild;
-        bool flLoaded = GetModuleHandleA("FLEngine_x64.dll") != NULL;
-        embedLog("begin child=0x%p childWin=%d flengine=%d show=%d",
-                 (void*)child, (child ? IsWindow(child) : 0), flLoaded, g_embedReqShow);
-        if (!child || !IsWindow(child)) { embedLog("FAIL step=child-invalid child=0x%p", (void*)child); return false; }
-        if (!flLoaded)                 { embedLog("FAIL step=no-flengine");                     return false; }
-
-        // VERSION GUARD: the embed depends on TScriptDialog struct-FIELD offsets that are class-layout-specific.
-        // Cross-version RE (2026-07-09) proved the layout is byte-identical 2025↔2026 EXCEPT one field — the
-        // script-editor subcontrol pointer moved 0x7b8→0x7c0 (embedNullFormEvents version-keys it). All other
-        // stubbed/read fields (events 0x194..0x5f4, subctrls 0x760..0x7b0, 0x110/0x11c/0x45c/0x2b0/0x4c2) are
-        // identical. So 2025 AND 2026 are validated. Any OTHER (unknown) FL version fails-safe → the managed
-        // side keeps its EXTERNAL top-level window (AI usable, just not docked) rather than risk a bad-offset AV.
-        if (sig_version() != FLV_2025_25_2_5 && sig_version() != FLV_2026_26_1_0) {
-            embedLog("FAIL step=version-guard ver=%d (embed field-offsets validated for 2025/2026 only; keeping external window)", (int)sig_version());
-            return false;
-        }
-
-        // Host = FL's REAL plugin-editor host, TBridgedEditorForm (classRef 0xbd3f38, a TCustomWPForm). Unlike
-        // TScriptDialog it binds NO OnShow, so showing it never runs a plugin-deref'ing handler → no crash. It
-        // is the SAME host FL wraps VST/plugin editor UIs in, so it standardizes our UI + future plugin UIs.
-        // FormCreate is plugin-independent (leaves editor cb/back-ptr @+0x720/+0x728 null → the "Show Editor"
-        // button is an inert no-op). Our child reparents into the content control's HWND (*(form+0x700)),
-        // which FL keeps laid out inside the chrome. (RE 2026-07-01.)
-        if (!g_embedHostForm || !g_embedContentHwnd || !IsWindow(g_embedContentHwnd)) {
-            g_embedHostForm = NULL; g_embedHostHwnd = NULL; g_embedContentHwnd = NULL; g_embedHostProc = NULL; g_embedHostHwnd45c = NULL; g_embedChildHwnd = NULL;
-            // Host classRef = the RESOLVED TScriptDialog metaclass (sym:HostClassRef, or the env override) —
-            // NOT the hardcoded 0xcf3888 ghidra addr, which is only valid on the 2025 build. When the sym is
-            // unresolved on this FL version (g_embedClassRef==0) or resolves outside the FLEngine image, refuse
-            // cleanly so the managed side keeps its external window instead of AV'ing inside the factory.
-            void* classRef = (void*)(uintptr_t)g_embedClassRef;
-            if (!classRef || !inFlEngine(classRef)) {
-                embedLog("FAIL step=classref-unresolved classRef=0x%p (sym:HostClassRef null/unmapped on this FL version)", classRef);
-                return false;
-            }
-            void* form = flCreateForm(classRef);            // TScriptDialog — chromed skinned shell (TNewCaption titlebar + border)
-            embedLog("create host form=0x%p classRef=0x%p", form, classRef);
-            if (!form) { embedLog("FAIL step=create-form"); return false; }
-            g_embedHostForm = form;
-            embedNullFormEvents(form);                       // null OnShow/OnClose/OnKeyDown/OnKeyPress → no bare-form script-widget AV
-
-            // Caption (skinned titlebar text). form+0x110 = FCaption (VCL UnicodeString). On a bare factory
-            // form the DFM is NOT streamed, so +0x110 is UNINITIALIZED GARBAGE — FLwp_SetFormCaption's inner
-            // Delphi_UStrAsg then faults releasing the bogus "old" value (`*(old-8)`), which is the ok=0 we saw.
-            // Fix: log the raw value for diagnosis, force +0x110 to nil (so the assign's release-old is a no-op),
-            // THEN set the caption BEFORE the first paint so the skinned titlebar picks it up on layout.
-            {
-                void* cur = (void*)-1;
-                __try { cur = *(void**)((char*)form + 0x110); } __except (EXCEPTION_EXECUTE_HANDLER) { cur = (void*)-2; }
-                embedLog("FCaption@+0x110 before=0x%p", cur);
-                __try { *(void**)((char*)form + 0x110) = NULL; } __except (EXCEPTION_EXECUTE_HANDLER) {}
-                void* cap = makeUStr(L"FL Automate");
-                if (cap) { bool ok; ULONG_PTR ca[2] = { (ULONG_PTR)form, (ULONG_PTR)cap }; invokeGuarded(symAddr("FLwp_SetFormCaption"), ca, 2, &ok); embedLog("caption(pre-show) ok=%d", ok ? 1 : 0); }
-            }
-
-            // SHOW with chrome — SetVisible (FUN_00833ec0 → SetShowing → Realign lays out titlebar + content)
-            // + z-order refresh (FUN_005d0ea0). OnShow is nulled so no script-widget AV; NO bring-to-front.
-            { bool ok; ULONG_PTR va[2] = { (ULONG_PTR)form, 1 }; invokeGuarded(symAddr("FLwp_SetVisible"), va, 2, &ok); embedLog("SetVisible ok=%d", ok ? 1 : 0); }
-            { bool ok; ULONG_PTR va[1] = { (ULONG_PTR)form };    invokeGuarded(symAddr("FLui_ZOrderRefresh"), va, 1, &ok); }
-
-            // Post-show caption. A WP form has THREE separate caption fields (RE 2026-07-09): +0x110 VCL
-            // FCaption and +0x2b0 OS-window text (both written by FLwp_SetFormCaption) — AND +0x2a0, the
-            // WP-control wide-string that FL's SKINNED titlebar/tab actually PAINTS. We had only ever set
-            // +0x110/+0x2b0, so every "ok=1" caption write left the skin showing the class-default "configure
-            // scripts" (which lands in +0x2a0 during construction). THE fix: also set +0x2a0 via the generic WP
-            // caption setter FLwp_SetButtonCaption (0x5d0ae0/0x60a3c0 — the SAME fn FL's own FormShow uses on
-            // this field, and the same one makeButton uses for "Send") with a raw null-terminated PWideChar.
-            // Post-show + OnShow nulled ⇒ nothing re-stamps it, so ours wins. Keep the +0x110/+0x2b0 write too
-            // (drives Alt-Tab / taskbar text).
-            { void* cap2 = makeUStr(L"FL Automate");
-              if (cap2) { bool ok; ULONG_PTR ca[2] = { (ULONG_PTR)form, (ULONG_PTR)cap2 }; invokeGuarded(symAddr("FLwp_SetFormCaption"), ca, 2, &ok); embedLog("caption(post-show,+110) ok=%d", ok ? 1 : 0); } }
-            { bool ok; ULONG_PTR sc[2] = { (ULONG_PTR)form, (ULONG_PTR)L"FL Automate" }; invokeGuarded(symAddr("FLwp_SetButtonCaption"), sc, 2, &ok); embedLog("caption(post-show,+2a0 skin) ok=%d", ok ? 1 : 0); }
-
-            // The form's OWN top-level HWND = the chromed window (FLui_WP_GetHandle → *(form+0x45c); fallback
-            // *(form+0x2b0)). We parent our child into THIS window and inset it to the content rect — the
-            // content container @form+0x11c is NOT a windowed control, so we can't SetParent into it.
-            HWND formHwnd = NULL;
-            { bool gok; ULONG_PTR ga[1] = { (ULONG_PTR)form }; formHwnd = (HWND)invokeGuarded(symAddr("FLui_WP_GetHandle"), ga, 1, &gok); }
-            if (!formHwnd || !IsWindow(formHwnd)) { __try { formHwnd = *(HWND*)((char*)form + 0x2b0); } __except (EXCEPTION_EXECUTE_HANDLER) { formHwnd = NULL; } }
-            if (!formHwnd || !IsWindow(formHwnd)) { embedLog("FAIL step=no-form-hwnd"); return false; }
-            g_embedHostHwnd = formHwnd; g_embedContentHwnd = formHwnd;   // child parents into the form window
-            embedLog("formHwnd=0x%p", (void*)formHwnd);
-
-            // Center over FL + force a frame paint (titlebar/border).
-            {
-                int hw = 900, hh = 640, x = 200, y = 120; RECT mr;
-                if (g_mainWnd && GetWindowRect(g_mainWnd, &mr)) {
-                    x = mr.left + ((mr.right - mr.left) - hw) / 2;
-                    y = mr.top  + ((mr.bottom - mr.top) - hh) / 2;
-                    if (x < mr.left + 20) x = mr.left + 20;
-                    if (y < mr.top  + 20) y = mr.top  + 20;
-                }
-                SetWindowPos(formHwnd, NULL, x, y, hw, hh, SWP_NOZORDER | SWP_NOACTIVATE);
-                RedrawWindow(formHwnd, NULL, NULL, RDW_INVALIDATE | RDW_FRAME | RDW_ALLCHILDREN);
-            }
-
-            // Subclass the FORM's HWND to keep our child at the content rect on resize.
-            g_embedHostProc = (WNDPROC)SetWindowLongPtrW(formHwnd, GWLP_WNDPROC, (LONG_PTR)embedHostSubProc);
-            embedLog("subclass formHwnd origProc=0x%p", (void*)g_embedHostProc);
-
-            // Promote the floating shell to a dockable/maximizable child (like FL's plugin-editor host).
-            // Done once on the freshly-created form (flags persist on the reused instance).
-            embedPromoteForm(form);
-        } else {
-            embedLog("reuse form=0x%p content=0x%p", g_embedHostForm, (void*)g_embedContentHwnd);
-            { bool ok; ULONG_PTR va[2] = { (ULONG_PTR)g_embedHostForm, 1 }; invokeGuarded(symAddr("FLwp_SetVisible"), va, 2, &ok); }   // re-show
-            if (g_embedHostHwnd && IsWindow(g_embedHostHwnd)) ShowWindow(g_embedHostHwnd, SW_SHOWNOACTIVATE);
-        }
-
-        g_embedShow = 1;
-        if (!embedReadFormContentRect(&g_embedContentX, &g_embedContentY, &g_embedContentW, &g_embedContentH)) {
-            RECT rc; if (GetClientRect(g_embedHostHwnd, &rc)) {
-                g_embedContentX = 2; g_embedContentY = 24;
-                g_embedContentW = (rc.right - rc.left) - 4; g_embedContentH = (rc.bottom - rc.top) - 26;
-                if (g_embedContentW < 1) g_embedContentW = 1; if (g_embedContentH < 1) g_embedContentH = 1;
-            }
-        }
-        g_embedChildHwnd = child;
-        g_embedActive = true;
-        g_embedResultOk = true;
-        embedLog("OK host ready form=0x%p host=0x%p content=0x%p client=%dx%d (TScriptDialog chromed)",
-                 g_embedHostForm, (void*)g_embedHostHwnd, (void*)g_embedContentHwnd, g_embedContentW, g_embedContentH);
-        return true;
-    } __except (EXCEPTION_EXECUTE_HANDLER) { embedLog("FAIL step=SEH-exception"); return false; }
-}
-
-// MAIN thread: toggle the HOST form's visibility (the View ▸ FL Agent toggle drives this when embedded).
-static bool DoWinHostShow()
-{
-    __try {
-        if (!g_embedActive || !g_embedHostHwnd || !IsWindow(g_embedHostHwnd)) return false;
-        int vis = g_embedReqShow ? 1 : 0;
-        // Show/hide WITHOUT activation. RE 2026-07-01: FL's FormShow (0x7ea5d0) does a vtbl[0x358]
-        // bring-to-front that activates cross-thread (part of the original hang). Plain Win32 ShowWindow on
-        // the host (a main-thread window) is safe and sufficient for a floating FL-skinned frame.
-        ShowWindow(g_embedHostHwnd, vis ? SW_SHOWNOACTIVATE : SW_HIDE);
-        g_embedShow = vis;
-        if (vis) { embedRefitChild(); embedScheduleRepresent(); }   // re-present after a bridge-driven re-show
-        embedLog("show host vis=%d (ShowWindow SW_%s)", vis, vis ? "SHOWNOACTIVATE" : "HIDE");
-        return true;
-    } __except (EXCEPTION_EXECUTE_HANDLER) { return false; }
-}
-
-// MAIN thread: REVERSIBLE close (plugin disable) — detach our child + restore its styles + hide the host
-// form, but KEEP the host form + subclass so a later re-embed reuses them (no per-cycle form leak). The
-// full subclass restore (for DLL unload) is the forceRestoreHook backstop below.
-static bool DoWinHostClose()
-{
-    __try {
-        // The managed side detaches our child (SetParent NULL + style restore) on the child's OWN thread
-        // BEFORE calling this (FL's teardown order; doing it here would cross-thread-deadlock again). Here we
-        // only hide the host form (a main-thread window) via Win32 ShowWindow, keeping the form + its subclass
-        // standing so a later re-embed reuses them (no per-cycle form leak).
-        if (g_embedHostHwnd && IsWindow(g_embedHostHwnd)) ShowWindow(g_embedHostHwnd, SW_HIDE);
-        g_embedChildHwnd = NULL; g_embedActive = false; g_embedShow = 0;
-        return true;
-    } __except (EXCEPTION_EXECUTE_HANDLER) { return false; }
-}
-
-// MAIN thread: minimize the FL host form via FL's own SetWindowState (FUN_00836600, state 1 = SW_MINIMIZE).
-// SEH-guarded; re-fits the child (a no-op while minimized, applied again on restore via the subclass).
-static bool DoWinHostMinimize()
-{
-    __try {
-        if (!g_embedHostForm || !g_embedHostHwnd || !IsWindow(g_embedHostHwnd)) { embedLog("minimize SKIP: no host"); return false; }
-        bool ok; ULONG_PTR a[2] = { (ULONG_PTR)g_embedHostForm, 1 };   // state 1 = minimize
-        invokeGuarded(symAddr("FLwp_SetWindowState"), a, 2, &ok);
-        int ws, g34, g389; void* par; embedReadGates(&ws, &g34, &g389, &par);
-        embedLog("minimize ok=%d nowState=%d gate34=%d gate389=%d", ok ? 1 : 0, ws, g34, g389);
-        return ok;
-    } __except (EXCEPTION_EXECUTE_HANDLER) { embedLog("minimize SEH"); return false; }
-}
-
-// MAIN thread: toggle maximize/restore the FL host form. State byte form+0x4c2: 2=max → restore(0), else max(2).
-// After the state flip we re-fit the child to the new content rect (the subclass also fires on WM_SIZE).
-static bool DoWinHostMaximizeToggle()
-{
-    __try {
-        if (!g_embedHostForm || !g_embedHostHwnd || !IsWindow(g_embedHostHwnd)) { embedLog("maximize SKIP: no host"); return false; }
-        unsigned char st = 0;
-        __try { st = *(unsigned char*)((char*)g_embedHostForm + 0x4c2); } __except (EXCEPTION_EXECUTE_HANDLER) { st = 0; }
-        unsigned char target = (st == 2) ? 0 : 2;                      // toggle max <-> restore
-        bool ok; ULONG_PTR a[2] = { (ULONG_PTR)g_embedHostForm, target };
-        invokeGuarded(symAddr("FLwp_SetWindowState"), a, 2, &ok);
-        embedRefitChild();
-        embedScheduleRepresent();   // re-present the child at the new size once FL's relayout settles
-        int ws, g34, g389; void* par; embedReadGates(&ws, &g34, &g389, &par);
-        embedLog("maximize ok=%d from=%d target=%d nowState=%d gate34=%d gate389=%d",
-                 ok ? 1 : 0, st, target, ws, g34, g389);
-        return ok;
-    } __except (EXCEPTION_EXECUTE_HANDLER) { embedLog("maximize SEH"); return false; }
-}
-
-// MAIN thread: in-workspace docking is DEFERRED (safe no-op) — see the block comment below for why.
-//
-// The RE is done + correct: FLui_Dock_RepositionHostedWindow@0x114b810 toggles dock/float via the FORM's
-// vtbl[0x138](form, dockHostObject) where dockHost = *(mainForm+0xb18) (mainForm = g_mainForm / **rb(0x14a8750)),
-// clamps into the dock-host client (dockHost.vtbl[0xe8]) and SetBounds (form.vtbl[0x188]). It sets FL's
-// object-model parent (form+0x78 = dockHost, confirmed live).
-//
-// BLOCKER (confirmed live via GetParent/GetWindowLong 2026-07-01): that reparent flips the form from a
-// top-level POPUP to a WS_CHILD, which makes VCL DESTROY + RECREATE the form's Win32 handle. GetParent(oldHwnd)
-// →0, GWL_STYLE→0, rect→0 after the call: the HWND we subclassed + reparented our WPF child into is GONE. Our
-// child is orphaned (Windows reparents it to the desktop → it pops out as a separate floating window that FL
-// then repositions in screen coords — exactly the user-visible symptom). Making docking work therefore needs a
-// full RE-EMBED after the toggle: re-acquire the new formHwnd (*(form+0x45c)), re-subclass it, and re-parent
-// our WPF child into it ON THE CHILD'S THREAD (+ re-pin/re-present) — for BOTH the dock and the float
-// directions (float recreates the handle too). That cross-thread re-embed is a real chunk of work with its own
-// failure modes; per the risk guidance we DEFER it rather than destabilise the working min/max/float. So this
-// is a documented no-op: it never calls the reposition, so it can NEVER orphan the child / break the embed.
-static bool DoWinHostDock()
-{
-    embedLog("dock DEFERRED (no-op): FL dock recreates the form handle + orphans the embedded child; see comment");
-    return false;
-}
+struct PendingWindowCommand { std::string request; std::string response = "{\"ok\":0,\"reason\":\"main-window-unavailable\"}"; };
 
 static LRESULT CALLBACK subProc(HWND h, UINT msg, WPARAM w, LPARAM l)
 {
+    if (msg == WM_BRIDGE_AUTOMATION) {
+        auto pending = reinterpret_cast<PendingWindowCommand*>(l);
+        if (pending) {
+            FlAutomationBackend backend(symAddr, invokeGuarded, sig_automationLayout);
+            pending->response = executeAutomationCommand(pending->request, backend);
+        }
+        return 0;
+    }
+    if (msg == WM_BRIDGE_MIXERADD) {
+        auto pending = reinterpret_cast<PendingWindowCommand*>(l);
+        if (pending) {
+            FlMixerTrackInsertionBackend backend(symAddr, invokeGuarded, sig_mixerLayout);
+            pending->response = executeMixerTrackInsertion(pending->request, backend);
+        }
+        return 0;
+    }
     if (msg == WM_BRIDGE_CHATOPEN)  { g_chatOpenOk = DoChatTabOpen();  return 0; }
     if (msg == WM_BRIDGE_CHATCLOSE) { DoChatTabClose();                return 0; }
     if (msg == WM_BRIDGE_CHATSAY)   { sayMain();                       return 0; }
@@ -2124,38 +1725,63 @@ static LRESULT CALLBACK subProc(HWND h, UINT msg, WPARAM w, LPARAM l)
     if (msg == WM_BRIDGE_MENUCONTRIBREMOVE)  { DoMenuContribRemove();  return 0; }
     if (msg == WM_BRIDGE_TOOLBARINSTALL) { DoToolbarInstall(); return 0; }
     if (msg == WM_BRIDGE_TOOLBARREMOVE)  { DoToolbarRemove();  return 0; }
-    if (msg == WM_BRIDGE_WINHOST_EMBED) { g_embedResultOk = DoWinHostEmbed(); return 0; }
-    if (msg == WM_BRIDGE_WINHOST_SHOW)  { DoWinHostShow();              return 0; }
-    if (msg == WM_BRIDGE_WINHOST_CLOSE) { DoWinHostClose();             return 0; }
-    if (msg == WM_BRIDGE_WINHOST_MIN)   { g_winhostOpOk = DoWinHostMinimize();       return 0; }
-    if (msg == WM_BRIDGE_WINHOST_MAX)   { g_winhostOpOk = DoWinHostMaximizeToggle(); return 0; }
-    if (msg == WM_BRIDGE_WINHOST_DOCK)  { g_winhostOpOk = DoWinHostDock();           return 0; }
-    if (msg == WM_BRIDGE_CALL) {
-        if (g_pending.useXmm)
-            g_pending.ret = invokeGuardedXmm(g_pending.fn, g_pending.arg, &g_pending.xmm0, &g_pending.ok);
-        else
-            g_pending.ret = invokeGuarded(g_pending.fn, g_pending.arg, g_pending.argc, &g_pending.ok);
+    if (msg == WM_BRIDGE_WINHOST_EMBED) {
+        auto pending = reinterpret_cast<PendingWindowCommand*>(l);
+        if (pending) pending->response = windowHosts().execute(pending->request);
         return 0;
     }
-    return CallWindowProcW(g_origProc, h, msg, w, l);
+    if (msg == WM_BRIDGE_WINHOST_CLOSE) { windowHosts().closeDetached(); return 0; }
+    if (msg == WM_BRIDGE_CALL) {
+        auto* pending = reinterpret_cast<PendingCall*>(l);
+        if (!pending) return 0;
+        if (pending->useXmm)
+            pending->ret = invokeGuardedXmm(pending->fn, pending->arg, &pending->xmm0, &pending->ok);
+        else
+            pending->ret = invokeGuarded(pending->fn, pending->arg, pending->argc, &pending->ok);
+        return 0;
+    }
+    WNDPROC original = g_origProc;
+    if (msg == WM_NCDESTROY) {
+        AcquireSRWLockExclusive(&g_subclassLock);
+        if (g_mainWnd == h) { g_mainWnd = NULL; g_origProc = NULL; }
+        ReleaseSRWLockExclusive(&g_subclassLock);
+    }
+    // A corrupt or duplicate hook must never recurse through itself.
+    return original && original != subProc ? CallWindowProcW(original, h, msg, w, l) : DefWindowProcW(h, msg, w, l);
 }
 
 static bool ensureSubclassed()
 {
-    if (g_mainWnd && g_origProc) return true;
-    HWND w = findMainWindow();
-    if (!w) return false;
-    g_mainWnd = w;
-    g_origProc = (WNDPROC)SetWindowLongPtrW(w, GWLP_WNDPROC, (LONG_PTR)subProc);
-    return g_origProc != NULL;
+    AcquireSRWLockExclusive(&g_subclassLock);
+    bool installed = false;
+    if (g_mainWnd && IsWindow(g_mainWnd) && g_origProc && g_origProc != subProc) installed = true;
+    else {
+        g_mainWnd = NULL; g_origProc = NULL;
+        HWND w = findMainWindow();
+        WNDPROC original = w ? reinterpret_cast<WNDPROC>(GetWindowLongPtrW(w, GWLP_WNDPROC)) : NULL;
+        if (original && original != subProc) {
+            // Publish the forwarding target before the replacement can receive a message.
+            g_mainWnd = w; g_origProc = original;
+            WNDPROC previous = reinterpret_cast<WNDPROC>(SetWindowLongPtrW(w, GWLP_WNDPROC, (LONG_PTR)subProc));
+            installed = previous && previous != subProc;
+            if (installed) g_origProc = previous;
+            else { g_mainWnd = NULL; g_origProc = NULL; }
+        }
+    }
+    ReleaseSRWLockExclusive(&g_subclassLock);
+    return installed;
 }
 
-static void revertSubclass()
+static void revertSubclass(bool waitForOwner = true)
 {
+    if (waitForOwner) AcquireSRWLockExclusive(&g_subclassLock);
+    else if (!TryAcquireSRWLockExclusive(&g_subclassLock)) return;
     if (g_mainWnd && g_origProc) {
-        SetWindowLongPtrW(g_mainWnd, GWLP_WNDPROC, (LONG_PTR)g_origProc);
+        if (IsWindow(g_mainWnd) && GetWindowLongPtrW(g_mainWnd, GWLP_WNDPROC) == (LONG_PTR)subProc)
+            SetWindowLongPtrW(g_mainWnd, GWLP_WNDPROC, (LONG_PTR)g_origProc.load());
         g_origProc = NULL; g_mainWnd = NULL;
     }
+    ReleaseSRWLockExclusive(&g_subclassLock);
 }
 
 // Run fn on the main thread via the subclass + SendMessage. Returns false if no main window.
@@ -2163,18 +1789,21 @@ static bool callOnMain(void* fn, ULONG_PTR* a, int argc, ULONG_PTR* ret, bool* o
                        bool useXmm = false, double* xmm0 = NULL)
 {
     if (!ensureSubclassed()) return false;
-    g_pending.fn = fn; g_pending.argc = argc; g_pending.ok = false; g_pending.ret = 0;
-    g_pending.useXmm = useXmm; g_pending.xmm0 = 0.0;
+    HWND target = g_mainWnd.load();
+    if (!target || !IsWindow(target)) return false;
+    PendingCall pending{};
+    pending.fn = fn; pending.argc = argc;
+    pending.useXmm = useXmm;
     // XMM path always loads 4 register slots; pad with zero.
-    for (int i = 0; i < 8; i++) g_pending.arg[i] = (i < argc) ? a[i] : 0;
-    SendMessageW(g_mainWnd, WM_BRIDGE_CALL, 0, 0); // blocks until main thread runs subProc
-    *ret = g_pending.ret; *ok = g_pending.ok;
-    if (xmm0) *xmm0 = g_pending.xmm0;
+    for (int i = 0; i < 8; i++) pending.arg[i] = (i < argc) ? a[i] : 0;
+    SendMessageW(target, WM_BRIDGE_CALL, 0, (LPARAM)&pending); // stack state remains alive until completion
+    *ret = pending.ret; *ok = pending.ok;
+    if (xmm0) *xmm0 = pending.xmm0;
     return true;
 }
 
 static DWORD mainThreadId()
-{ HWND w = g_mainWnd ? g_mainWnd : findMainWindow(); if (!w) return 0; DWORD pid; return GetWindowThreadProcessId(w, &pid); }
+{ HWND w = g_mainWnd.load(); if (!w) w = findMainWindow(); if (!w) return 0; DWORD pid; return GetWindowThreadProcessId(w, &pid); }
 
 static int parseArgs(const char* p, ULONG_PTR* out) // space-separated hex; returns count (<=8)
 {
@@ -2201,28 +1830,17 @@ static std::string hexDump(unsigned long long addr, size_t len)
 // True if request `s` begins with command prefix `p`.
 static bool starts(const std::string& s, const char* p) { return s.rfind(p, 0) == 0; }
 
-// Resolve a command address: absolute as-is, else rebased onto the loaded FLEngine module.
-// Sets *ok=false (returns 0) when FLEngine isn't loaded — callers surface "err:no-flengine".
+// Resolve a command address: absolute as-is, otherwise use the shared version-safe legacy resolver.
 static unsigned long long resolveAddr(bool absolute, unsigned long long a, bool* ok)
 {
     if (absolute) { *ok = true; return a; }
-    HMODULE e = GetModuleHandleA("FLEngine_x64.dll");
-    if (!e) { *ok = false; return 0ULL; }
-    // TABLE-AWARE legacy hex path. The C# side hardcodes 2025 Ghidra addresses; the linear rebase below
-    // is only correct on a 2025 engine. If this address is a resolved symbol, return its version-correct
-    // runtime address (fixes the whole un-migrated hex surface at once). On a CONFIRMED 2026 engine an
-    // UNMAPPED address would rebase to the WRONG place (an uncatchable AV inside FL), so REFUSE it — the
-    // caller surfaces a clean "err" and the op fails gracefully instead of crashing. 2025/unknown keep the
-    // old linear rebase so a known-good build is never regressed.
     sig_resolveAll();
-    unsigned long long tabled = sig_addrByGhidra2025(a);
-    if (tabled) { *ok = true; return tabled; }
-    if (sig_version() == FLV_2026_26_1_0) { *ok = false; return 0ULL; }   // 2026 + unmapped -> refuse, don't AV
-    *ok = true;
-    return (unsigned long long)e + (a - GHIDRA_BASE);
+    unsigned long long resolved = sig_legacyAddr(GetModuleHandleA("FLEngine_x64.dll"), sig_version(), a);
+    *ok = resolved != 0;
+    return resolved;
 }
 
-// Runtime signature-scanning wire support (ADDITIVE — the legacy hex path is untouched). If the address
+// Runtime signature-scanning wire support. If the address
 // token at *pp begins with "sym:NAME", resolve NAME via the sigscan table to an ABSOLUTE address, advance
 // *pp past the token, and return 1 (ok, *real set) or -1 (error, *err set: unknown-sym / unresolved). A
 // `sym:` token is refused loudly rather than guessing — a wrong address is an uncatchable AV inside FL.
@@ -2233,11 +1851,11 @@ static int trySymToken(const char** pp, unsigned long long* real, std::string* e
     while (*p == ' ' || *p == '\t') p++;
     if (strncmp(p, "sym:", 4) != 0) return 0;
     p += 4;
-    char name[128]; int i = 0;
-    while (*p && *p != ' ' && *p != '\t' && i < 127) name[i++] = *p++;
-    name[i] = 0;
+    const char* nameStart = p;
+    while (*p && *p != ' ' && *p != '\t') ++p;
+    std::string name(nameStart, p);
     sig_resolveAll();                                   // idempotent; resolves-at-init if not done yet
-    SymEntry* e = sig_findSym(name);
+    const SymEntry* e = sig_findSym(name.c_str());
     if (!e)                     { *err = std::string("err:unknown-sym:") + name; return -1; }
     if (e->status != RS_Ok)     { *err = std::string("err:unresolved:") + name; return -1; }
     *real = (unsigned long long)e->addr;
@@ -2290,6 +1908,7 @@ static bool setHintRaw(const wchar_t* text)
 
 static std::string handleCmd(const std::string& req)
 {
+    if (g_bridgeStopping.load()) return "err:bridge-stopping";
     // Resolve the signature-scanning table ONCE, up front — BEFORE any dispatch (including fl_ready).
     // sig_resolveAll() only needs FLEngine_x64.dll loaded (it scans .text), which is always true when we
     // are processing a command; it is idempotent (guarded by g_symsResolved) and a cheap no-op after the
@@ -2309,6 +1928,19 @@ static std::string handleCmd(const std::string& req)
     // Signature-scanning diagnostics (like `info`): {"ver":N,"ok":N,"fail":M,"unresolved":[{name,why}]}.
     // The managed tool registry uses this to mark tools whose symbol didn't resolve as UNAVAILABLE.
     if (req == "syms") { sig_resolveAll(); return sig_symsJson(); }
+
+    // Internal managed transport uses this for FL addresses passed as arguments (e.g. typeinfo).
+    if (starts(req, "resolve ")) {
+        const char* p = req.c_str() + 8;
+        unsigned long long real = 0;
+        std::string error;
+        int status = trySymToken(&p, &real, &error);
+        if (status == -1) return error;
+        while (*p == ' ' || *p == '\t') ++p;
+        if (status != 1 || *p) return "err:usage resolve sym:NAME";
+        char result[32]; sprintf_s(result, sizeof(result), "%llx", real);
+        return result;
+    }
 
     // Return the absolute address of a zeroed scratch buffer (pass to call as an out-param, then peekabs it).
     if (req == "scratch") {
@@ -2623,79 +2255,31 @@ static std::string handleCmd(const std::string& req)
         return js.empty() ? "{\"host\":0}" : js;
     }
 
-    // ---- Window-host embed (task #22, Phase 1) ----
-    // The managed FL Agent plugin hands over its chat window's child HWND; we reparent it inside an FL
-    // host form on the MAIN thread. Returns ok=0 on any failure → the plugin keeps its external window.
-    if (starts(req, "winhost_embed ")) {
-        if (!ensureSubclassed()) return "err:no-mainwindow";
-        unsigned long long hw = 0; int show = 1;
-        if (sscanf_s(req.c_str() + 14, "%llx %d", &hw, &show) < 1) return "err:usage winhost_embed <hwndHex> [show]";
-        // Resolve the host-form classRef to a RUNTIME pointer (retried until non-null so a late symbol
-        // resolution still works). Two sources: an explicit FRUITYLINK_EMBED_CLASSREF *ghidra hex* (dev
-        // override to try another clean wpform without a rebuild → legacy rb() rebase, 2025-only), else the
-        // version-portable sym:HostClassRef (0 until it is added/refined in g_syms — DoWinHostEmbed then
-        // fails safe rather than feeding a bogus classRef to the factory).
-        if (!g_embedClassRef) {
-            char ev[40]; DWORD n = GetEnvironmentVariableA("FRUITYLINK_EMBED_CLASSREF", ev, sizeof(ev));
-            unsigned long long cr = 0;
-            if (n > 0 && n < sizeof(ev) && sscanf_s(ev, "%llx", &cr) == 1 && cr)
-                g_embedClassRef = (unsigned long long)(uintptr_t)rb(cr);              // explicit ghidra override
-            else
-                g_embedClassRef = (unsigned long long)(uintptr_t)symAddr("HostClassRef");  // resolved TScriptDialog classRef
-        }
-        g_embedReqChild = (HWND)(ULONG_PTR)hw; g_embedReqShow = show ? 1 : 0;
-        g_embedResultOk = false;
-        SendMessageW(g_mainWnd, WM_BRIDGE_WINHOST_EMBED, 0, 0);
-        char b[640]; sprintf_s(b, sizeof(b),
-            "{\"ok\":%d,\"host\":\"0x%p\",\"content\":\"0x%p\",\"child\":\"0x%p\","
-            "\"cx\":%d,\"cy\":%d,\"cw\":%d,\"ch\":%d,\"diag\":\"%s\"}",
-            g_embedResultOk ? 1 : 0, (void*)g_embedHostHwnd, (void*)g_embedContentHwnd,
-            (void*)g_embedChildHwnd,
-            g_embedContentX, g_embedContentY, g_embedContentW, g_embedContentH, g_embedDiag);
-        return b;
+    if (starts(req, "automation_")) {
+        if (!ensureSubclassed()) return "{\"ok\":0,\"reason\":\"main-window-unavailable\",\"mayHaveChanged\":false}";
+        HWND target = g_mainWnd.load();
+        if (!target || !IsWindow(target)) return "{\"ok\":0,\"reason\":\"main-window-unavailable\",\"mayHaveChanged\":false}";
+        PendingWindowCommand pending{req};
+        SendMessageW(target, WM_BRIDGE_AUTOMATION, 0, reinterpret_cast<LPARAM>(&pending));
+        return pending.response;
     }
-    if (starts(req, "winhost_show ")) {
-        if (!(g_mainWnd && g_origProc)) return "err:no-mainwindow";
-        std::string a = req.substr(13);
-        g_embedReqShow = (a == "1" || a == "true") ? 1 : 0;
-        SendMessageW(g_mainWnd, WM_BRIDGE_WINHOST_SHOW, 0, 0);
-        char b[48]; sprintf_s(b, sizeof(b), "{\"ok\":%d,\"visible\":%d}", g_embedActive ? 1 : 0, g_embedShow);
-        return b;
+    if (starts(req, "mixer_add")) {
+        if (!ensureSubclassed()) return "{\"ok\":0,\"reason\":\"main-window-unavailable\",\"mayHaveChanged\":false}";
+        HWND target = g_mainWnd.load();
+        if (!target || !IsWindow(target)) return "{\"ok\":0,\"reason\":\"main-window-unavailable\",\"mayHaveChanged\":false}";
+        PendingWindowCommand pending{req};
+        SendMessageW(target, WM_BRIDGE_MIXERADD, 0, reinterpret_cast<LPARAM>(&pending));
+        return pending.response;
     }
-    if (req == "winhost_close") {
-        if (g_mainWnd && g_origProc) SendMessageW(g_mainWnd, WM_BRIDGE_WINHOST_CLOSE, 0, 0);
-        return "{\"ok\":1}";
-    }
-    if (req == "winhost_status") {
-        int ws, g34, g389; void* par; embedReadGates(&ws, &g34, &g389, &par);
-        char b[640]; sprintf_s(b, sizeof(b),
-            "{\"active\":%d,\"visible\":%d,\"host\":\"0x%p\",\"host45c\":\"0x%p\",\"child\":\"0x%p\",\"classRef\":\"0x%llx\","
-            "\"winstate\":%d,\"gate34\":%d,\"gate389\":%d,\"formParent\":\"0x%p\",\"diag\":\"%s\"}",
-            g_embedActive ? 1 : 0, g_embedShow, (void*)g_embedHostHwnd, (void*)g_embedHostHwnd45c,
-            (void*)g_embedChildHwnd, g_embedClassRef, ws, g34, g389, par, g_embedDiag);
-        return b;
-    }
-    // ---- Window-host min / max (like FL's plugin-editor windows) ----
-    // Both run FL's own SetWindowState on the MAIN thread (via the subclass + SendMessage); the host subclass
-    // re-fits our child + a delayed represent re-paints it. Return ok=0 when not embedded / a no-op.
-    if (req == "winhost_min" || req == "winhost_max") {
-        if (!(g_mainWnd && g_origProc)) return "err:no-mainwindow";
-        if (!g_embedActive || !g_embedHostForm) return "{\"ok\":0,\"reason\":\"not-embedded\"}";
-        g_winhostOpOk = false;
-        UINT m = (req == "winhost_min") ? WM_BRIDGE_WINHOST_MIN : WM_BRIDGE_WINHOST_MAX;
-        SendMessageW(g_mainWnd, m, 0, 0);
-        int ws, g34, g389; void* par; embedReadGates(&ws, &g34, &g389, &par);
-        char b[320]; sprintf_s(b, sizeof(b),
-            "{\"ok\":%d,\"winstate\":%d,\"gate34\":%d,\"gate389\":%d,\"formParent\":\"0x%p\",\"diag\":\"%s\"}",
-            g_winhostOpOk ? 1 : 0, ws, g34, g389, par, g_embedDiag);
-        return b;
-    }
-    // ---- Window-host dock: DEFERRED ----
-    // In-workspace docking is a documented no-op (never invoked): FL's dock reparent recreates the form's
-    // Win32 handle and orphans our embedded child (verified live). The window stays a solid, movable FLOAT
-    // with working min/max. See DoWinHostDock for the full diagnosis + the re-embed work it would require.
-    if (req == "winhost_dock") {
-        return "{\"ok\":0,\"reason\":\"deferred\",\"note\":\"in-workspace dock recreates the FL form handle and orphans the embedded child; window stays a floating min/max-able plugin-style window\"}";
+
+    // Keyed asynchronous managed hosting and legacy slot zero share the same validated factory.
+    if (starts(req, "winhost_")) {
+        if (!ensureSubclassed()) return "{\"ok\":0,\"exists\":0,\"reason\":\"main-window-unavailable\"}";
+        HWND target = g_mainWnd.load();
+        if (!target || !IsWindow(target)) return "{\"ok\":0,\"exists\":0,\"reason\":\"main-window-unavailable\"}";
+        PendingWindowCommand pending{req};
+        SendMessageW(target, WM_BRIDGE_WINHOST_EMBED, 0, reinterpret_cast<LPARAM>(&pending));
+        return pending.response;
     }
 
 #ifdef FRUITYLINK_DEBUG_PIPE
@@ -2739,9 +2323,10 @@ static std::string handleCmd(const std::string& req)
 // thread (WM_BRIDGE_CALL) and SEH-guards them, so this path keeps the same correctness discipline.
 //
 //   int FlBridge_Command(const char* reqUtf8NullTerm, char* outBuf, int outLen);
-//     returns the FULL response length in bytes (may exceed outLen → caller resizes and retries);
+//     returns the FULL response length in bytes (may exceed outLen; DO NOT retry a mutating command);
 //     writes up to outLen bytes into outBuf (not null-terminated; use the returned length).
 //     returns -1 on a null request.
+// New hosts use FlBridge_CommandAlloc below to obtain the complete response without replay.
 extern "C" __declspec(dllexport) int FlBridge_Command(const char* req, char* outBuf, int outLen)
 {
     if (!req) return -1;
@@ -2752,6 +2337,31 @@ extern "C" __declspec(dllexport) int FlBridge_Command(const char* req, char* out
         memcpy(outBuf, resp.data(), (size_t)copy);
     }
     return n;
+}
+
+// Owned-response transport: execute each command once even when its reply exceeds a caller's buffer.
+// Empty replies have length 0 and a null pointer. Release every non-null response with the matching
+// bridge export so allocation and deallocation use the same CRT.
+extern "C" __declspec(dllexport) int FlBridge_CommandAlloc(const char* req, char** response)
+{
+    if (!response) return -1;
+    *response = nullptr;
+    if (!req) return -1;
+    try {
+        std::string result = handleCmd(std::string(req));
+        if (result.size() > INT_MAX) return -1;
+        if (result.empty()) return 0;
+        char* buffer = static_cast<char*>(std::malloc(result.size()));
+        if (!buffer) return -1;
+        memcpy(buffer, result.data(), result.size());
+        *response = buffer;
+        return static_cast<int>(result.size());
+    } catch (...) { return -1; }
+}
+
+extern "C" __declspec(dllexport) void FlBridge_FreeResponse(char* response)
+{
+    std::free(response);
 }
 
 #ifdef FRUITYLINK_DEBUG_PIPE
@@ -2821,15 +2431,8 @@ static void forceRestoreHook()
     // Same for our toolbar toggle buttons: neutralize their onChange/paint TMethods (the main-thread
     // teardown is done by DoToolbarRemove before this) so no toolbar click can re-enter the unmapping DLL.
     clearToolbarThunksMem();
-    // Window-host embed: detach our child + restore the host form's WndProc so neither a dangling parent
-    // nor the host subclass points into the unmapping DLL. (The FL host form object is left for FL to
-    // own/free — see DoWinHostClose.) Memory/Win32 only; the orderly close ran on the main thread first.
-    if (g_embedChildHwnd) { __try { SetParent(g_embedChildHwnd, NULL); } __except (EXCEPTION_EXECUTE_HANDLER) {} g_embedChildHwnd = NULL; }
-    if (g_embedContentHwnd && g_embedHostProc) {   // we subclassed the content control's HWND
-        __try { if (IsWindow(g_embedContentHwnd)) SetWindowLongPtrW(g_embedContentHwnd, GWLP_WNDPROC, (LONG_PTR)g_embedHostProc); }
-        __except (EXCEPTION_EXECUTE_HANDLER) {}
-    }
-    g_embedHostProc = NULL; g_embedHostHwnd = NULL; g_embedContentHwnd = NULL; g_embedHostForm = NULL; g_embedActive = false;
+    // Native-window callbacks remain in the pinned bridge. Never detach another UI thread's child
+    // or destroy a native form from DLL_PROCESS_DETACH / loader lock.
     // Restore the suppress flag + un-hook FormShortCut (its jmp must not point into the unmapping DLL).
     setShortcutSuppress(0);
     removeShortcutHook();
@@ -2838,6 +2441,7 @@ static void forceRestoreHook()
 
 extern "C" __declspec(dllexport) void BridgeStop()
 {
+    g_bridgeStopping.store(true);
     // Tear the chat tab down on the MAIN thread (restore vtbl + hide widgets) BEFORE unload, while the
     // subclass is still installed; then a direct restore as a backstop.
     if (g_vtblSlot && g_mainWnd && g_origProc) SendMessageW(g_mainWnd, WM_BRIDGE_CHATCLOSE, 0, 0);
@@ -2847,9 +2451,9 @@ extern "C" __declspec(dllexport) void BridgeStop()
     if (!g_menuItems.empty() && g_mainWnd && g_origProc) SendMessageW(g_mainWnd, WM_BRIDGE_MENUCONTRIBREMOVE, 0, 0);
     // Remove our toolbar toggle buttons on the MAIN thread (clear TMethods + hide + unparent) before unload.
     if (!g_toolbarBtns.empty() && g_mainWnd && g_origProc) SendMessageW(g_mainWnd, WM_BRIDGE_TOOLBARREMOVE, 0, 0);
-    // Detach our embedded chat child + hide the host form on the MAIN thread before unload (the host
-    // subclass restore is forceRestoreHook's backstop just below).
-    if (g_embedActive && g_mainWnd && g_origProc) SendMessageW(g_mainWnd, WM_BRIDGE_WINHOST_CLOSE, 0, 0);
+    // Hide hosts and release only detached forms. Bound children stay with their own UI thread;
+    // their native subclass remains safe because creating a native host pins this bridge.
+    if (g_mainWnd && g_origProc) SendMessageW(g_mainWnd, WM_BRIDGE_WINHOST_CLOSE, 0, 0);
     forceRestoreHook();
     if (g_stop) SetEvent(g_stop);
     if (g_thread) { WaitForSingleObject(g_thread, 5000); CloseHandle(g_thread); g_thread = NULL; }
@@ -2857,7 +2461,7 @@ extern "C" __declspec(dllexport) void BridgeStop()
     logline("BridgeStop done");
 }
 
-BOOL APIENTRY DllMain(HMODULE hModule, DWORD reason, LPVOID)
+BOOL APIENTRY DllMain(HMODULE hModule, DWORD reason, LPVOID reserved)
 {
     switch (reason) {
     case DLL_PROCESS_ATTACH:
@@ -2872,9 +2476,14 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD reason, LPVOID)
 #endif
         break;
     case DLL_PROCESS_DETACH:
+        // Process termination already stopped other threads. Never call UI APIs, acquire their locks,
+        // or wait for worker/UI completion from the loader lock; Windows reclaims these resources.
+        if (reserved) break;
         forceRestoreHook(); // never leave a vtbl slot pointing into the unmapping DLL (loader-lock safe: no SendMessage)
-        if (g_thread) { if (g_stop) SetEvent(g_stop); WaitForSingleObject(g_thread, 2000); CloseHandle(g_thread); g_thread = NULL; }
-        revertSubclass();
+        // Never wait for a worker under loader lock; explicit BridgeStop performs the join.
+        if (g_stop) SetEvent(g_stop);
+        if (g_thread) { CloseHandle(g_thread); g_thread = NULL; }
+        revertSubclass(false);
         if (g_stop) { CloseHandle(g_stop); g_stop = NULL; }
         logline("detach");
         break;

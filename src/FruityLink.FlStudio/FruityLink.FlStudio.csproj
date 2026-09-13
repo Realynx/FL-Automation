@@ -19,6 +19,7 @@
        concrete type. The in-proc host that legitimately needs raw access sees them via this grant. -->
   <ItemGroup>
     <InternalsVisibleTo Include="FruityLink.Host" />
+    <InternalsVisibleTo Include="FruityLink.FlStudio.Tests" />
   </ItemGroup>
 
 </Project>

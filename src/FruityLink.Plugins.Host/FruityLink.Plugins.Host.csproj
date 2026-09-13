@@ -5,8 +5,8 @@
        must load against the same Windows-desktop runtime as the host process. The host itself draws
        no UI, so it does NOT enable WPF (a WPF plugin's PresentationFramework/WindowsBase refs resolve
        from the host process's default load context — see PluginLoadContext). Opted out of central
-       package management so it builds standalone; needs nothing beyond the in-box BCL + a single
-       ProjectReference to the stable plugin contract (which transitively pulls Core). -->
+       package management so it builds standalone. Scripting is shared with plugins so the embedded
+       Python interpreter and its native callbacks have one process-wide owner. -->
   <PropertyGroup>
     <TargetFramework>net9.0-windows</TargetFramework>
     <RootNamespace>FruityLink.Plugins.Host</RootNamespace>
@@ -15,6 +15,8 @@
 
   <ItemGroup>
     <ProjectReference Include="..\FruityLink.Plugins.Abstractions\FruityLink.Plugins.Abstractions.csproj" />
+    <ProjectReference Include="..\FruityLink.Scripting\FruityLink.Scripting.csproj" />
+    <ProjectReference Include="..\FruityLink.Ui.Avalonia.Hosting\FruityLink.Ui.Avalonia.Hosting.csproj" />
   </ItemGroup>
 
 </Project>

@@ -1,0 +1,11 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net9.0-windows</TargetFramework>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <CopyLocalLockFileAssemblies>true</CopyLocalLockFileAssemblies>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../FruityLink.Plugins.Abstractions/FruityLink.Plugins.Abstractions.csproj" />
+    <ProjectReference Include="../FruityLink.Scripting/FruityLink.Scripting.csproj" />
+  </ItemGroup>
+</Project>

@@ -1,0 +1,532 @@
+"""Generated from INativeFlControl.cs; regenerate with tools/generate_operations.py.
+
+Python arguments use snake_case; generated mappings preserve native wire names.
+Native integer scales and index conventions are documented by each operation.
+"""
+
+from collections.abc import Sequence
+from typing import cast
+
+from .automation_records import AutomationClipResult, AutomationPointSpec, AutomationTarget
+from .models import decode_record
+from .queries import QueryOperations
+from .records import ClipMove, ClipResize, NoteEdit, NoteRef, NoteSpec, PatternClipSpec
+from .transport import RequestTransport
+from .values import JsonValue, wire_arguments
+
+
+class Operations(QueryOperations):
+    def __init__(self, transport: RequestTransport) -> None:
+        self._transport = transport
+
+    def invoke(self, operation: str, **arguments: object) -> JsonValue:
+        """Invoke a catalogue operation, including capability-dependent extensions."""
+        return self._transport.request("invoke", {"operation": operation, "arguments": wire_arguments(arguments)})
+
+    def is_available(self) -> bool:
+        """True if the injected bridge is loaded in FL and responding."""
+        return cast(bool, self.invoke("is_available"))
+
+    def set_tempo(self, *, bpm: float) -> None:
+        """Set tempo in beats per minute (10..522)."""
+        self.invoke("set_tempo", **{"bpm": bpm})
+
+    def get_tempo(self) -> float:
+        """Read tempo in beats per minute."""
+        return cast(float, self.invoke("get_tempo"))
+
+    def set_master_volume(self, *, value: int) -> None:
+        """Master volume, 0..12800 (≈7624 ≈ 0 dB)."""
+        self.invoke("set_master_volume", **{"value": value})
+
+    def get_master_volume(self) -> int:
+        """Read master volume, 0..12800 (symmetric with SetMasterVolumeAsync)."""
+        return cast(int, self.invoke("get_master_volume"))
+
+    def set_master_pitch(self, *, cents: int) -> None:
+        """Master pitch in cents, -1200..+1200."""
+        self.invoke("set_master_pitch", **{"cents": cents})
+
+    def get_master_pitch(self) -> int:
+        """Read master pitch in cents (symmetric with SetMasterPitchAsync)."""
+        return cast(int, self.invoke("get_master_pitch"))
+
+    def set_shuffle(self, *, value: int) -> None:
+        """Global shuffle/swing, 0..128."""
+        self.invoke("set_shuffle", **{"value": value})
+
+    def get_shuffle(self) -> int:
+        """Read global shuffle/swing, 0..128 (symmetric with SetShuffleAsync)."""
+        return cast(int, self.invoke("get_shuffle"))
+
+    def set_mixer_volume(self, *, track: int, value: int) -> None:
+        """Mixer track volume 0..12800 (track 0 = master)."""
+        self.invoke("set_mixer_volume", **{"track": track, "value": value})
+
+    def get_mixer_volume(self, *, track: int) -> int:
+        """Read a mixer track volume 0..12800 (symmetric with SetMixerVolumeAsync)."""
+        return cast(int, self.invoke("get_mixer_volume", **{"track": track}))
+
+    def set_mixer_pan(self, *, track: int, value: int) -> None:
+        """Mixer track pan 0..12800 (6400 = center)."""
+        self.invoke("set_mixer_pan", **{"track": track, "value": value})
+
+    def get_mixer_pan(self, *, track: int) -> int:
+        """Read a mixer track pan 0..12800 (symmetric with SetMixerPanAsync)."""
+        return cast(int, self.invoke("get_mixer_pan", **{"track": track}))
+
+    def set_mixer_track_muted(self, *, track: int, muted: bool) -> None:
+        """Mute/unmute a mixer track (the enabled flag; solo state untouched)."""
+        self.invoke("set_mixer_track_muted", **{"track": track, "muted": muted})
+
+    def get_mixer_track_muted(self, *, track: int) -> bool:
+        """Read a mixer track's mute state (symmetric with SetMixerTrackMutedAsync)."""
+        return cast(bool, self.invoke("get_mixer_track_muted", **{"track": track}))
+
+    def set_mixer_fx_param(self, *, track: int, slot: int, param_index: int, value: int) -> None:
+        """A mixer FX-slot plugin parameter (normalized fixed-point value)."""
+        self.invoke("set_mixer_fx_param", **{"track": track, "slot": slot, "paramIndex": param_index, "value": value})
+
+    def set_channel_volume(self, *, channel: int, value: int) -> None:
+        """Channel volume 0..12800 (10000 = default 78%)."""
+        self.invoke("set_channel_volume", **{"channel": channel, "value": value})
+
+    def get_channel_volume(self, *, channel: int) -> int:
+        """Read channel volume 0..12800 (symmetric with SetChannelVolumeAsync)."""
+        return cast(int, self.invoke("get_channel_volume", **{"channel": channel}))
+
+    def set_channel_pan(self, *, channel: int, value: int) -> None:
+        """Channel pan 0..12800 (6400 = center)."""
+        self.invoke("set_channel_pan", **{"channel": channel, "value": value})
+
+    def get_channel_pan(self, *, channel: int) -> int:
+        """Read channel pan 0..12800 (symmetric with SetChannelPanAsync)."""
+        return cast(int, self.invoke("get_channel_pan", **{"channel": channel}))
+
+    def set_channel_pitch(self, *, channel: int, cents: int) -> None:
+        """Channel pitch in cents (0 = center)."""
+        self.invoke("set_channel_pitch", **{"channel": channel, "cents": cents})
+
+    def get_channel_pitch(self, *, channel: int) -> int:
+        """Read channel pitch in cents (symmetric with SetChannelPitchAsync)."""
+        return cast(int, self.invoke("get_channel_pitch", **{"channel": channel}))
+
+    def set_channel_muted(self, *, channel: int, muted: bool) -> None:
+        """Mute/unmute a channel."""
+        self.invoke("set_channel_muted", **{"channel": channel, "muted": muted})
+
+    def get_channel_muted(self, *, channel: int) -> bool:
+        """Read a channel's mute state (symmetric with SetChannelMutedAsync)."""
+        return cast(bool, self.invoke("get_channel_muted", **{"channel": channel}))
+
+    def set_channel_fx_route(self, *, channel: int, mixer_track: int) -> None:
+        """Route a channel to Master (0) or an active ordinary mixer insert (within 1..500). Query mixer tracks for current indices; Current and dormant slots are unavailable."""
+        self.invoke("set_channel_fx_route", **{"channel": channel, "mixerTrack": mixer_track})
+
+    def get_channel_fx_route(self, *, channel: int) -> int:
+        """Read a channel's mixer-track route (symmetric with SetChannelFxRouteAsync)."""
+        return cast(int, self.invoke("get_channel_fx_route", **{"channel": channel}))
+
+    def add_note(self, *, pattern: int, channel: int, key: int, start_tick: int, length_tick: int, velocity: int) -> None:
+        """Add a note to a pattern's piano roll for a channel (pattern: 1-based, or <=0 = current). key = MIDI 0..131 (60 = middle C), startTick/lengthTick in PPQ ticks, velocity 0..127."""
+        self.invoke("add_note", **{"pattern": pattern, "channel": channel, "key": key, "startTick": start_tick, "lengthTick": length_tick, "velocity": velocity})
+
+    def add_notes(self, *, pattern: int, notes: Sequence[NoteSpec]) -> None:
+        """Add many notes to a pattern's piano roll in one batch — resolves the pattern and refreshes the editor once for the whole set, far faster than repeated AddNoteAsync. Each note carries its own channel, so a single call can author chords, melodies, or multi-channel drum grids."""
+        self.invoke("add_notes", **{"pattern": pattern, "notes": notes})
+
+    def get_ppq(self) -> int:
+        """Project timebase: ticks per quarter note (PPQ)."""
+        return cast(int, self.invoke("get_ppq"))
+
+    def get_current_pattern(self) -> int:
+        """Read the selected one-based pattern index."""
+        return cast(int, self.invoke("get_current_pattern"))
+
+    def select_pattern(self, *, index: int) -> None:
+        """Select a one-based pattern index."""
+        self.invoke("select_pattern", **{"index": index})
+
+    def create_pattern(self) -> int:
+        """Selects the first empty pattern; returns its index."""
+        return cast(int, self.invoke("create_pattern"))
+
+    def clear_pattern(self, *, index: int) -> None:
+        """Remove all notes from the specified one-based pattern."""
+        self.invoke("clear_pattern", **{"index": index})
+
+    def get_pattern_name(self, *, index: int) -> str:
+        """Read the name of a one-based pattern."""
+        return cast(str, self.invoke("get_pattern_name", **{"index": index}))
+
+    def list_patterns(self) -> str:
+        """List patterns and their names."""
+        return cast(str, self.invoke("list_patterns"))
+
+    def get_channel_count(self) -> int:
+        """Read the number of channels in the rack."""
+        return cast(int, self.invoke("get_channel_count"))
+
+    def select_channel(self, *, index: int) -> None:
+        """Exclusively select a channel (so the piano roll edits it)."""
+        self.invoke("select_channel", **{"index": index})
+
+    def get_channel_name(self, *, index: int) -> str:
+        """Read the name of a zero-based channel."""
+        return cast(str, self.invoke("get_channel_name", **{"index": index}))
+
+    def list_channels(self) -> str:
+        """List channel indices and names."""
+        return cast(str, self.invoke("list_channels"))
+
+    def set_channel_name(self, *, index: int, name: str) -> None:
+        """Rename a channel (persists across save/reload) so the model's own name→index lookups keep working on channels it created."""
+        self.invoke("set_channel_name", **{"index": index, "name": name})
+
+    def set_channel_solo(self, *, index: int) -> None:
+        """Toggle exclusive SOLO on a channel (solo again = un-solo) — hear one part without muting every other channel by hand."""
+        self.invoke("set_channel_solo", **{"index": index})
+
+    def get_mixer_track_count(self) -> int:
+        """Native mixer cardinality: Master + active ordinary inserts + Current. Current has a special physical index, not count-1; use IFlStructuredQuery.QueryMixerTracksAsync to enumerate addressable Master/insert tracks."""
+        return cast(int, self.invoke("get_mixer_track_count"))
+
+    def add_mixer_track(self, *, after_track: int = -1) -> int:
+        """Add an ordinary mixer insert after afterTrack (0 = Master), or append after the last ordinary insert when -1. Returns the new track index; requery track indices and routing after this structural edit. Unsupported native builds fail without adding a track."""
+        return cast(int, self.invoke("add_mixer_track", **{"afterTrack": after_track}))
+
+    def get_mixer_track_name(self, *, track: int) -> str:
+        """Effective mixer track name (custom if set, else default by type: Master/Insert n/Current)."""
+        return cast(str, self.invoke("get_mixer_track_name", **{"track": track}))
+
+    def list_mixer_tracks(self) -> str:
+        """Custom-named mixer tracks (+ Master) as "index: name", for name→index resolution."""
+        return cast(str, self.invoke("list_mixer_tracks"))
+
+    def set_mixer_track_name(self, *, track: int, name: str) -> None:
+        """Rename a mixer track/bus (persists) so a bus the model creates is resolvable by name later."""
+        self.invoke("set_mixer_track_name", **{"track": track, "name": name})
+
+    def set_mixer_send(self, *, src_track: int, dst_track: int, level: float) -> None:
+        """Set a mixer send srcTrack->dstTrack at level (1.0 ≈ unity)."""
+        self.invoke("set_mixer_send", **{"srcTrack": src_track, "dstTrack": dst_track, "level": level})
+
+    def set_mixer_eq_gain(self, *, track: int, band: int, value: int) -> None:
+        """Mixer track EQ band gain (band 0=low,1=mid,2=high; value 0..0x40000000, ~0x20000000 = 0 dB)."""
+        self.invoke("set_mixer_eq_gain", **{"track": track, "band": band, "value": value})
+
+    def transport_play(self) -> None:
+        """Start playback."""
+        self.invoke("transport_play")
+
+    def transport_stop(self) -> None:
+        """Stop playback."""
+        self.invoke("transport_stop")
+
+    def transport_toggle_record(self) -> None:
+        """Toggle recording."""
+        self.invoke("transport_toggle_record")
+
+    def set_loop_region(self, *, start_tick: int, end_tick: int) -> None:
+        """Set the song loop / time-selection region to [startTick, endTick), with an exclusive end (for example, 0..1536 spans four bars at 96 PPQ). endTick <= the nonnegative start clears the loop."""
+        self.invoke("set_loop_region", **{"startTick": start_tick, "endTick": end_tick})
+
+    def list_available_plugins(self, *, effects: bool) -> str:
+        """List installed plugins of a kind (effects=true → mixer effects, false → channel generators)."""
+        return cast(str, self.invoke("list_available_plugins", **{"effects": effects}))
+
+    def get_channel_plugin(self, *, channel: int) -> str:
+        """Describe a channel's loaded generator plugin."""
+        return cast(str, self.invoke("get_channel_plugin", **{"channel": channel}))
+
+    def add_channel(self, *, plugin_name: str) -> int:
+        """Add a new channel hosting the named generator plugin; returns its index."""
+        return cast(int, self.invoke("add_channel", **{"pluginName": plugin_name}))
+
+    def list_mixer_effects(self, *, track: int) -> str:
+        """List the effects loaded in a mixer track's FX slots."""
+        return cast(str, self.invoke("list_mixer_effects", **{"track": track}))
+
+    def add_mixer_effect(self, *, track: int, slot: int, plugin_name: str) -> None:
+        """Load/replace the named effect into a mixer track's FX slot (0-9)."""
+        self.invoke("add_mixer_effect", **{"track": track, "slot": slot, "pluginName": plugin_name})
+
+    def remove_mixer_effect(self, *, track: int, slot: int) -> None:
+        """Clear a mixer track's FX slot."""
+        self.invoke("remove_mixer_effect", **{"track": track, "slot": slot})
+
+    def clone_mixer_effect(self, *, track: int, from_slot: int, to_slot: int) -> None:
+        """Copy the effect type from one FX slot to another (type only, not parameter state)."""
+        self.invoke("clone_mixer_effect", **{"track": track, "fromSlot": from_slot, "toSlot": to_slot})
+
+    def list_plugin_params(self, *, channel_or_track: int, slot: int, filter: str | None) -> str:
+        """List a plugin's parameters ("index: name"). slot < 0 = channel generator; else mixer track+slot. Optional name filter."""
+        return cast(str, self.invoke("list_plugin_params", **{"channelOrTrack": channel_or_track, "slot": slot, "filter": filter}))
+
+    def set_plugin_param(self, *, channel_or_track: int, slot: int, param_index: int, value: float) -> None:
+        """Set a plugin parameter to a normalized value 0..1. slot < 0 = channel generator; else mixer track+slot."""
+        self.invoke("set_plugin_param", **{"channelOrTrack": channel_or_track, "slot": slot, "paramIndex": param_index, "value": value})
+
+    def list_samples(self, *, filter: str | None) -> str:
+        """List available audio samples (factory packs + user content), optionally filtered by name."""
+        return cast(str, self.invoke("list_samples", **{"filter": filter}))
+
+    def add_sample_channel(self, *, sample_path: str) -> int:
+        """Add a new channel that plays the given audio sample file (drum/one-shot/loop); returns its index."""
+        return cast(int, self.invoke("add_sample_channel", **{"samplePath": sample_path}))
+
+    def replace_channel_sample(self, *, channel: int, sample_path: str) -> None:
+        """Replace an existing channel's sample with a new audio file."""
+        self.invoke("replace_channel_sample", **{"channel": channel, "samplePath": sample_path})
+
+    def get_notes(self, *, pattern: int, channel: int, offset: int = 0) -> str:
+        """Read piano-roll notes of a pattern (1-based, or <=0 = current); channel<0 = all. Paged: offset skips the first N notes (raw index); the output's continuation hint feeds it back in."""
+        return cast(str, self.invoke("get_notes", **{"pattern": pattern, "channel": channel, "offset": offset}))
+
+    def edit_notes(self, *, pattern: int, edits: Sequence[NoteEdit]) -> int:
+        """Edit EXISTING piano-roll notes in place, WITHOUT clearing the pattern (every other note is untouched, including fields the read tool doesn't surface — pan, fine pitch, release, cut, res). Each NoteEdit identifies a note by the (channel, key, startTick) triple GetNotesAsync shows and applies whichever new fields it carries. Returns the number of notes changed."""
+        return cast(int, self.invoke("edit_notes", **{"pattern": pattern, "edits": edits}))
+
+    def delete_notes(self, *, pattern: int, targets: Sequence[NoteRef]) -> int:
+        """Delete SPECIFIC existing piano-roll notes (matched by the (channel, key, startTick) triple), leaving the rest of the pattern intact — the surgical counterpart to ClearPatternAsync. Returns the number of notes deleted."""
+        return cast(int, self.invoke("delete_notes", **{"pattern": pattern, "targets": targets}))
+
+    def clone_pattern(self, *, source_pattern: int) -> int:
+        """Duplicate a pattern's notes into a new empty pattern; returns the new pattern's 1-based index (0 if the source has nothing to clone). The full 24-byte note structs are copied, so pan/fine-pitch/ mute/etc. survive — a "make a variation of this part" without hand-recreating every note."""
+        return cast(int, self.invoke("clone_pattern", **{"sourcePattern": source_pattern}))
+
+    def set_pattern_name(self, *, index: int, name: str) -> None:
+        """Rename a pattern (1-based; persists across save/reload) so the model can label its verse/ chorus/drop parts instead of leaving "Pattern N" — which its own list_patterns navigation relies on."""
+        self.invoke("set_pattern_name", **{"index": index, "name": name})
+
+    def list_playlist_tracks(self) -> str:
+        """List customized playlist tracks and summarize default tracks."""
+        return cast(str, self.invoke("list_playlist_tracks"))
+
+    def set_track_name(self, *, track: int, name: str) -> None:
+        """Rename a one-based playlist track."""
+        self.invoke("set_track_name", **{"track": track, "name": name})
+
+    def get_track_name(self, *, track: int) -> str:
+        """Read a playlist track's name ("" when default; symmetric with SetTrackNameAsync)."""
+        return cast(str, self.invoke("get_track_name", **{"track": track}))
+
+    def set_track_color(self, *, track: int, rgb: int) -> None:
+        """Set a playlist track color as packed RGB."""
+        self.invoke("set_track_color", **{"track": track, "rgb": rgb})
+
+    def get_track_color(self, *, track: int) -> int:
+        """Read a playlist track's RGB color (symmetric with SetTrackColorAsync)."""
+        return cast(int, self.invoke("get_track_color", **{"track": track}))
+
+    def set_track_mute(self, *, track: int, muted: bool) -> None:
+        """Mute or unmute a playlist track."""
+        self.invoke("set_track_mute", **{"track": track, "muted": muted})
+
+    def get_track_mute(self, *, track: int) -> bool:
+        """Read a playlist track's mute state (symmetric with SetTrackMuteAsync)."""
+        return cast(bool, self.invoke("get_track_mute", **{"track": track}))
+
+    def set_track_solo(self, *, track: int) -> None:
+        """Toggle exclusive SOLO on a playlist track (solo again = un-solo)."""
+        self.invoke("set_track_solo", **{"track": track})
+
+    def set_track_collapsed(self, *, track: int, collapsed: bool) -> None:
+        """Collapse or expand a playlist track."""
+        self.invoke("set_track_collapsed", **{"track": track, "collapsed": collapsed})
+
+    def get_track_collapsed(self, *, track: int) -> bool:
+        """Read a playlist track's collapsed state (symmetric with SetTrackCollapsedAsync)."""
+        return cast(bool, self.invoke("get_track_collapsed", **{"track": track}))
+
+    def select_track(self, *, track: int) -> None:
+        """Select a playlist track."""
+        self.invoke("select_track", **{"track": track})
+
+    def list_clips(self, *, offset: int = 0, track: int = -1) -> str:
+        """List active playlist clips, paged: offset skips the first N matching clips; track>0 filters to one playlist track (<=0 = all)."""
+        return cast(str, self.invoke("list_clips", **{"offset": offset, "track": track}))
+
+    def add_pattern_clip(self, *, pattern: int, track: int, start_tick: int, length_tick: int) -> None:
+        """Add a pattern clip (pattern 1-based, matching notes/patterns; 0 or out-of-range throws) to a track at startTick; lengthTick<=0 = pattern length."""
+        self.invoke("add_pattern_clip", **{"pattern": pattern, "track": track, "startTick": start_tick, "lengthTick": length_tick})
+
+    def move_clip(self, *, clip_index: int, start_tick: int, track: int) -> None:
+        """Move a playlist clip to a tick position and track."""
+        self.invoke("move_clip", **{"clipIndex": clip_index, "startTick": start_tick, "track": track})
+
+    def resize_clip(self, *, clip_index: int, length_tick: int) -> None:
+        """Set a playlist clip duration in ticks."""
+        self.invoke("resize_clip", **{"clipIndex": clip_index, "lengthTick": length_tick})
+
+    def delete_clip(self, *, clip_index: int) -> None:
+        """Remove a playlist clip by its collection index."""
+        self.invoke("delete_clip", **{"clipIndex": clip_index})
+
+    def set_clip_muted(self, *, clip_index: int, muted: bool) -> None:
+        """Mute/unmute a playlist clip."""
+        self.invoke("set_clip_muted", **{"clipIndex": clip_index, "muted": muted})
+
+    def get_clip_muted(self, *, clip_index: int) -> bool:
+        """Read a playlist clip's mute state (clip+0x13 bit 0x20), symmetric with SetClipMutedAsync — the read-before-write for granular clip-mute undo."""
+        return cast(bool, self.invoke("get_clip_muted", **{"clipIndex": clip_index}))
+
+    def delete_clips(self, *, clip_indices: Sequence[int]) -> None:
+        """Delete many playlist clips in one pass. Indices are DEDUPED and removed high→low so the TList shift from an earlier removal never invalidates a later index; one recount + one repaint."""
+        self.invoke("delete_clips", **{"clipIndices": clip_indices})
+
+    def move_clips(self, *, moves: Sequence[ClipMove]) -> None:
+        """Move many playlist clips in one pass (per-clip start/track poke), then one repaint. Moves don't reorder the collection, so all indices stay valid within the call."""
+        self.invoke("move_clips", **{"moves": moves})
+
+    def add_pattern_clips(self, *, clips: Sequence[PatternClipSpec]) -> None:
+        """Place many pattern clips in one pass (each realized + inserted atomically), then one refresh/repaint. Clips are addressed by (pattern,track,start), so add-order index shifts don't matter."""
+        self.invoke("add_pattern_clips", **{"clips": clips})
+
+    def resize_clips(self, *, resizes: Sequence[ClipResize]) -> None:
+        """Resize many playlist clips in one pass (per-clip length poke), then one repaint."""
+        self.invoke("resize_clips", **{"resizes": resizes})
+
+    def set_clips_muted(self, *, clip_indices: Sequence[int], muted: bool) -> None:
+        """Mute/unmute many playlist clips in one pass, then one repaint."""
+        self.invoke("set_clips_muted", **{"clipIndices": clip_indices, "muted": muted})
+
+    def slice_clip(self, *, clip_index: int, tick: int) -> None:
+        """Slice/chop a clip into two at an absolute tick (audio stays continuous)."""
+        self.invoke("slice_clip", **{"clipIndex": clip_index, "tick": tick})
+
+    def duplicate_clip(self, *, clip_index: int) -> None:
+        """Duplicate a clip right after itself on the same track."""
+        self.invoke("duplicate_clip", **{"clipIndex": clip_index})
+
+    def get_song_state(self) -> str:
+        """Describe playback state, mode, and song position."""
+        return cast(str, self.invoke("get_song_state"))
+
+    def get_song_mode(self) -> bool:
+        """Read song mode (true) vs pattern mode (false) — symmetric with SetSongModeAsync."""
+        return cast(bool, self.invoke("get_song_mode"))
+
+    def get_status(self) -> str:
+        """FL's current status/hint bar text (the name/tooltip of whatever is under the mouse + current-operation messages, e.g. "Opening: Fruity Wrapper" at load), cleaned of FL's internal "tooltip|status" split and '^' markup. Empty when there is no active hint. Read-only; safe to poll."""
+        return cast(str, self.invoke("get_status"))
+
+    def set_song_mode(self, *, song: bool) -> None:
+        """Select song playback when true, or pattern playback when false."""
+        self.invoke("set_song_mode", **{"song": song})
+
+    def seek(self, *, tick: int) -> None:
+        """Move the song playhead to an absolute tick (PPQ)."""
+        self.invoke("seek", **{"tick": tick})
+
+    def list_markers(self) -> str:
+        """List song time markers."""
+        return cast(str, self.invoke("list_markers"))
+
+    def add_marker(self, *, tick: int, name: str) -> None:
+        """Add a named song marker at a tick position."""
+        self.invoke("add_marker", **{"tick": tick, "name": name})
+
+    def open_project(self, *, path: str) -> None:
+        """Open the project at the specified path."""
+        self.invoke("open_project", **{"path": path})
+
+    def save_project(self, *, path: str) -> None:
+        """Save the project using the specified path."""
+        self.invoke("save_project", **{"path": path})
+
+    def new_project(self) -> None:
+        """Create a new project through FL Studio."""
+        self.invoke("new_project")
+
+    def get_project_info(self) -> str:
+        """Read project identity and metadata."""
+        return cast(str, self.invoke("get_project_info"))
+
+    def save_project_as(self, *, path: str) -> None:
+        """Save As: write to a new path and make it the current project (updates title + recent files)."""
+        self.invoke("save_project_as", **{"path": path})
+
+    def save_copy(self, *, path: str) -> None:
+        """Save a full .flp copy of the live project to a path WITHOUT changing the current project path/title. Modal-free and safe on UNTITLED projects too (uses FL's low-level direct writer, not the save wrapper that pops a blocking dialog on untitled projects)."""
+        self.invoke("save_copy", **{"path": path})
+
+    def save_new_version(self) -> None:
+        """Save an auto-incremented new version and make it current."""
+        self.invoke("save_new_version")
+
+    def list_recent_projects(self) -> str:
+        """List recently opened project paths."""
+        return cast(str, self.invoke("list_recent_projects"))
+
+    def list_arrangements(self) -> str:
+        """List arrangement indices and names."""
+        return cast(str, self.invoke("list_arrangements"))
+
+    def add_arrangement(self, *, name: str | None) -> int:
+        """Add a new (empty) arrangement and switch to it; returns its index."""
+        return cast(int, self.invoke("add_arrangement", **{"name": name}))
+
+    def clone_arrangement(self, *, src_idx: int, name: str | None) -> int:
+        """Clone an arrangement (deep copy incl. clips); srcIdx<0 = current. Returns the new index."""
+        return cast(int, self.invoke("clone_arrangement", **{"srcIdx": src_idx, "name": name}))
+
+    def rename_arrangement(self, *, idx: int, name: str) -> None:
+        """Rename an arrangement by index."""
+        self.invoke("rename_arrangement", **{"idx": idx, "name": name})
+
+    def get_arrangement_name(self, *, idx: int) -> str:
+        """Read an arrangement's name ("" when unnamed; symmetric with RenameArrangementAsync)."""
+        return cast(str, self.invoke("get_arrangement_name", **{"idx": idx}))
+
+    def delete_arrangement(self, *, idx: int) -> None:
+        """Delete an arrangement by index."""
+        self.invoke("delete_arrangement", **{"idx": idx})
+
+    def select_arrangement(self, *, idx: int) -> None:
+        """Switch to an arrangement by index."""
+        self.invoke("select_arrangement", **{"idx": idx})
+
+    def create_automation_clip(self, *, target: AutomationTarget, track: int, start_tick: int, length_tick: int, name: str | None = None) -> AutomationClipResult:
+        """Create a linked automation channel and place its clip on one-based playlist track 1..500. Times are ticks, length positive. Initial linking is part of native creation; failures may leave the channel created, so inspect before retrying."""
+        return decode_record(AutomationClipResult, self.invoke("create_automation_clip", **{"target": target, "track": track, "startTick": start_tick, "lengthTick": length_tick, "name": name}))
+
+    def add_automation_clip(self, *, channel: int, track: int, start_tick: int, length_tick: int) -> int:
+        """Place an existing Automation Clip generator on one-based playlist track 1..500. Returns the new playlist clip index; startTick is nonnegative and lengthTick positive."""
+        return cast(int, self.invoke("add_automation_clip", **{"channel": channel, "track": track, "startTick": start_tick, "lengthTick": length_tick}))
+
+    def set_automation_points(self, *, channel: int, points: Sequence[AutomationPointSpec]) -> None:
+        """Replace an automation envelope with 2..4000 linear points. Times are beats, first time zero, later times strictly increasing; values 0..1, tension -1..1, curve must be zero."""
+        self.invoke("set_automation_points", **{"channel": channel, "points": points})
+
+    def list_automation_points(self, *, channel: int) -> str:
+        """List an automation channel curve with times, values, and tension."""
+        return cast(str, self.invoke("list_automation_points", **{"channel": channel}))
+
+    def add_automation_point(self, *, channel: int, time_beats: float, value: float, tension: float) -> None:
+        """Add an automation point: time in beats, value 0..1, tension -1..1 (inserts in time order)."""
+        self.invoke("add_automation_point", **{"channel": channel, "timeBeats": time_beats, "value": value, "tension": tension})
+
+    def delete_automation_point(self, *, channel: int, index: int) -> None:
+        """Delete an automation point by index and recompute its curve."""
+        self.invoke("delete_automation_point", **{"channel": channel, "index": index})
+
+    def open_export_dialog(self, *, format_index: int = 0) -> None:
+        """Opens FL's audio Export dialog for the user to finish (format/path/Render)."""
+        self.invoke("open_export_dialog", **{"formatIndex": format_index})
+
+    def open_chat_tab(self) -> None:
+        """Open (or focus) the native "FruityLink AI" chat tab in FL's browser."""
+        self.invoke("open_chat_tab")
+
+    def close_chat_tab(self) -> None:
+        """Hide the chat tab and restore the browser content hook."""
+        self.invoke("close_chat_tab")
+
+    def chat_poll(self) -> str:
+        """Return + clear the user's submitted chat message (empty if none pending)."""
+        return cast(str, self.invoke("chat_poll"))
+
+    def chat_say(self, *, text: str) -> None:
+        """Append a line to the chat display (runs on FL's main thread)."""
+        self.invoke("chat_say", **{"text": text})

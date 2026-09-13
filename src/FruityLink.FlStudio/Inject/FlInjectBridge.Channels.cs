@@ -55,7 +55,8 @@ public sealed partial class FlInjectBridge
     {
         // Delphi `function GetName: string` (vtbl+0x68) returns via a hidden out-param: getName(self, @result).
         // The result slot must be a valid (zeroed) UnicodeString var, or the assign derefs garbage and faults.
-        ulong sc = await ZeroedScratchSlotAsync(0, ct);
+        using var scratch = await LeaseScratchAsync(ct).ConfigureAwait(false);
+        ulong sc = await ZeroedScratchSlotAsync(0, scratch, ct);
         await CallVtblAsync(ch, 0x68, "Channel getName", new[] { ch, sc }, ct);
         ulong strPtr = await APtrAsync(sc, ct);
         string s = await ReadDelphiStringAsync(strPtr, ct);
@@ -70,8 +71,11 @@ public sealed partial class FlInjectBridge
         ulong ch = await ChannelObjAsync(index, ct);
         if (ch == 0) throw new InvalidOperationException($"Channel {index} not found.");
         LogOp("SetChannelName", $"index={index}");
-        ulong str = await MakeOwnedDelphiStringAsync(name ?? string.Empty, ct);
-        await CallVtblAsync(ch, 0x70, "Channel setName", new[] { ch, str }, ct);   // UStrAsg into the name field + notify
+        using (var scratch = await LeaseScratchAsync(ct).ConfigureAwait(false))
+        {
+            ulong str = await MakeOwnedDelphiStringAsync(name ?? string.Empty, scratch, ct);
+            await CallVtblAsync(ch, 0x70, "Channel setName", new[] { ch, str }, ct);   // UStrAsg into the name field + notify
+        }
         await RefreshRackAsync(ct);
     }
 
@@ -169,8 +173,17 @@ public sealed partial class FlInjectBridge
             long since = Environment.TickCount64 - _lastChannelLoadTicks;
             if (_lastChannelLoadTicks != 0 && since < MinChannelLoadSpacingMs)
                 await Task.Delay((int)(MinChannelLoadSpacingMs - since), ct).ConfigureAwait(false);
-            ulong strPtr = await WriteDelphiStringAsync(path, ct);
-            await CallVtblAsync(ch, 0x150, "Channel load", new ulong[] { ch, strPtr, mode, 0x42 }, ct);
+            using var scratch = await LeaseScratchAsync(ct).ConfigureAwait(false);
+            ulong strPtr = await WriteDelphiStringAsync(path, scratch, ct);
+            // FL's channel generator-load method (vtbl+0x150) takes FL's FULL argument list. The bridge used
+            // to pass only 4 (ch, path, mode, flags=0x42), leaving p5 UNINITIALIZED. On 2025 that stack slot
+            // was benignly 0, but FL 2026 widened the method — its own callers pass
+            // (self, path, mode, flags, p5=0, p6 = double -1.0) — and p5 is consumed early by
+            // UStrAsg(ch+0x340, p5): a garbage p5 gets DEREFERENCED → AV (the add_channel / add_sample_channel
+            // "callabs faulted" on 2026, RE 2026-07-10). Pass the full list: p5=0, p6 = raw bits of double -1.0
+            // (0xBFF0000000000000). The extra trailing arg is ignored by the narrower 2025 method (x64: args
+            // 5+ live on the stack), so this is correct on BOTH versions.
+            await CallVtblAsync(ch, 0x150, "Channel load", new ulong[] { ch, strPtr, mode, 0x42, 0, 0xBFF0000000000000UL }, ct);
         }
         finally
         {
@@ -287,11 +300,9 @@ public sealed partial class FlInjectBridge
             if (!Directory.Exists(root)) continue;
             try
             {
-                foreach (string f in Directory.EnumerateFiles(root, "*.*", SearchOption.AllDirectories))
+                foreach (string f in EnumerateSamples(root, filter))
                 {
                     if (ct.IsCancellationRequested) break;
-                    if (Array.IndexOf(SampleExts, Path.GetExtension(f).ToLowerInvariant()) < 0) continue;
-                    if (!string.IsNullOrEmpty(filter) && f.IndexOf(filter, StringComparison.OrdinalIgnoreCase) < 0) continue;
                     total++;
                     if (hits.Count < cap) hits.Add(tag + Path.GetRelativePath(root, f));
                     else if (total >= scanMax) { truncatedScan = true; break; }
@@ -306,6 +317,11 @@ public sealed partial class FlInjectBridge
         string more = total > hits.Count ? $"\n({total - hits.Count}{(truncatedScan ? "+" : "")} more — pass a filter)" : "";
         return Task.FromResult(head + string.Join("\n", hits) + more);
     }
+
+    private static IEnumerable<string> EnumerateSamples(string root, string? filter) =>
+        Directory.EnumerateFiles(root, "*.*", SearchOption.AllDirectories)
+            .Where(path => Array.IndexOf(SampleExts, Path.GetExtension(path).ToLowerInvariant()) >= 0)
+            .Where(path => string.IsNullOrEmpty(filter) || path.Contains(filter, StringComparison.OrdinalIgnoreCase));
 
     /// <summary>Adds a new channel that plays the given audio sample file; returns its index.
     /// Accepts full paths or the root-tagged relative paths <see cref="ListSamplesAsync"/> emits.</summary>
@@ -335,6 +351,8 @@ public sealed partial class FlInjectBridge
 
     // ---- plugin parameters ----
     // Resolve a plugin instance + its param command base. slot < 0 => channel generator, else mixer FX slot.
+    // Built-in Sampler settings are channel controls, not a hosted-plugin parameter interface.
+    // A missing instance must not be interpreted as an empty sample or an invitation to call another ABI.
     //   instance = (*(*(*(obj+0x38)+0x48)+0x20))(host);  count = *(int*)(obj+0x68)
     //   cmd base = channel: *(int*)(obj+0x9c)+0x8000 ; mixer: ((track*0x40+slot)<<16)+0x70008000
     private async Task<(ulong inst, int count, uint cmdBase)> ResolvePluginAsync(int channelOrTrack, int slot, CancellationToken ct)
@@ -361,17 +379,27 @@ public sealed partial class FlInjectBridge
         return (inst, count, cmdBase);
     }
 
+    private static string PluginParametersUnavailableMessage(int channelOrTrack, int slot)
+        => slot < 0
+            ? $"Channel {channelOrTrack} has no hosted-plugin parameter interface. " +
+              "The SDK does not expose built-in Sampler envelopes or sample settings through this API. " +
+              "Use channel volume, pan, mute, routing, and sample-loading operations where applicable."
+            : $"Mixer track {channelOrTrack}, effect slot {slot} has no loaded plugin parameter interface (the slot may be empty).";
+
     /// <summary>Shared plugin-text call: both param NAME (mode 0) and param VALUE DISPLAY (mode 1) go
     /// through the SAME vtable slot (*(*inst+0x20))(inst, mode, paramIdx, rawValue, buf) on the shared
-    /// TBaseAudioPlugin base, so it is flavor-agnostic: native / VST2 / VST3 alike.
+    /// TBaseAudioPlugin base, shared by hosted native plugins, VST2 and VST3. Built-in Sampler controls
+    /// do not use this interface.
     /// NB: no EnsureInModule here — for a hosted VST (e.g. Serum 2) the plugin-instance methods
     /// legitimately live in the PLUGIN's own DLL, not FLEngine. The native callabs is SEH-guarded,
     /// so a bad pointer returns ok:0 (a clean exception) rather than crashing FL.</summary>
-    private async Task<string> ReadPluginTextAsync(ulong inst, uint mode, int paramIndex, uint rawValue, ulong charBuf, string what, CancellationToken ct)
+    private async Task<string> ReadPluginTextAsync(ulong inst, uint mode, int paramIndex, uint rawValue, string what, CancellationToken ct)
     {
         ulong vti = await APtrAsync(inst, ct);
         ulong fn = await APtrAsync(vti + 0x20, ct);
         if (fn == 0) throw new InvalidOperationException($"Plugin {what} pointer is null.");
+        using var scratch = await LeaseScratchAsync(ct).ConfigureAwait(false);
+        ulong charBuf = scratch.Address + 0x40;
         await PokeAbsAsync(charBuf, new byte[64], ct);
         await CallAbsAsync(fn, new ulong[] { inst, mode, (uint)paramIndex, rawValue, charBuf }, ct);
         return DecodePluginText(await PeekAbsAsync(charBuf, 64, ct));
@@ -386,9 +414,9 @@ public sealed partial class FlInjectBridge
         return end > start ? Encoding.ASCII.GetString(raw, start, end - start) : "";
     }
 
-    private async Task<string> ReadParamNameAsync(ulong inst, int i, ulong charBuf, CancellationToken ct)
+    private async Task<string> ReadParamNameAsync(ulong inst, int i, CancellationToken ct)
     {
-        string s = await ReadPluginTextAsync(inst, 0, i, 0, charBuf, "getParamName", ct);  // GetParamName(?, i, ?, buf)
+        string s = await ReadPluginTextAsync(inst, 0, i, 0, "getParamName", ct);  // GetParamName(?, i, ?, buf)
         return s.Length > 0 ? s : $"param {i}";
     }
 
@@ -404,27 +432,26 @@ public sealed partial class FlInjectBridge
 
     /// <summary>Reads a param's human-readable display string (with units), the sound-design feedback
     /// loop — e.g. "1.2 kHz", "-6.0 dB", "62 %". Mode 1 = value display. Returns "" if the plugin supplies none.</summary>
-    private async Task<string> ReadParamValueStringAsync(ulong inst, int i, int raw, ulong charBuf, CancellationToken ct)
-        => (await ReadPluginTextAsync(inst, 1, i, unchecked((uint)raw), charBuf, "getParamValueString", ct)).Trim();
+    private async Task<string> ReadParamValueStringAsync(ulong inst, int i, int raw, CancellationToken ct)
+        => (await ReadPluginTextAsync(inst, 1, i, unchecked((uint)raw), "getParamValueString", ct)).Trim();
 
     /// <summary>Lists a plugin's parameters as "index: name" (slot &lt; 0 = channel generator). Optional name filter.</summary>
     public async Task<string> ListPluginParamsAsync(int channelOrTrack, int slot, string? filter, CancellationToken ct = default)
     {
         var (inst, count, _) = await ResolvePluginAsync(channelOrTrack, slot, ct);
-        if (inst == 0) return "No plugin found (the slot is empty or the channel has no generator).";
+        if (inst == 0) return PluginParametersUnavailableMessage(channelOrTrack, slot);
         if (count <= 0) return "This plugin exposes no parameters.";
-        ulong charBuf = await ScratchAsync(ct) + 0x40;
         var sb = new StringBuilder();
         int shown = 0;
         for (int i = 0; i < count && shown < 200; i++)
         {
-            string name = await ReadParamNameAsync(inst, i, charBuf, ct);
+            string name = await ReadParamNameAsync(inst, i, ct);
             if (!string.IsNullOrEmpty(filter) && name.IndexOf(filter, StringComparison.OrdinalIgnoreCase) < 0) continue;
             int val = await ReadParamValueAsync(inst, i, ct);
             // Prefer the plugin's own display string (units) so the LLM can reason about real targets
             // ("Cutoff = 1.2 kHz"). Fallback when a plugin gives none: VST params return their raw value
             // as normalized float bits, so reinterpret to a 0..1 figure rather than print a huge integer.
-            string disp = await ReadParamValueStringAsync(inst, i, val, charBuf, ct);
+            string disp = await ReadParamValueStringAsync(inst, i, val, ct);
             if (disp.Length == 0)
             {
                 float f = BitConverter.Int32BitsToSingle(val);
@@ -444,46 +471,25 @@ public sealed partial class FlInjectBridge
     public async Task SetPluginParamAsync(int channelOrTrack, int slot, int paramIndex, double value, CancellationToken ct = default)
     {
         var (inst, count, cmdBase) = await ResolvePluginAsync(channelOrTrack, slot, ct);
-        if (inst == 0) throw new InvalidOperationException("No plugin found (the slot is empty or the channel has no generator).");
+        if (inst == 0) throw new InvalidOperationException(PluginParametersUnavailableMessage(channelOrTrack, slot));
         if (paramIndex < 0 || paramIndex >= count) throw new InvalidOperationException($"paramIndex out of range (0..{count - 1}).");
         uint fixedVal = (uint)Math.Round(Math.Clamp(value, 0.0, 1.0) * 1073741824.0);  // norm * 2^30
         await DispatchCommandAsync(cmdBase + (uint)paramIndex, fixedVal, 0x3fd, ct);
     }
 
     // ---- automation target links (what a clip CONTROLS) ----
-    // Registry (re/11 §3): a global TList (items @+0x08, count @+0x10, capacity @+0x14) of 0x18-byte
-    // entries { +0x00 targetDesc, +0x08 sourceEventId (= clip channel's +0x9c), +0x10 targetEventId }.
-    // The RE note's registry global reads literally as *(0x14A81C0) — but that slot is the LIVE-VERIFIED
-    // play-state holder (Transport), so the note's parse is ambiguous. Resolve DEFENSIVELY: probe each
-    // plausible parse and require TList-shaped fields before trusting one. Read-only peeks throughout —
-    // a wrong candidate can only fail validation (peeks are SEH-guarded), never fault FL.
+    // Both verified creators append entries to the TList at *(AutoLinkRegistryRoot + 8).
+    // The adjacent global is transport state; never probe it as an alternative registry.
     private async Task<ulong> AutomationLinkRegistryAsync(CancellationToken ct)
     {
-        var candidates = new List<ulong>();
-        try
-        {
-            ulong b8 = await GPtrAsync("14a81b8", ct);
-            if (b8 > 0x10000)
-            {
-                candidates.Add(b8);                                // registry object at *(0x14A81B8)
-                candidates.Add(await APtrAsync(b8 + 8, ct));       // TList hanging at *(reg + 8)
-            }
-            candidates.Add(await GPtrAsync("14a81c0", ct));        // the note's literal parse, last
-        }
-        catch (InvalidOperationException) { /* keep whatever candidates resolved */ }
-        foreach (ulong cand in candidates)
-        {
-            if (cand <= 0x10000) continue;
-            try
-            {
-                ulong items = await APtrAsync(cand + 8, ct);
-                int count = await AI32Async(cand + 0x10, ct);
-                int capacity = await AI32Async(cand + 0x14, ct);
-                if (items > 0x10000 && count >= 0 && count <= 8192 && capacity >= count) return cand;
-            }
-            catch (InvalidOperationException) { /* unmapped — not this parse */ }
-        }
-        return 0;
+        ulong root = await GPtrAsync("14a81b8", ct);
+        if (root <= 0x10000) return 0;
+        ulong list = await APtrAsync(root + 8, ct);
+        if (list <= 0x10000) return 0;
+        ulong items = await APtrAsync(list + 8, ct);
+        int count = await AI32Async(list + 0x10, ct);
+        int capacity = await AI32Async(list + 0x14, ct);
+        return count is >= 0 and <= 8192 && capacity >= count && (items > 0x10000 || count == 0) ? list : 0;
     }
 
     /// <summary>Target event ids linked to a clip channel (entries whose +0x08 source id equals the
@@ -517,7 +523,8 @@ public sealed partial class FlInjectBridge
     {
         try
         {
-            ulong outSlot = await ZeroedScratchSlotAsync(0x380, ct);
+            using var scratch = await LeaseScratchAsync(ct).ConfigureAwait(false);
+            ulong outSlot = await ZeroedScratchSlotAsync(0x380, scratch, ct);
             await CallAsync("f5ca00", new ulong[] { outSlot, (uint)eventId, 0 }, ct);
             string s = await ReadDelphiStringAsync(await APtrAsync(outSlot, ct), ct);
             return s.Any(char.IsControl) ? "" : s;
@@ -545,91 +552,4 @@ public sealed partial class FlInjectBridge
         catch (InvalidOperationException) { return null; }
     }
 
-    // ---- automation clips ----
-    // channel -> container *(ch+0x390) -> env *(cont+0x10) -> points dynarray *(env+0x28) (0x20-byte
-    // elements: deltaTime f32@0, value f32@4, tension f32@8, curve u8@0xc; count @arr-8). Times are in
-    // beats (default 2nd point at 4.0 = one 4/4 bar). Make one with native_add_channel("Automation Clip").
-    private async Task<ulong> AutomationEnvAsync(int channel, CancellationToken ct)
-    {
-        ulong ch = await ChannelObjAsync(channel, ct);
-        if (ch == 0) return 0;
-        ulong cont = await APtrAsync(ch + 0x390, ct);
-        return cont == 0 ? 0 : await APtrAsync(cont + 0x10, ct);
-    }
-
-    public async Task<string> ListAutomationPointsAsync(int channel, CancellationToken ct = default)
-    {
-        ulong env = await AutomationEnvAsync(channel, ct);
-        if (env == 0) return $"Channel {channel} is not an automation clip.";
-        // Say WHAT the clip controls up front — points without a target are meaningless to the model.
-        // null (registry unresolved) omits the line; "" (resolved, no links) states it plainly.
-        ulong chObj = await ChannelObjAsync(channel, ct);
-        string? targets = chObj != 0 ? await DescribeAutomationTargetsAsync(chObj, ct) : null;
-        string targetLine = targets switch
-        {
-            null => "",
-            "" => "automates: nothing (no target link yet)\n",
-            _ => $"automates: {targets}\n",
-        };
-        ulong arr = await APtrAsync(env + 0x28, ct);
-        if (arr == 0) return (targetLine + "(no points)").TrimEnd();
-        int n = BitConverter.ToInt32(await PeekAbsAsync(arr - 8, 4, ct), 0);
-        if (n <= 0 || n > 4000) return (targetLine + "(no points)").TrimEnd();
-        var sb = new StringBuilder($"{targetLine}{n} points (time in beats):\n");
-        double abs = 0;
-        for (int i = 0; i < n; i++)
-        {
-            byte[] p = await PeekAbsAsync(arr + (ulong)i * 0x20, 0x10, ct);
-            abs += BitConverter.ToSingle(p, 0);
-            sb.Append($"  [{i}] t={abs:0.###} value={BitConverter.ToSingle(p, 4):0.###} tension={BitConverter.ToSingle(p, 8):0.###} curve={p[0xc]}\n");
-        }
-        return sb.ToString().TrimEnd();
-    }
-
-    /// <summary>Add an automation point (time in beats, value 0..1, tension -1..1) — inserts in time order
-    /// and rebuilds the curve (integer-only SetLength + poke + recompute; no XMM needed).</summary>
-    public async Task AddAutomationPointAsync(int channel, double timeBeats, double value, double tension, CancellationToken ct = default)
-    {
-        ulong env = await AutomationEnvAsync(channel, ct);
-        if (env == 0) throw new InvalidOperationException($"Channel {channel} is not an automation clip.");
-        ulong arr = await APtrAsync(env + 0x28, ct);
-        int n = arr != 0 ? BitConverter.ToInt32(await PeekAbsAsync(arr - 8, 4, ct), 0) : 0;
-        if (n < 0 || n > 4000) n = 0;
-        var pts = new List<(double t, float v, float ten, byte cv)>();
-        double acc = 0;
-        for (int i = 0; i < n; i++)
-        {
-            byte[] p = await PeekAbsAsync(arr + (ulong)i * 0x20, 0x10, ct);
-            acc += BitConverter.ToSingle(p, 0);
-            pts.Add((acc, BitConverter.ToSingle(p, 4), BitConverter.ToSingle(p, 8), p[0xc]));
-        }
-        pts.Add((timeBeats, (float)Math.Clamp(value, 0, 1), (float)Math.Clamp(tension, -1, 1), 0));
-        pts.Sort((x, y) => x.t.CompareTo(y.t));
-        int N = pts.Count;
-        await CallAsync("417fc0", new ulong[] { env + 0x28, GhidraToRuntime(0xB2C678), 1, (uint)N }, ct);  // SetLength
-        ulong arr2 = await APtrAsync(env + 0x28, ct);
-        double prev = 0;
-        for (int i = 0; i < N; i++)
-        {
-            ulong p = arr2 + (ulong)i * 0x20;
-            await PokeAbsAsync(p + 0, BitConverter.GetBytes((float)(pts[i].t - prev)), ct); prev = pts[i].t;
-            await PokeAbsAsync(p + 4, BitConverter.GetBytes(pts[i].v), ct);
-            await PokeAbsAsync(p + 8, BitConverter.GetBytes(pts[i].ten), ct);
-            await PokeAbsAsync(p + 0xc, new byte[1] { pts[i].cv }, ct);
-            await PokeAbsAsync(p + 0xd, new byte[0x13], ct);  // zero cached coefficients
-        }
-        ulong vt = await APtrAsync(env, ct);
-        ulong rec = await APtrAsync(vt + 0x40, ct);
-        if (IsInModule(rec)) await CallAbsAsync(rec, new ulong[] { env }, ct);  // recompute
-        await RefreshRackAsync(ct);
-    }
-
-    /// <summary>Delete an automation point by index (FLac_DeletePoint handles delta-fixup + recompute).</summary>
-    public async Task DeleteAutomationPointAsync(int channel, int index, CancellationToken ct = default)
-    {
-        ulong env = await AutomationEnvAsync(channel, ct);
-        if (env == 0) throw new InvalidOperationException($"Channel {channel} is not an automation clip.");
-        await CallAsync("b30ad0", new ulong[] { env, (uint)index }, ct);  // FLac_DeletePoint
-        await RefreshRackAsync(ct);
-    }
 }

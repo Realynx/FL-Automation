@@ -13,6 +13,7 @@ public static class ChordProgressionComposer
     private static readonly int[] TriadOffsets = { 0, 2, 4 };
     private static readonly int[] SeventhOffsets = { 0, 2, 4, 6 };
 
+    /// <summary>Compose timed, voiced chords from the requested key, scale, and degrees.</summary>
     public static ProgressionResult Compose(ProgressionRequest request)
     {
         ArgumentNullException.ThrowIfNull(request);

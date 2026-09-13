@@ -60,7 +60,7 @@ internal sealed class HostWindow : Window
     private async void RunProbes() => await RunProbeSequence(Append);
 
     /// <summary>
-    /// The in-process bridge probe sequence (ping/info/tempo read+reversible-write/channels). Each
+    /// The read-only in-process bridge probe sequence (ping/info/tempo/channels). Each
     /// line is handed to <paramref name="emit"/>: the proof window passes its textbox+file sink, while
     /// <see cref="HostEntry"/> passes the file logger so the probes still run — after FL is ready — even
     /// when the window is hidden by default. Never throws (each step is guarded).
@@ -73,19 +73,15 @@ internal sealed class HostWindow : Window
         {
             emit("ping             -> " + InProcBridge.Raw("ping"));
             emit("info             -> " + InProcBridge.Raw("info"));
-            emit("IsAvailableAsync -> " + await bridge.IsAvailableAsync());
+            bool available = await bridge.IsAvailableAsync();
+            emit("IsAvailableAsync -> " + available);
+            if (!available) { emit("FL is not ready; native operation probes skipped."); return; }
             try
             {
-                double t0 = await bridge.GetTempoAsync();
-                emit("GetTempoAsync    -> " + t0 + " BPM");
-                // Reversible WRITE through the same in-proc transport (proves a real mutation, no pipe).
-                double probe = t0 >= 521 ? t0 - 1 : t0 + 1;
-                await bridge.SetTempoAsync(probe);
-                double t1 = await bridge.GetTempoAsync();
-                await bridge.SetTempoAsync(t0); // restore
-                emit($"SetTempo write   -> set {probe}, read back {t1}, restored {t0} (in-proc write OK)");
+                double tempo = await bridge.GetTempoAsync();
+                emit("GetTempoAsync    -> " + tempo + " BPM");
             }
-            catch (Exception ex) { emit("Tempo r/w        -> (no project?) " + ex.Message); }
+            catch (Exception ex) { emit("Tempo read       -> (no project?) " + ex.Message); }
             try { emit("ListChannels     ->\n" + await bridge.ListChannelsAsync()); }
             catch (Exception ex) { emit("ListChannels     -> " + ex.Message); }
         }
