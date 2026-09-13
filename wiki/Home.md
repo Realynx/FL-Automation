@@ -2,8 +2,9 @@
 
 Build C# plugins and write Python scripts for FL Studio.
 
-The documentation is maintained alongside the source code. Start with the
-[documentation home](https://github.com/Realynx/FL-Automation/blob/master/docs/index.md).
+Start with the **[documentation site](https://realynx.github.io/FL-Automation/)**,
+with search and guides for C# and Python. The [Markdown source](https://github.com/Realynx/FL-Automation/blob/master/docs/index.md)
+is maintained alongside the code.
 
 - [Getting started](https://github.com/Realynx/FL-Automation/blob/master/docs/getting-started.md)
 - [Installation](https://github.com/Realynx/FL-Automation/blob/master/docs/installation.md)

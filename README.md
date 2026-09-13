@@ -9,8 +9,10 @@
 <img src="https://img.shields.io/badge/.NET-9.0-7c3aed?style=flat-square" alt=".NET 9" />
 <img src="https://img.shields.io/badge/platform-Windows%20x64-d946ef?style=flat-square" alt="Windows x64" />
 </p>
-<p><a href="docs/index.md">Documentation</a> · <a href="docs/getting-started.md">Getting started</a> · <a href="https://discord.fl-automate.com">Discord</a></p>
+<p><a href="https://realynx.github.io/FL-Automation/"><strong>Documentation site</strong></a> · <a href="https://realynx.github.io/FL-Automation/getting-started/">Getting started</a> · <a href="https://realynx.github.io/FL-Automation/csharp/">C# SDK</a> · <a href="https://realynx.github.io/FL-Automation/python/">Python SDK</a> · <a href="https://discord.fl-automate.com">Discord</a></p>
 </div>
+
+Read the **[documentation site](https://realynx.github.io/FL-Automation/)** or [browse its Markdown source](docs/index.md).
 
 FruityLink loads plugins inside FL Studio and gives them a shared API for project
 editing, composition, mixing, automation, menus, and windows. C# plugins and Python
@@ -18,12 +20,12 @@ scripts operate on the same live project.
 
 | I want to… | Start here |
 | --- | --- |
-| Understand the project and install it | [Getting started](docs/getting-started.md) |
-| Write a C# plugin | [C# SDK](docs/csharp/index.md) |
-| Write a Python script | [Python SDK](docs/python/index.md) |
+| Understand the project and install it | [Getting started](https://realynx.github.io/FL-Automation/getting-started/) |
+| Write a C# plugin | [C# SDK](https://realynx.github.io/FL-Automation/csharp/) |
+| Write a Python script | [Python SDK](https://realynx.github.io/FL-Automation/python/) |
 | Connect an AI assistant | [FLMCP repository](https://github.com/Realynx/Fl-MCP) |
-| Check supported features and FL builds | [Capabilities](docs/capabilities.md) |
-| Build or contribute | [Development guide](docs/development.md) |
+| Check supported features and FL builds | [Capabilities](https://realynx.github.io/FL-Automation/capabilities/) |
+| Build or contribute | [Development guide](https://realynx.github.io/FL-Automation/development/) |
 
 **Requirements:** Windows x64 and a compatible FL Studio engine build. This checkout
 targets SDK **0.2.0**; its matching NuGet packages and local installer **0.1.22** are
