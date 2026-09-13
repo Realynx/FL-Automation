@@ -1,5 +1,7 @@
 """Finite normalized PCM, explicit frame ranges, and a bounded RIFF WAV reader."""
 
+from __future__ import annotations
+
 import math
 import struct
 from array import array

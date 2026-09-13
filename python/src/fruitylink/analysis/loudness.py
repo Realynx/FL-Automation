@@ -4,6 +4,8 @@ Mono and stereo only: channel roles of multichannel PCM cannot be inferred safel
 This implementation is tested against analytic EBU signals, not certified as a meter.
 """
 
+from __future__ import annotations
+
 import math
 from array import array
 from collections.abc import Sequence

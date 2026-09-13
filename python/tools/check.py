@@ -9,6 +9,7 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 def main() -> None:
+    print(f"Running Python quality gate on Python {sys.version.split()[0]}", flush=True)
     project = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))
     sdk_version = (ROOT.parent / "VERSION").read_text(encoding="utf-8").strip()
     if project["project"]["version"] != sdk_version:

@@ -84,9 +84,14 @@ def execute_json(code: str, scope: str, request: RequestCallback, cancelled: Can
     prior_trace, prior_thread_trace = sys.gettrace(), threading.gettrace()
     remaining_events = TRACE_POLL_INTERVAL
     entered_script = False
+    legacy_opcode_trace = sys.version_info < (3, 12)
 
     def trace(frame: FrameType, event: str, arg: object) -> Any:
         nonlocal remaining_events, entered_script
+        # CPython 3.11 can omit line events for a self-jumping instruction, such
+        # as "while True: pass". Trace opcodes in script frames on that runtime.
+        if legacy_opcode_trace and event == "call" and _inside_script(frame):
+            frame.f_trace_opcodes = True
         # Crossing the native callback and walking ancestry on every event makes
         # DSP loops unusably slow. Keep tracing, but bound that work to a poll.
         # Check initial entry immediately; native SDK calls also check separately.

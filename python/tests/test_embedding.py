@@ -1,7 +1,9 @@
 import json
+import subprocess
 import sys
 import threading
 import types
+from pathlib import Path
 
 import pytest
 
@@ -58,17 +60,24 @@ def test_remote_errors_and_cancellation_keep_context() -> None:
 
 @pytest.mark.parametrize("code", ["while True: pass", "exec('while True: pass')"])
 def test_trace_cancels_user_and_nested_code_and_restores_streams(code: str) -> None:
-    checks = 0
-
-    def cancelled(scope: str) -> bool:
-        nonlocal checks
-        checks += 1
-        return checks > 20
-
-    trace, stdout, stderr = sys.gettrace(), sys.stdout, sys.stderr
-    result = json.loads(execute_json(code, "test", request, cancelled))
-    assert result["ok"] is False and "ExecutionCancelled" in result["error"]
-    assert sys.gettrace() is trace and sys.stdout is stdout and sys.stderr is stderr
+    # A cancellation regression must fail within a deadline, not hang the suite.
+    script = """
+import json, sys
+from fruitylink.embedding import execute_json
+checks = 0
+def cancelled(scope):
+    global checks
+    checks += 1
+    return checks > 20
+trace, stdout, stderr = sys.gettrace(), sys.stdout, sys.stderr
+result = json.loads(execute_json(sys.argv[1], "test", lambda *args: "{}", cancelled))
+assert result["ok"] is False and "ExecutionCancelled" in result["error"], result
+assert sys.gettrace() is trace and sys.stdout is stdout and sys.stderr is stderr
+"""
+    process = subprocess.run([sys.executable, "-c", script, code],
+                             cwd=Path(__file__).resolve().parents[1] / "src",
+                             capture_output=True, text=True, timeout=10)
+    assert process.returncode == 0, process.stderr
 
 
 def test_child_threads_drain_while_output_remains_captured() -> None:
@@ -96,7 +105,8 @@ def test_compute_loop_batches_managed_cancellation_callback() -> None:
         f"total=0\nfor i in range({iterations}):\n total+=i\nresult=total", "test", request, cancelled))
     assert result["ok"] is True
     assert result["result"] == iterations * (iterations - 1) // 2
-    assert 1 < checks <= iterations * 4 // TRACE_POLL_INTERVAL + 8
+    # Even the legacy opcode fallback must batch many iterations per host call.
+    assert 1 < checks < iterations // 16
 
 
 def test_cancelled_before_entry_does_not_execute_first_statement() -> None:
