@@ -2,6 +2,13 @@
 <img src="assets/logo.svg" width="104" alt="FL Automate" />
 <h1>FruityLink SDK</h1>
 <p><strong>Build plugins and script FL Studio with C# and Python.</strong></p>
+<p>
+<a href="https://www.nuget.org/packages/FruityLink.Plugins.Abstractions"><img src="https://img.shields.io/nuget/dt/FruityLink.Plugins.Abstractions?style=flat-square&amp;color=22d3ee&amp;label=NuGet%20downloads" alt="FruityLink.Plugins.Abstractions total NuGet downloads" /></a>
+<a href="https://discord.fl-automate.com"><img src="https://img.shields.io/badge/Discord-join%20us-5865F2?style=flat-square&amp;logo=discord&amp;logoColor=white" alt="Discord" /></a>
+<img src="https://img.shields.io/badge/license-MIT-8b5cf6?style=flat-square" alt="MIT license" />
+<img src="https://img.shields.io/badge/.NET-9.0-7c3aed?style=flat-square" alt=".NET 9" />
+<img src="https://img.shields.io/badge/platform-Windows%20x64-d946ef?style=flat-square" alt="Windows x64" />
+</p>
 <p><a href="docs/index.md">Documentation</a> · <a href="docs/getting-started.md">Getting started</a> · <a href="https://discord.fl-automate.com">Discord</a></p>
 </div>
 
