@@ -68,6 +68,30 @@ external execution needs the enabled local endpoint and its authentication detai
 Follow the appropriate route in [Python SDK](python/index.md), including its
 connection and cancellation guidance.
 
+## FL reports invalid notes when opening or saving
+
+This warning can mean that a note references a channel that does not exist in the
+project. Earlier SDK builds accepted those indices. The current SDK validates the
+entire note batch before adding it, and checks existing notes before saving.
+
+Use channel indices returned by `fl.channels.list()` or a channel creation call;
+requery after structural changes. A save error identifies the pattern, note and
+missing channel. Inspect that note and explicitly repair or remove it before
+retrying. The check leaves the project open and does not delete notes. See
+[note integrity](note-integrity.md) for the verified behavior and limits.
+
+## Plugin windows reopen every time FL starts
+
+The host remembers native window X actions and menu visibility toggles separately
+for each plugin window. Python IDE and FL Agent also remember their external
+window visibility. Reopen a hidden plugin through its View menu entry or toolbar
+button; being hidden does not disable the plugin.
+
+Preferences live in `plugins.windows` beside `plugins.json`. Shutdown and plugin
+reload preserve the last user-selected visibility. Update the shared host and
+native bridge together, then restart FL. The first launch after upgrading has no
+saved visibility preference yet; close an unwanted window once to record it.
+
 ## Find logs and report a problem
 
 The default host log is:

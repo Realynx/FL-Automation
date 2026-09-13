@@ -46,6 +46,7 @@ public sealed class PluginManager : IPluginManager, IDisposable
     private readonly ToolbarContributionRegistry _toolbar;
     private readonly Action<string> _log;
     private readonly EnabledStateStore _state;
+    private readonly WindowVisibilityStore _visibility;
     private readonly ShadowCopyStore _shadow;
 
     private readonly object _sync = new();                 // guards _plugins + entry/owner mutable fields
@@ -78,6 +79,7 @@ public sealed class PluginManager : IPluginManager, IDisposable
         _menu = new MenuContributionRegistry(_log);
         _toolbar = new ToolbarContributionRegistry(_log);
         _state = new EnabledStateStore(stateFile, _log);
+        _visibility = new WindowVisibilityStore(Path.ChangeExtension(stateFile, ".windows"), _log);
         _shadow = new ShadowCopyStore(shadowRoot, _pluginsDir, _log);
     }
 
@@ -673,13 +675,14 @@ public sealed class PluginManager : IPluginManager, IDisposable
         if (entry.Context is not null) return entry.Context;
         IFlWindowHost windows = _windows is IFlWindowHostFactory factory
             ? factory.CreateWindowHost(entry.Id, entry.Name) : _windows;
-        var context = new PluginContext(_fl, _services, _log, _menu.ScopeFor(entry.Id), _toolbar.ScopeFor(entry.Id), windows);
+        var context = new PluginContext(_fl, _services, _log, _menu.ScopeFor(entry.Id), _toolbar.ScopeFor(entry.Id), windows, _visibility, entry.Id);
         lock (_sync) entry.Context = context;
         return context;
     }
 
     private async Task<bool> DeactivateAsync_NoLock(PluginEntry entry, CancellationToken ct)
     {
+        if (entry.Context is PluginContext context) context.BeginTeardown();
         IFlPlugin? inst;
         bool needsCleanup;
         lock (_sync) { inst = entry.Instance; needsCleanup = entry.NeedsCleanup; }

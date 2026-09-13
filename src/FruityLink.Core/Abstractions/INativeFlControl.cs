@@ -70,12 +70,18 @@ public interface INativeFlControl
 
     // --- piano roll (current pattern) ---
     /// <summary>Add a note to a pattern's piano roll for a channel (pattern: 1-based, or &lt;=0 = current).
-    /// key = MIDI 0..131 (60 = middle C), startTick/lengthTick in PPQ ticks, velocity 0..127.</summary>
+    /// channel must be an existing zero-based channel rack index; query channels after adding or removing one.
+    /// key = MIDI 0..131 (60 = middle C), startTick &gt;= 0, lengthTick &gt; 0 in PPQ ticks, velocity 0..127.
+    /// Invalid values and startTick + lengthTick above int.MaxValue are rejected, not clamped.</summary>
     Task AddNoteAsync(int pattern, int channel, int key, int startTick, int lengthTick, int velocity, CancellationToken ct = default);
 
     /// <summary>Add many notes to a pattern's piano roll in one batch — resolves the pattern and refreshes
     /// the editor once for the whole set, far faster than repeated <see cref="AddNoteAsync"/>. Each note
-    /// carries its own channel, so a single call can author chords, melodies, or multi-channel drum grids.</summary>
+    /// carries its own channel, so a single call can author chords, melodies, or multi-channel drum grids.
+    /// Every channel must exist in the current channel rack. Invalid channel references are rejected before
+    /// any note in the batch is added; channel indices are never wrapped into another channel.
+    /// Note values use the same strict ranges as AddNoteAsync. Cancellation may leave a completed prefix
+    /// of the batch, but never an unfinished note-on waiting for its length.</summary>
     Task AddNotesAsync(int pattern, IReadOnlyList<NoteSpec> notes, CancellationToken ct = default);
 
     /// <summary>Project timebase: ticks per quarter note (PPQ).</summary>
@@ -282,19 +288,19 @@ public interface INativeFlControl
     // --- project lifecycle ---
     /// <summary>Open the project at the specified path.</summary>
     Task OpenProjectAsync(string path, CancellationToken ct = default);
-    /// <summary>Save the project using the specified path.</summary>
+    /// <summary>Save the project using the specified path. Rejects orphan note channel references before invoking FL's serializer; inspect and repair the reported note before retrying.</summary>
     Task SaveProjectAsync(string path, CancellationToken ct = default);
     /// <summary>Create a new project through FL Studio.</summary>
     Task NewProjectAsync(CancellationToken ct = default);
     /// <summary>Read project identity and metadata.</summary>
     Task<string> GetProjectInfoAsync(CancellationToken ct = default);
-    /// <summary>Save As: write to a new path and make it the current project (updates title + recent files).</summary>
+    /// <summary>Save As: write to a new path and make it the current project (updates title + recent files). Orphan note validation runs before changing project identity.</summary>
     Task SaveProjectAsAsync(string path, CancellationToken ct = default);
     /// <summary>Save a full <c>.flp</c> copy of the live project to a path WITHOUT changing the current
-    /// project path/title. Modal-free and safe on UNTITLED projects too (uses FL's low-level direct
-    /// writer, not the save wrapper that pops a blocking dialog on untitled projects).</summary>
+    /// project path/title. Supports UNTITLED projects through FL's low-level direct writer.
+    /// Orphan note channel references are rejected before writing; no notes are deleted automatically.</summary>
     Task SaveCopyAsync(string path, CancellationToken ct = default);
-    /// <summary>Save an auto-incremented new version and make it current.</summary>
+    /// <summary>Save an auto-incremented new version and make it current. Orphan note validation runs before changing project identity.</summary>
     Task SaveNewVersionAsync(CancellationToken ct = default);
     /// <summary>List recently opened project paths.</summary>
     Task<string> ListRecentProjectsAsync(CancellationToken ct = default);

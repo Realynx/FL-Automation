@@ -143,6 +143,7 @@ public sealed partial class FlInjectBridge
 
     public async Task SaveProjectAsync(string path, CancellationToken ct = default)
     {
+        await ValidateProjectNotesBeforeSaveAsync(ct);
         ulong song = await GPtrAsync("1581200", ct);
         if (song == 0) throw new InvalidOperationException("Project object not found.");
         // HARD BACKSTOP (root cause of the post-turn UI freeze): FLproj_SaveProjectToFlp @0x10d6190
@@ -207,6 +208,7 @@ public sealed partial class FlInjectBridge
     /// <summary>Save As: writes to a new path AND makes it the current project (updates title + recent files).</summary>
     public async Task SaveProjectAsAsync(string path, CancellationToken ct = default)
     {
+        await ValidateProjectNotesBeforeSaveAsync(ct);
         ulong song = await GPtrAsync("1581200", ct);
         if (song == 0) throw new InvalidOperationException("Project object not found.");
         // Assign the real path FIRST so an UNTITLED project stops matching FLproj_SaveProjectToFlp's
@@ -230,24 +232,26 @@ public sealed partial class FlInjectBridge
     /// no SetProjectPath after — proving the writer is self-contained: it serializes the live song and
     /// writes it straight to the given path).
     ///
-    /// MODAL-FREE and SIDE-EFFECT-FREE (verified in Ghidra) — this is why it is safe on an untitled project
-    /// where the earlier SaveProjectToFlp path wedged FL's UI:
+    /// This avoids the wrapper's untitled-path modal and leaves the current project identity unchanged.
+    /// Orphan note references are validated before entering FL's serializer, which can otherwise reject
+    /// an invalid project through its own modal error path:
     ///  • It is NOT the SaveProjectToFlp wrapper (@0x10d6190). That wrapper has the "untitled.flp"
     ///    special-case AND a temp→final <c>MoveFileW</c> (FUN_010d5f50) whose failure pops a BLOCKING
     ///    "moving the temporary file" <c>FLui_ShowMessageBox</c> on FL's MAIN thread (the freeze). flag=0 is
     ///    a DIRECT write — no temp file, no move — so that modal code path cannot execute.
-    ///  • WriteFlpFile itself never shows a dialog: its non-wrapper callers (FUN_010d7930, FUN_010e1190)
-    ///    report a false return UP the stack rather than popping a modal.
+    ///  • Its non-wrapper callers (FUN_010d7930, FUN_010e1190) report a false return to their caller.
+    ///    This does not exempt the underlying serializer from project-data validation.
     ///  • It does NOT call <c>FLproj_SetProjectPath</c> (@0x10d2c90), so DAT_01581298 (path) and
     ///    DAT_015812a0 (title) are untouched: the user's project stays "untitled" in FL and the
     ///    recent-files MRU is not polluted. The writer never inspects the project path, so titled and
     ///    untitled projects take an identical code path.
-    /// The target directory must already exist. Throws if FL reports the write failed (no modal either way).
+    /// The target directory must already exist. Throws if validation or the native write fails.
     /// </summary>
     public async Task SaveCopyAsync(string path, CancellationToken ct = default)
     {
         if (string.IsNullOrWhiteSpace(path))
             throw new ArgumentException("A target .flp path is required.", nameof(path));
+        await ValidateProjectNotesBeforeSaveAsync(ct);
         using var scratch = await LeaseScratchAsync(ct).ConfigureAwait(false);
         ulong strPtr = await WriteDelphiStringAsync(path, scratch, ct);
         ulong ret = await CallAsync("10d5a60", new ulong[] { strPtr, 0 }, ct);  // FLproj_WriteFlpFile(path, 0 = direct write)
@@ -258,6 +262,7 @@ public sealed partial class FlInjectBridge
     /// <summary>Save an auto-incremented new version (project_2.flp, _3.flp, …) and make it current.</summary>
     public async Task SaveNewVersionAsync(CancellationToken ct = default)
     {
+        await ValidateProjectNotesBeforeSaveAsync(ct);
         ulong song = await GPtrAsync("1581200", ct);
         ulong cur = await GPtrAsync("1581298", ct);
         if (song == 0 || cur == 0) throw new InvalidOperationException("Project not yet saved — use save_project_as first.");

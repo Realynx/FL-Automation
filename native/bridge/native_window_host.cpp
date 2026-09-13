@@ -240,7 +240,14 @@ LRESULT CALLBACK NativeWindowRegistry::subclass(HWND window, UINT message, WPARA
     const auto record = found->second; // Nested native destruction cannot invalidate this callback.
     if (message == WM_CLOSE || (message == WM_SYSCOMMAND && (w & 0xfff0) == SC_CLOSE)) {
         if (record->releaseFailed) ShowWindow(window, SW_HIDE);
-        else registry.factory_.visible(record->surface, false, false);
+        else if (registry.factory_.visible(record->surface, false, false) && record->bound &&
+            IsWindow(record->spec.child) && GetParent(record->spec.child) == record->surface.content) {
+            // Only explicit chrome close changes the user's startup preference. Teardown uses
+            // show/close commands and never posts this notification. Do not block the child UI.
+            const UINT notification = RegisterWindowMessageW(L"FruityLink.Window.UserHidden.v1");
+            if (notification) PostMessageW(record->spec.child, notification,
+                reinterpret_cast<WPARAM>(window), reinterpret_cast<LPARAM>(record->surface.content));
+        }
         return 0;
     }
     if (message == WM_NCDESTROY) {

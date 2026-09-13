@@ -413,12 +413,19 @@ void closeAndVisibility() {
         "minimum native frame size did not include requested content and chrome");
     SendMessageW(host, WM_CLOSE, 0, 0);
     expect(IsWindow(host) && fixture.registry.size() == 1 && !fixture.factory.visibility.back(), "WM_CLOSE must hide, not destroy");
+    const UINT notification = RegisterWindowMessageW(L"FruityLink.Window.UserHidden.v1");
+    MSG posted{};
+    expect(notification && PeekMessageW(&posted, child, notification, notification, PM_REMOVE), "user close did not notify child");
+    expect(posted.wParam == reinterpret_cast<WPARAM>(host) &&
+        posted.lParam == reinterpret_cast<LPARAM>(fixture.factory.surfaces.at(1).content), "close notification lost window identity");
     SendMessageW(host, WM_SYSCOMMAND, SC_CLOSE, 0);
     expect(IsWindow(host) && !fixture.factory.visibility.back(), "system close must hide");
+    expect(PeekMessageW(&posted, child, notification, notification, PM_REMOVE), "system close did not notify child");
     expect(!succeeded(fixture.registry.execute("winhost_close 1")), "close destroyed a parented toolkit child");
     expect(IsWindow(child) && fixture.factory.destroyed == 0, "failed close changed ownership");
     fixture.registry.closeDetached();
     expect(fixture.registry.size() == 1 && IsWindow(child), "shutdown detached or destroyed a bound child");
+    expect(!PeekMessageW(&posted, child, notification, notification, PM_REMOVE), "shutdown must not replace the user's visibility preference");
     fixture.detach(child);
     expect(succeeded(fixture.registry.execute("winhost_close 1")), "detached close failed");
     expect(fixture.registry.size() == 0 && IsWindow(child) && !IsWindow(host), "close did not release only the native frame");

@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using System.Runtime.InteropServices;
 using System.Text.Json;
 using Avalonia;
 using Avalonia.Threading;
@@ -13,6 +14,26 @@ namespace FruityLink.Hosting.Tests;
 public sealed class FlWindowSessionTests
 {
     private static readonly FlWindowOptions Options = new("Python · editor", 1120, 780, 820, 560);
+
+    [Fact]
+    public Task NativeCloseNotificationReachesSessionButTeardownDoesNot() => OnUi(async () =>
+    {
+        using var child = new NativeWindow();
+        using var content = new NativeWindow();
+        var bridge = new Bridge(content);
+        var session = new FlWindowSession(bridge.Send, "visibility");
+        var changes = new List<bool>();
+        session.UserVisibilityChanged += changes.Add;
+        Assert.True(await session.TryEmbedAsync(child.Handle, Options, false));
+        SendMessage(child.Handle, NativeWindowVisibilityListener.Message, content.Handle, content.Handle);
+        Assert.Equal(new[] { false }, changes);
+        Assert.True(await session.CloseAsync());
+        SendMessage(child.Handle, NativeWindowVisibilityListener.Message, content.Handle, content.Handle);
+        Assert.Single(changes);
+    });
+
+    [DllImport("user32.dll", EntryPoint = "SendMessageW")]
+    private static extern IntPtr SendMessage(IntPtr window, uint message, IntPtr w, IntPtr l);
 
     [Fact]
     public Task CancelledFinalShowDrainsThenDetachesBeforeCompleting() => OnUi(async () =>

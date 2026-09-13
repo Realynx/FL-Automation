@@ -11,6 +11,21 @@ namespace FruityLink.Plugins.PythonIde.Execution.Tests;
 public sealed class PluginLifecycleTests
 {
     [Fact]
+    public async Task SavedHiddenPreferenceKeepsEditorClosedUntilMenuToggle()
+    {
+        var fixture = new Fixture();
+        fixture.Context.Preferences.StartupVisible = false;
+        await fixture.Plugin.EnableAsync(fixture.Context);
+        Assert.Equal(0, fixture.Windows[0].Shows);
+        Assert.False(fixture.Windows[0].IsVisible);
+        Assert.Equal(2, fixture.Context.Registrations.Count);
+        fixture.Context.Toggle!();
+        await fixture.Windows[0].Toggled.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        Assert.True(fixture.Windows[0].IsVisible);
+        await fixture.Plugin.DisableAsync();
+    }
+
+    [Fact]
     public async Task EnableIsIdempotentAndDisableDisposesRegistrationsExecutionThenWindow()
     {
         var fixture = new Fixture();
@@ -135,6 +150,7 @@ public sealed class PluginLifecycleTests
         public bool FailShow { get; init; }
         public bool FailDispose { get; set; }
         public int Shows { get; private set; }
+        public TaskCompletionSource Toggled { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
         public Task ShowAsync(CancellationToken ct = default)
         {
             if (FailShow) throw new InvalidOperationException("fake UI startup failure");
@@ -142,7 +158,7 @@ public sealed class PluginLifecycleTests
             IsVisible = true;
             return Task.CompletedTask;
         }
-        public Task ToggleAsync(CancellationToken ct = default) { IsVisible = !IsVisible; return Task.CompletedTask; }
+        public Task ToggleAsync(CancellationToken ct = default) { IsVisible = !IsVisible; Toggled.TrySetResult(); return Task.CompletedTask; }
         public ValueTask DisposeAsync()
         {
             if (FailDispose) throw new IOException("fake native detach failure");
@@ -152,20 +168,37 @@ public sealed class PluginLifecycleTests
 
     private sealed class Context : IPluginContext, IFlMenuRegistrar, IFlToolbarRegistrar, IServiceProvider
     {
+        public WindowPreferences Preferences { get; } = new();
+        public Action? Toggle { get; private set; }
         public List<Registration> Registrations { get; } = [];
         public INativeFlControl Fl { get; } = DispatchProxy.Create<INativeFlControl, ExecutionTests.ControlProxy>();
         public IServiceProvider Services => this;
         public IFlMenuRegistrar Menu => this;
         public IFlToolbarRegistrar Toolbar => this;
-        public IFlWindowHost Windows => throw new NotSupportedException();
+        public IFlWindowHost Windows => Preferences;
         public void Log(string message) { }
         public object? GetService(Type serviceType) => null;
-        public IDisposable AddToggle(FlNativeMenu menu, string caption, Func<bool> isChecked, Action onToggled) => Add();
+        public IDisposable AddToggle(FlNativeMenu menu, string caption, Func<bool> isChecked, Action onToggled) { Toggle = onToggled; return Add(); }
         public IDisposable AddToggle(string caption, string tooltip, Func<bool> isActive, Action onToggled) => Add();
         public IDisposable AddCommand(FlNativeMenu menu, string caption, Action onInvoke) => Add();
         public IDisposable AddButton(string caption, string tooltip, Action onClick) => Add();
         public void Refresh() { }
         private Registration Add() { var registration = new Registration(); Registrations.Add(registration); return registration; }
+    }
+
+    private sealed class WindowPreferences : IFlWindowHost, IFlWindowVisibilityState
+    {
+        public bool StartupVisible { get; set; } = true;
+        public void RememberVisibility(bool visible) => StartupVisible = visible;
+        public bool IsBridgeAvailable() => false;
+        public string LastEmbedReply => "";
+        public int LastInsetX => 0;
+        public int LastInsetY => 0;
+        public bool TryEmbed(IntPtr childHwnd, bool show) => false;
+        public bool IsHostVisible() => false;
+        public void SetVisible(bool visible) { }
+        public void Close() { }
+        public void SetStatusHint(string text) { }
     }
 
     private sealed class Registration : IDisposable

@@ -28,7 +28,7 @@ scripts operate on the same live project.
 | Build or contribute | [Development guide](https://realynx.github.io/FL-Automation/development/) |
 
 **Requirements:** Windows x64 and a compatible FL Studio engine build. This checkout
-targets SDK **0.2.0**; its matching NuGet packages and local installer **0.1.22** are
+targets SDK **0.2.0**; its matching NuGet packages and local installer **0.1.23** are
 not yet published. An installed, matching host
 is required to run plugins. See [installation and compatibility](docs/installation.md)
 before choosing a build.

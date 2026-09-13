@@ -51,7 +51,8 @@ public sealed class PythonIdePlugin : IFlPlugin
             window = createWindow(pluginContext, execution);
             registrations.Add(pluginContext.Menu.AddToggle(FlNativeMenu.View, Name, () => window?.IsVisible == true, QueueToggle));
             registrations.Add(pluginContext.Toolbar.AddToggle("PY", "Show/hide FL Python IDE", () => window?.IsVisible == true, QueueToggle));
-            await window.ShowAsync(startup.Token).ConfigureAwait(false);
+            if ((pluginContext.Windows as IFlWindowVisibilityState)?.StartupVisible != false)
+                await window.ShowAsync(startup.Token).ConfigureAwait(false);
             pluginContext.Log("[fl-python-ide] Ready. Python initializes only when a script runs.");
         }
         catch (Exception error)

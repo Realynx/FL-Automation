@@ -41,11 +41,12 @@ public sealed partial class FlInjectBridge
 
     /// <summary>
     /// Batch note authoring: resolve the pattern's note store and refresh the editor ONCE for the whole
-    /// set (only the two per-note record calls scale with note count). Each note carries its own channel.
+    /// set (one complete-record append per note). Invalid input rejects the entire batch before mutation.
     /// </summary>
     public async Task AddNotesAsync(int pattern, IReadOnlyList<NoteSpec> notes, CancellationToken ct = default)
     {
         if (notes is null || notes.Count == 0) return;
+        NoteSpec[] validated = await ValidateNoteBatchAsync(notes, ct);
         LogOp("AddNotes", $"pattern={pattern} notes={notes.Count}");
 
         int patIdx = pattern;
@@ -60,29 +61,77 @@ public sealed partial class FlInjectBridge
         ulong rec = await CallAsync("11d4080", new ulong[] { (uint)patIdx, 1UL }, ct);
         if (rec == 0) throw new InvalidOperationException($"Could not get/create the note store for pattern {patIdx} (open a project in FL).");
 
-        // Each note: an on/off pair appended to the recorder. Note event (24B) — matched byte-for-byte
-        // against a UI-drawn note:  +0x4 = (channel<<16) | 0x4000  (0x4000 = "real note" flag; without it
-        // notes are ghosts); +0x8 = 0x400078 pending (the off rewrites it to length); +0xC = key;
-        // +0x10 finePitch=120, +0x12 release=64, +0x14 pan=64 / +0x15 vel / +0x16 cut=128 / +0x17 res=128.
-        foreach (var n in notes)
+        await AppendCompleteNotesAsync(patIdx, rec, validated, ct);
+    }
+
+    private async Task<NoteSpec[]> ValidateNoteBatchAsync(IReadOnlyList<NoteSpec> notes, CancellationToken ct)
+    {
+        ct.ThrowIfCancellationRequested();
+        NoteSpec[] snapshot = notes.ToArray();
+        foreach (NoteSpec note in snapshot) ValidateNoteValues(note);
+        int channels = await GetChannelCountAsync(ct);
+        if (channels is < 1 or > 65536)
+            throw new InvalidOperationException("The project's channel count is unavailable or invalid; no notes were added.");
+        foreach (NoteSpec note in snapshot)
+            if (note.Channel >= channels)
+                throw new ArgumentOutOfRangeException(nameof(notes), $"Channel {note.Channel} does not exist (project has {channels} channels); no notes were added.");
+        return snapshot;
+    }
+
+    private static void ValidateNoteValues(NoteSpec note)
+    {
+        ArgumentOutOfRangeException.ThrowIfNegative(note.Channel);
+        ArgumentOutOfRangeException.ThrowIfGreaterThan(note.Channel, ushort.MaxValue);
+        ArgumentOutOfRangeException.ThrowIfNegative(note.Key);
+        ArgumentOutOfRangeException.ThrowIfGreaterThan(note.Key, 131);
+        ArgumentOutOfRangeException.ThrowIfNegative(note.Velocity);
+        ArgumentOutOfRangeException.ThrowIfGreaterThan(note.Velocity, 127);
+        ValidateNoteTime(note.StartTick, note.LengthTick);
+    }
+
+    private static void ValidateNoteTime(int start, int length)
+    {
+        ArgumentOutOfRangeException.ThrowIfNegative(start);
+        ArgumentOutOfRangeException.ThrowIfLessThan(length, 1);
+        if ((long)start + length > int.MaxValue)
+            throw new ArgumentOutOfRangeException(nameof(length), "The note's end tick exceeds the supported signed 32-bit timeline.");
+    }
+
+    private async Task AppendCompleteNotesAsync(int pattern, ulong recorder, NoteSpec[] notes, CancellationToken ct)
+    {
+        Exception? failure = null;
+        bool attempted = false;
+        try
         {
-            // Clamp to valid ranges so a stray LLM value can't fault the native call.
-            int key = Math.Clamp(n.Key, 0, 131);
-            int start = Math.Max(0, n.StartTick);
-            int len = Math.Max(1, n.LengthTick);
-            uint p3 = ((uint)(n.Channel & 0xFFFF) << 16) | 0x4000u;
-            uint vel = (uint)Math.Clamp(n.Velocity, 0, 127);
-            uint p7 = 0x80800040u | (vel << 8);
-            await CallAsync("f6d740", new ulong[] { rec, (uint)start, p3, 0x400078UL, (uint)key, 0x78UL, p7 }, ct);                       // RecordNoteOn
-            await CallAsync("f6d880", new ulong[] { rec, (uint)(start + len), p3, 0x80400088UL, (uint)key, 0x40UL, 1UL }, ct);            // RecordNoteOff -> length
+            foreach (NoteSpec note in notes)
+            {
+                ct.ThrowIfCancellationRequested();
+                attempted = true;
+                // Verified 25.2.5/26.1.3: this historic RecordNoteOn alias initializes and appends a
+                // COMPLETE 24-byte record. Use actual duration, fine pitch 120 and release 64; the
+                // recording-only NoteOff path applies live loop rules and is unnecessary here.
+                await CallAsync("f6d740", new ulong[] { recorder, (uint)note.StartTick,
+                    ((uint)note.Channel << 16) | 0x4000u, (uint)note.LengthTick, (uint)note.Key,
+                    0x00400078UL, 0x80800040u | ((uint)note.Velocity << 8) }, CancellationToken.None);
+            }
+            ct.ThrowIfCancellationRequested();
         }
+        catch (Exception error) { failure = error; }
 
-        // Commit ONCE (recorder->vtbl[3]; compaction) + LIGHT redraw only. Do NOT call FUN_0107EB90 — it
-        // corrupts FL's audio engine. The piano roll picks up the new notes on redraw.
-        await CommitNoteRecorderAsync(rec, ct);
-
-        // Safe auto-refresh (verified live) — never FUN_0107EB90 (corrupts audio).
-        await RefreshPatternAsync(patIdx, ct);
+        if (attempted)
+        {
+            try
+            {
+                await CommitNoteRecorderAsync(recorder, CancellationToken.None);
+                await RefreshPatternAsync(pattern, CancellationToken.None);
+            }
+            catch (Exception cleanupError)
+            {
+                if (failure is null) throw;
+                throw new AggregateException("Note append and finalization failed; inspect the pattern before retrying.", failure, cleanupError);
+            }
+        }
+        if (failure is not null) System.Runtime.ExceptionServices.ExceptionDispatchInfo.Capture(failure).Throw();
     }
 
     /// <summary>Commit a pattern's note recorder (recorder->vtbl[3] @ vt+0x18; compaction) after edits.</summary>
@@ -338,11 +387,28 @@ public sealed partial class FlInjectBridge
 
     private static void ApplyNoteEdit(byte[] note, NoteEdit edit)
     {
-        if (edit.NewKey is int key) BitConverter.GetBytes((ushort)Math.Clamp(key, 0, 131)).CopyTo(note, 0xC);
-        if (edit.NewStartTick is int start) BitConverter.GetBytes(Math.Max(0, start)).CopyTo(note, 0);
-        if (edit.NewLength is int length) BitConverter.GetBytes(Math.Max(1, length)).CopyTo(note, 8);
-        if (edit.NewVelocity is int velocity) note[0x15] = (byte)Math.Clamp(velocity, 0, 127);
+        ValidateSuppliedNoteEdit(note, edit);
+        if (edit.NewKey is int key) BitConverter.GetBytes((ushort)key).CopyTo(note, 0xC);
+        if (edit.NewStartTick is int start) BitConverter.GetBytes(start).CopyTo(note, 0);
+        if (edit.NewLength is int length) BitConverter.GetBytes(length).CopyTo(note, 8);
+        if (edit.NewVelocity is int velocity) note[0x15] = (byte)velocity;
         if (edit.Muted is bool muted) note[0x13] = (byte)(muted ? note[0x13] | 0x20 : note[0x13] & ~0x20);
+    }
+
+    private static void ValidateSuppliedNoteEdit(byte[] note, NoteEdit edit)
+    {
+        if (edit.NewKey is int key)
+        {
+            ArgumentOutOfRangeException.ThrowIfNegative(key);
+            ArgumentOutOfRangeException.ThrowIfGreaterThan(key, 131);
+        }
+        if (edit.NewVelocity is int velocity)
+        {
+            ArgumentOutOfRangeException.ThrowIfNegative(velocity);
+            ArgumentOutOfRangeException.ThrowIfGreaterThan(velocity, 127);
+        }
+        if (edit.NewStartTick.HasValue || edit.NewLength.HasValue)
+            ValidateNoteTime(edit.NewStartTick ?? NotePos(note), edit.NewLength ?? BitConverter.ToInt32(note, 8));
     }
 
     /// <summary>Delete specific notes (matched by channel+key+startTick), keeping the rest of the pattern.
@@ -379,12 +445,12 @@ public sealed partial class FlInjectBridge
         if (read is null || read.Value.notes.Count == 0) return 0;   // nothing to clone
         List<byte[]> notes = read.Value.notes;
 
-        int destIdx = await CreatePatternAsync(ct);   // first empty pattern, selected
-
         // 1) Add every note with its basic fields — this ALLOCATES the destination's note-array (count = N)
         //    through the proven recorder path, so we don't have to hand-seed the store.
         var specs = notes.Select(n => new NoteSpec(
-            NoteCh(n), NoteKey(n), NotePos(n), BitConverter.ToInt32(n, 8), n[0x15])).ToList();
+            NoteCh(n), NoteKey(n), NotePos(n), BitConverter.ToInt32(n, 8), Math.Min(n[0x15], (byte)127))).ToList();
+        await ValidateNoteBatchAsync(specs, ct); // Reject orphan source notes before selecting a destination.
+        int destIdx = await CreatePatternAsync(ct);   // first empty pattern, selected
         await AddNotesAsync(destIdx, specs, ct);
 
         // 2) Overwrite the freshly-added structs with the FULL originals so pan/fine-pitch/release/cut/res/

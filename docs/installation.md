@@ -23,7 +23,7 @@ Python is a separate execution route. See [Python SDK](python/index.md).
 This checkout targets **SDK 0.2.0**. As checked on September 13, 2026:
 
 - Matching **0.2.0 NuGet packages have not yet been published**.
-- Installer **0.1.22 exists locally but has not been published as a GitHub release**.
+- Installer **0.1.23 exists locally but has not been published as a GitHub release**.
 
 Use the [repository releases](https://github.com/Realynx/FL-Automation/releases)
 and their notes to identify an actual downloadable bundle and its matching SDK.
@@ -39,7 +39,7 @@ host binaries; it does not by itself install FL's startup loader. You can still
 ## Set up a matching host bundle
 
 These steps describe the matching installer bundle once you have obtained it; they
-do not imply that installer 0.1.22 is already downloadable from GitHub.
+do not imply that installer 0.1.23 is already downloadable from GitHub.
 
 1. Extract the **whole bundle** to a folder. Keep its `payload` folder beside
    `FruityLink.Installer.exe`; moving only the executable leaves the installer without

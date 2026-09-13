@@ -128,11 +128,11 @@ class Operations(QueryOperations):
         return cast(int, self.invoke("get_channel_fx_route", **{"channel": channel}))
 
     def add_note(self, *, pattern: int, channel: int, key: int, start_tick: int, length_tick: int, velocity: int) -> None:
-        """Add a note to a pattern's piano roll for a channel (pattern: 1-based, or <=0 = current). key = MIDI 0..131 (60 = middle C), startTick/lengthTick in PPQ ticks, velocity 0..127."""
+        """Add a note to a pattern's piano roll for a channel (pattern: 1-based, or <=0 = current). channel must be an existing zero-based channel rack index; query channels after adding or removing one. key = MIDI 0..131 (60 = middle C), startTick >= 0, lengthTick > 0 in PPQ ticks, velocity 0..127. Invalid values and startTick + lengthTick above int.MaxValue are rejected, not clamped."""
         self.invoke("add_note", **{"pattern": pattern, "channel": channel, "key": key, "startTick": start_tick, "lengthTick": length_tick, "velocity": velocity})
 
     def add_notes(self, *, pattern: int, notes: Sequence[NoteSpec]) -> None:
-        """Add many notes to a pattern's piano roll in one batch — resolves the pattern and refreshes the editor once for the whole set, far faster than repeated AddNoteAsync. Each note carries its own channel, so a single call can author chords, melodies, or multi-channel drum grids."""
+        """Add many notes to a pattern's piano roll in one batch — resolves the pattern and refreshes the editor once for the whole set, far faster than repeated AddNoteAsync. Each note carries its own channel, so a single call can author chords, melodies, or multi-channel drum grids. Every channel must exist in the current channel rack. Invalid channel references are rejected before any note in the batch is added; channel indices are never wrapped into another channel. Note values use the same strict ranges as AddNoteAsync. Cancellation may leave a completed prefix of the batch, but never an unfinished note-on waiting for its length."""
         self.invoke("add_notes", **{"pattern": pattern, "notes": notes})
 
     def get_ppq(self) -> int:
@@ -432,7 +432,7 @@ class Operations(QueryOperations):
         self.invoke("open_project", **{"path": path})
 
     def save_project(self, *, path: str) -> None:
-        """Save the project using the specified path."""
+        """Save the project using the specified path. Rejects orphan note channel references before invoking FL's serializer; inspect and repair the reported note before retrying."""
         self.invoke("save_project", **{"path": path})
 
     def new_project(self) -> None:
@@ -444,15 +444,15 @@ class Operations(QueryOperations):
         return cast(str, self.invoke("get_project_info"))
 
     def save_project_as(self, *, path: str) -> None:
-        """Save As: write to a new path and make it the current project (updates title + recent files)."""
+        """Save As: write to a new path and make it the current project (updates title + recent files). Orphan note validation runs before changing project identity."""
         self.invoke("save_project_as", **{"path": path})
 
     def save_copy(self, *, path: str) -> None:
-        """Save a full .flp copy of the live project to a path WITHOUT changing the current project path/title. Modal-free and safe on UNTITLED projects too (uses FL's low-level direct writer, not the save wrapper that pops a blocking dialog on untitled projects)."""
+        """Save a full .flp copy of the live project to a path WITHOUT changing the current project path/title. Supports UNTITLED projects through FL's low-level direct writer. Orphan note channel references are rejected before writing; no notes are deleted automatically."""
         self.invoke("save_copy", **{"path": path})
 
     def save_new_version(self) -> None:
-        """Save an auto-incremented new version and make it current."""
+        """Save an auto-incremented new version and make it current. Orphan note validation runs before changing project identity."""
         self.invoke("save_new_version")
 
     def list_recent_projects(self) -> str:

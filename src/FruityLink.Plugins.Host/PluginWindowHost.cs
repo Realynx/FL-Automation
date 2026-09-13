@@ -4,7 +4,7 @@ using FruityLink.Plugins.Abstractions;
 namespace FruityLink.Plugins.Host;
 
 /// <summary>One plugin's access to the adapter's single native embedding slot.</summary>
-internal sealed class PluginWindowHost : IAsyncFlWindowHost, IFlWindowHostFactory, IAsyncDisposable
+internal sealed class PluginWindowHost : IAsyncFlWindowHost, IFlWindowHostFactory, IFlWindowVisibilityState, IAsyncDisposable
 {
     private static readonly ConditionalWeakTable<IFlWindowHost, Slot> Slots = new();
     private readonly IFlWindowHost _host;
@@ -13,11 +13,41 @@ internal sealed class PluginWindowHost : IAsyncFlWindowHost, IFlWindowHostFactor
     private int _uiThread;
     private int _disposed;
     private readonly Dictionary<string, PluginWindowHost> _children = new(StringComparer.Ordinal);
+    private readonly WindowVisibilityStore? _visibility;
+    private readonly string _pluginId, _windowId;
+    private volatile bool _rememberVisibility = true;
+    private volatile bool _startupVisible;
 
-    internal PluginWindowHost(IFlWindowHost host)
+    internal PluginWindowHost(IFlWindowHost host, WindowVisibilityStore? visibility = null, string pluginId = "", string windowId = "")
     {
         _host = host;
         _slot = Slots.GetValue(host, _ => new Slot());
+        _visibility = visibility;
+        _pluginId = pluginId;
+        _windowId = windowId;
+        _startupVisible = visibility?.Load(pluginId, windowId) ?? true;
+        if (host is IFlWindowVisibilityNotifications notifications) notifications.UserVisibilityChanged += OnUserVisibilityChanged;
+    }
+
+    public bool StartupVisible => _startupVisible;
+
+    private void OnUserVisibilityChanged(bool visible)
+    {
+        if (_slot.Owner == this) RememberVisibility(visible);
+    }
+
+    public void RememberVisibility(bool visible)
+    {
+        if (!_rememberVisibility || _disposed != 0) return;
+        _startupVisible = visible;
+        _visibility?.Save(_pluginId, _windowId, visible);
+    }
+
+    internal void SuspendVisibilityPersistence()
+    {
+        _rememberVisibility = false;
+        lock (_children)
+            foreach (PluginWindowHost child in _children.Values) child.SuspendVisibilityPersistence();
     }
 
     public string LastEmbedReply { get; private set; } = "";
@@ -33,7 +63,8 @@ internal sealed class PluginWindowHost : IAsyncFlWindowHost, IFlWindowHostFactor
             ObjectDisposedException.ThrowIf(_disposed != 0, this);
             if (_children.TryGetValue(windowId, out PluginWindowHost? existing)) return existing;
             IFlWindowHost child = _host is IFlWindowHostFactory factory ? factory.CreateWindowHost(windowId, caption) : _host;
-            return _children[windowId] = new PluginWindowHost(child);
+            string path = _windowId + "/" + windowId.Length + ":" + windowId;
+            return _children[windowId] = new PluginWindowHost(child, _visibility, _pluginId, path);
         }
     }
 
@@ -57,7 +88,7 @@ internal sealed class PluginWindowHost : IAsyncFlWindowHost, IFlWindowHostFactor
             bool alreadyOwned = _slot.Owner == this;
             _slot.Owner = this;
             if (!alreadyOwned) { _uiContext = SynchronizationContext.Current; _uiThread = Environment.CurrentManagedThreadId; }
-            return await EmbedOwnedAsync(childHwnd, options, show, alreadyOwned, cancellationToken);
+            return await EmbedOwnedAsync(childHwnd, options, show && (alreadyOwned || StartupVisible), alreadyOwned, cancellationToken);
         }
         finally { _slot.Gate.Release(); }
     }
@@ -88,8 +119,12 @@ internal sealed class PluginWindowHost : IAsyncFlWindowHost, IFlWindowHostFactor
         try
         {
             if (_disposed != 0 || _slot.Owner != this) return false;
-            if (_host is IAsyncFlWindowHost host) return await host.SetVisibleAsync(visible, activate, cancellationToken).ConfigureAwait(false);
-            _host.SetVisible(visible);
+            if (_host is IAsyncFlWindowHost host)
+            {
+                if (!await host.SetVisibleAsync(visible, activate, cancellationToken).ConfigureAwait(false)) return false;
+            }
+            else _host.SetVisible(visible);
+            RememberVisibility(visible);
             return true;
         }
         finally { _slot.Gate.Release(); }
@@ -121,7 +156,7 @@ internal sealed class PluginWindowHost : IAsyncFlWindowHost, IFlWindowHostFactor
                 _uiContext = SynchronizationContext.Current;
                 _uiThread = Environment.CurrentManagedThreadId;
             }
-            return EmbedOwned(childHwnd, show, alreadyOwned);
+            return EmbedOwned(childHwnd, show && (alreadyOwned || StartupVisible), alreadyOwned);
         }
         finally { _slot.Gate.Release(); }
     }
@@ -160,8 +195,14 @@ internal sealed class PluginWindowHost : IAsyncFlWindowHost, IFlWindowHostFactor
 
     public void SetVisible(bool visible)
     {
+        if (_host is IAsyncFlWindowHost) { ObserveVisibilityAsync(visible); return; }
         if (_disposed != 0 || !_slot.Gate.Wait(0)) return;
-        try { if (_slot.Owner == this) _host.SetVisible(visible); }
+        try
+        {
+            if (_slot.Owner != this) return;
+            _host.SetVisible(visible);
+            RememberVisibility(visible);
+        }
         finally { _slot.Gate.Release(); }
     }
 
@@ -182,6 +223,12 @@ internal sealed class PluginWindowHost : IAsyncFlWindowHost, IFlWindowHostFactor
         finally { _slot.Gate.Release(); }
     }
 
+    private async void ObserveVisibilityAsync(bool visible)
+    {
+        try { await SetVisibleAsync(visible).ConfigureAwait(false); }
+        catch { /* A failed visibility request must not replace the user's saved preference. */ }
+    }
+
     private async void ObserveCloseAsync()
     {
         try { await CloseAsync().ConfigureAwait(false); }
@@ -195,6 +242,8 @@ internal sealed class PluginWindowHost : IAsyncFlWindowHost, IFlWindowHostFactor
 
     public async ValueTask DisposeAsync()
     {
+        SuspendVisibilityPersistence();
+        if (_host is IFlWindowVisibilityNotifications notifications) notifications.UserVisibilityChanged -= OnUserVisibilityChanged;
         Interlocked.Exchange(ref _disposed, 1);
         List<Exception> errors = [];
         PluginWindowHost[] children;

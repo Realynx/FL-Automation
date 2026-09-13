@@ -17,6 +17,8 @@ internal static class OperationAvailability
         { "list_plugin_params", "set_plugin_param", "query_plugin_parameters" };
     private static readonly HashSet<string> Timeline = new(StringComparer.Ordinal)
         { "add_marker", "list_markers", "set_loop_region" };
+    private static readonly HashSet<string> ProjectSave = new(StringComparer.Ordinal)
+        { "save_project", "save_project_as", "save_copy", "save_new_version" };
     private static readonly HashSet<string> Automation = new(StringComparer.Ordinal)
     {
         "create_automation_clip", "add_automation_clip", "set_automation_points", "add_automation_point",
@@ -30,6 +32,7 @@ internal static class OperationAvailability
         if (ConditionalMixer.Contains(operation)) return new[] { "mixer_layout_for_effect_slot" };
         if (Timeline.Contains(operation)) return new[] { "timeline_layout" };
         if (Automation.Contains(operation)) return new[] { "automation_clips" };
+        if (ProjectSave.Contains(operation)) return new[] { "project_note_validation" };
         return Array.Empty<string>();
     }
 
@@ -38,6 +41,7 @@ internal static class OperationAvailability
         if (operation == "is_available" || status is null) return null;
         if (status.Supported == false) return "The native scanner does not support this FL Studio version.";
         if (status.Complete == false) return "Native scanner initialization is still in progress.";
+        if (SaveUnavailable(operation, status) is { } saveError) return saveError;
         if (Automation.Contains(operation)) return AutomationUnavailable(status);
         if (NeedsMixer(operation, arguments) && status.MixerLayout is null)
             return "This operation requires a complete verified mixer layout for the running FL Studio build.";
@@ -49,6 +53,12 @@ internal static class OperationAvailability
             return "The legacy browser UI layout is verified only for FL Studio 25.2.5.5319.";
         return null;
     }
+
+    private static string? SaveUnavailable(string operation, FlSymbolStatus status)
+        => ProjectSave.Contains(operation) &&
+            (status.Unresolved.Contains("NoteRecorderArrayBase") || status.Unresolved.Contains("ChannelList"))
+            ? "Saving requires resolved note-recorder and channel-list symbols to check for invalid notes before invoking FL's serializer."
+            : null;
 
     private static string? AutomationUnavailable(FlSymbolStatus status)
     {

@@ -33,8 +33,8 @@ public sealed class PythonIdeWindowHost(IPluginContext context, IPythonIdeExecut
         try
         {
             ObjectDisposedException.ThrowIf(_disposed, this);
-            await EnsureWindowAsync(ct).ConfigureAwait(false);
             bool visible = !toggle || !IsVisible;
+            await EnsureWindowAsync(ct).ConfigureAwait(false);
             await Dispatcher.UIThread.InvokeAsync(() => ApplyVisibilityAsync(visible, activate: toggle && visible, ct));
         }
         finally { _lifecycle.Release(); }
@@ -79,8 +79,8 @@ public sealed class PythonIdeWindowHost(IPluginContext context, IPythonIdeExecut
         Action<string> log, CancellationToken ct)
     {
         bool embedded = windows is IAsyncFlWindowHost asynchronous
-            ? await asynchronous.TryEmbedAsync(child, options, cancellationToken: ct)
-            : windows.TryEmbed(child, show: true);
+            ? await asynchronous.TryEmbedAsync(child, options, show: false, cancellationToken: ct)
+            : windows.TryEmbed(child, show: false);
         if (!embedded) LogExternalFallback(log, windows.LastEmbedReply);
         return embedded;
     }
@@ -111,11 +111,13 @@ public sealed class PythonIdeWindowHost(IPluginContext context, IPythonIdeExecut
         else _view!.SetVisible(false);
         if (visible && activate) _window!.FocusEditor();
         _visible = visible;
+        (context.Windows as IFlWindowVisibilityState)?.RememberVisibility(visible);
     }
 
     private void OnHidden()
     {
         _visible = false;
+        (context.Windows as IFlWindowVisibilityState)?.RememberVisibility(false);
         _ = PersistHiddenDraftAsync();
     }
 

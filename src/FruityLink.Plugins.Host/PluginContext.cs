@@ -16,14 +16,15 @@ internal sealed class PluginContext : IPluginContext, IAsyncDisposable
     private readonly Action<string> _log;
     private readonly PluginWindowHost _windows;
 
-    public PluginContext(INativeFlControl fl, IServiceProvider services, Action<string> log, IFlMenuRegistrar menu, IFlToolbarRegistrar toolbar, IFlWindowHost? windows = null)
+    public PluginContext(INativeFlControl fl, IServiceProvider services, Action<string> log, IFlMenuRegistrar menu, IFlToolbarRegistrar toolbar,
+        IFlWindowHost? windows = null, WindowVisibilityStore? visibility = null, string pluginId = "")
     {
         Fl = fl;
         Services = services;
         _log = log;
         Menu = menu;
         Toolbar = toolbar;
-        _windows = new PluginWindowHost(windows ?? NullFlWindowHost.Instance);
+        _windows = new PluginWindowHost(windows ?? NullFlWindowHost.Instance, visibility, pluginId);
     }
 
     /// <inheritdoc/>
@@ -42,6 +43,8 @@ internal sealed class PluginContext : IPluginContext, IAsyncDisposable
     public IFlWindowHost Windows => _windows;
 
     public ValueTask DisposeAsync() => _windows.DisposeAsync();
+
+    internal void BeginTeardown() => _windows.SuspendVisibilityPersistence();
 
     /// <inheritdoc/>
     public void Log(string message) => _log(message);

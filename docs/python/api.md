@@ -77,6 +77,19 @@ print(timebase.ppq, four_beats, timebase.beats(four_beats))
 
 A retained `Timebase` is a snapshot. Fetch another after opening or changing projects. `ticks()` rounds fractional ticks to the nearest integer using Python's ties-to-even rule. See each operation's catalogue for its other native ranges.
 
+## Note validation
+
+Notes must reference existing zero-based channels. Query `fl.channels.list()` or
+use the index returned by channel creation. `NoteSpec` values require keys 0..131,
+velocities 0..127, nonnegative start ticks, positive lengths, and an end tick no
+greater than 2,147,483,647. The SDK rejects invalid values rather than clamping them.
+The entire add batch is checked before any note is added. Edited notes must also
+remain within those time and value ranges.
+
+Saving checks existing notes for missing channel references before invoking FL's
+serializer. An error identifies the pattern and note; it does not delete notes or
+close the project. See [note integrity](../note-integrity.md).
+
 ## Generated operations
 
 `fl.ops` exposes concrete methods with editor completion and type hints, generated from the C# native contract. Python names use snake_case; the SDK maps argument names to the wire contract.

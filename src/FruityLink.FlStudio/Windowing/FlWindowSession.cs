@@ -5,7 +5,7 @@ using FruityLink.Plugins.Abstractions;
 namespace FruityLink.FlStudio.Windowing;
 
 /// <summary>One independent keyed FL form. Native calls run on workers while the child's dispatcher pumps.</summary>
-internal sealed class FlWindowSession(Func<string, string> send, string caption) : IAsyncFlWindowHost, IFlWindowHostFactory
+internal sealed class FlWindowSession(Func<string, string> send, string caption) : IAsyncFlWindowHost, IFlWindowHostFactory, IFlWindowVisibilityNotifications
 {
     private static long _nextId;
     private readonly string _id = Interlocked.Increment(ref _nextId).ToString("x", System.Globalization.CultureInfo.InvariantCulture);
@@ -13,10 +13,12 @@ internal sealed class FlWindowSession(Func<string, string> send, string caption)
     private SynchronizationContext? _ui;
     private int _uiThread;
     private NativeChildWindow? _child;
+    private NativeWindowVisibilityListener? _visibilityListener;
     private IntPtr _host, _content;
     private bool _nativePending;
 
     public string LastEmbedReply { get; private set; } = "";
+    public event Action<bool>? UserVisibilityChanged;
     public int LastInsetX { get; private set; }
     public int LastInsetY { get; private set; }
     public IFlWindowHost CreateWindowHost(string windowId, string windowCaption) => new FlWindowSession(send, windowCaption);
@@ -71,6 +73,7 @@ internal sealed class FlWindowSession(Func<string, string> send, string caption)
             ct.ThrowIfCancellationRequested();
             _child = new NativeChildWindow(child);
             if (!_child.Attach(reply, out string diagnostic)) { LastEmbedReply = diagnostic; return await RollBackFailureAsync(); }
+            _visibilityListener = new NativeWindowVisibilityListener(child, _host, _content, () => UserVisibilityChanged?.Invoke(false));
             LastInsetX = reply.X;
             LastInsetY = reply.Y;
             LastEmbedReply = await SendAsync($"winhost_bind {_id} {child.ToInt64():x}");
@@ -132,6 +135,8 @@ internal sealed class FlWindowSession(Func<string, string> send, string caption)
 
     private bool DetachChild()
     {
+        _visibilityListener?.Dispose();
+        _visibilityListener = null;
         bool detached = _child!.Detach(out string diagnostic);
         if (!detached) LastEmbedReply = diagnostic;
         return detached;

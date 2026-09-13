@@ -4,6 +4,22 @@ Plugins can host their UI *inside* FL Studio's own window chrome using a native 
 `IFlWindowHost` capability (exposed on `IPluginContext` as `Windows`) accepts a Win32 `HWND` and
 preserves a regular external window when native hosting is unavailable.
 
+## Remembered visibility
+
+The plugin host remembers each window's last user-selected visibility separately from whether
+the plugin is enabled. Native close and successful menu/toolbar show or hide persist that choice
+under `%LocalAppData%\FruityLink\plugins.windows`. Initial embedding restores it; a window without
+a saved choice defaults to visible. Explicit plugin/window IDs keep additional windows independent.
+Disable, reload and shutdown suspend preference updates before lifecycle cleanup, so destroying
+the UI does not turn a previously visible window into a permanently hidden one.
+
+For an external fallback, use the optional `IFlWindowVisibilityState` capability on the same
+window scope. Check `StartupVisible` before first presentation, and call `RememberVisibility`
+only after a user show/hide action or external close. Do not record teardown. Native close uses
+an asynchronous notification to the bound child, rather than inferring user intent from minimize,
+parent visibility or destruction. Python IDE and FL Agent use this shared preference in both modes.
+Preferences require matching updated managed hosting and native bridge binaries.
+
 ## Independent plugin windows
 
 The current host gives each plugin an independent session through `context.Windows`. New

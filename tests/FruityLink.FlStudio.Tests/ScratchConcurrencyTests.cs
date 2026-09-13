@@ -231,6 +231,7 @@ public sealed class ScratchConcurrencyTests : IDisposable
                 "ping" => "pong",
                 "pokeabs" => Poke(Parse(parts[1]), Convert.FromHexString(parts[2])),
                 "peekabs" => Convert.ToHexString(Read(Parse(parts[1]), int.Parse(parts[2], CultureInfo.InvariantCulture))),
+                "resolve" when parts[1] == "sym:NoteRecorderArrayBase" => "80000",
                 "peek" => ReadGlobal(parts[1]),
                 "call" => Call(parts),
                 _ => throw new InvalidOperationException("Unexpected fake command: " + command),
@@ -258,6 +259,9 @@ public sealed class ScratchConcurrencyTests : IDisposable
 
         private byte[] Read(ulong address, int count)
         {
+            if (address >= 0x80000 && address + (ulong)count <= 0x80000 + 1000 * 0xC0) return new byte[count];
+            if (address == 0x70000) return BitConverter.GetBytes(0x71000UL);
+            if (address == 0x71010) return BitConverter.GetBytes(4);
             if (address >= ScratchAddress && address < ScratchAddress + (ulong)_scratch.Length)
                 return _scratch.AsSpan(checked((int)(address - ScratchAddress)), count).ToArray();
             foreach (var allocation in _heap)
@@ -297,6 +301,7 @@ public sealed class ScratchConcurrencyTests : IDisposable
             {
                 "1581200" => 0x40000,
                 "1581298" => StoreString(CurrentPath, HeapAddress),
+                "14a98d8" => 0x70000,
                 _ => throw new InvalidOperationException("Unexpected fake global " + address),
             };
             return Convert.ToHexString(BitConverter.GetBytes(value));
