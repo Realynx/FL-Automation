@@ -1,3 +1,8 @@
+---
+search:
+  boost: 0.3
+---
+
 # Python IDE validation — September 12, 2026
 
 Framework installer **0.1.13** installed 463 files successfully into FL Studio **2026 26.1.3.5570**. Fifteen critical host, toolkit, native bridge and plugin files match their build outputs, published installer payload and installed copies. Both installer ZIPs contain the verified payloads. The SDK/plugin version is **0.2.0**; Python is private, embedded **CPython 3.14.6**.

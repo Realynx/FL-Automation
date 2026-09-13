@@ -1,3 +1,8 @@
+---
+search:
+  boost: 0.3
+---
+
 # FL Studio binary verification, 2026-09-12
 
 This pass inspected the installed engines with Ghidra 12.1.2 and an independent PE/byte-signature

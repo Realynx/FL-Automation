@@ -1,3 +1,8 @@
+---
+search:
+  boost: 0.3
+---
+
 # Python backend validation — 2026-09-12
 
 The reusable library, worker, typed query interface, scripting dispatcher, and standalone

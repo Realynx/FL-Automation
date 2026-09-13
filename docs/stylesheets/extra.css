@@ -1,0 +1,15 @@
+/* Shared FL Automate documentation palette; use local system fonts. */
+:root { --md-primary-fg-color: #6236b5; --md-accent-fg-color: #008b9c; --md-typeset-a-color: #6236b5; }
+[data-md-color-scheme="slate"] { --md-primary-fg-color: #9571dc; --md-accent-fg-color: #5ddde4; --md-typeset-a-color: #bca7f5; }
+.md-grid { max-width: 78rem; }
+.md-typeset { font-size: .82rem; line-height: 1.7; }
+.md-typeset h1 { font-weight: 750; letter-spacing: -.035em; color: var(--md-default-fg-color); }
+.md-typeset h2 { font-weight: 650; letter-spacing: -.02em; }
+.md-typeset code { font-size: .85em; }
+.md-typeset table:not([class]) { border-radius: .35rem; }
+.md-typeset a { text-underline-offset: .18em; }
+.md-typeset a:hover { text-decoration: underline; }
+.md-typeset details { border-radius: .4rem; }
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { scroll-behavior: auto !important; animation: none !important; transition: none !important; }
+}

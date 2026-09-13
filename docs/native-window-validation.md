@@ -1,3 +1,8 @@
+---
+search:
+  boost: 0.3
+---
+
 # Native window candidate validation
 
 ## Caption paint follow-up: 0.1.17

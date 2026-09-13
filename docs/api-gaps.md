@@ -1,3 +1,8 @@
+---
+search:
+  boost: 0.3
+---
+
 # Practical editing and mixing API gaps
 
 Audit snapshot: September 12, 2026. This review compared the shared C# contract, its

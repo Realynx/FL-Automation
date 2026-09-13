@@ -1,0 +1,104 @@
+site_name: FruityLink SDK
+site_description: Build plugins and script FL Studio with C# and Python.
+site_url: https://realynx.github.io/FL-Automation/
+repo_url: https://github.com/Realynx/FL-Automation
+repo_name: Realynx/FL-Automation
+edit_uri: edit/master/docs/
+strict: true
+theme:
+  name: material
+  language: en
+  font: false
+  logo: assets/logo.svg
+  favicon: assets/logo.svg
+  palette:
+    - media: '(prefers-color-scheme: light)'
+      scheme: default
+      toggle:
+        icon: material/weather-night
+        name: Switch to dark mode
+    - media: '(prefers-color-scheme: dark)'
+      scheme: slate
+      toggle:
+        icon: material/weather-sunny
+        name: Switch to light mode
+  features:
+    - navigation.tabs
+    - navigation.sections
+    - navigation.indexes
+    - navigation.top
+    - navigation.footer
+    - search.suggest
+    - search.highlight
+    - content.code.copy
+    - content.action.edit
+plugins:
+  - search
+hooks:
+  - scripts/docs_hooks.py
+markdown_extensions:
+  - admonition
+  - attr_list
+  - md_in_html
+  - tables
+  - toc:
+      permalink: true
+  - pymdownx.details
+  - pymdownx.highlight
+  - pymdownx.superfences
+  - pymdownx.tabbed:
+      alternate_style: true
+extra_css:
+  - stylesheets/extra.css
+validation:
+  nav:
+    omitted_files: info
+  links:
+    not_found: warn
+    anchors: warn
+    unrecognized_links: warn
+nav:
+  - Start here:
+      - Overview: index.md
+      - Getting started: getting-started.md
+      - Installation: installation.md
+      - How it works: concepts.md
+      - Capabilities: capabilities.md
+      - Troubleshooting: troubleshooting.md
+      - Community plugins: community-plugins.md
+  - C# SDK:
+      - Overview: csharp/index.md
+      - First plugin: csharp/first-plugin.md
+      - Recipes: csharp/recipes.md
+      - FL control API: fl-control-api.md
+      - Plugin lifecycle: plugin-lifecycle.md
+      - Menus and toolbar: menus-and-toolbar.md
+      - Windows and UI:
+          - Window hosting: window-embedding.md
+          - Avalonia: avalonia-ui.md
+          - Consumer integration: plugin-window-consumers.md
+  - Python SDK:
+      - Overview: python/index.md
+      - First script: python/getting-started.md
+      - API reference: python/api.md
+      - Examples: python/examples.md
+      - Execution and errors: python/execution.md
+      - Embedded runtime: embedded-python.md
+      - Automation clips: automation-clips.md
+      - Audio analysis: python-audio-analysis.md
+      - Spectral analysis: python-spectral-analysis.md
+      - Protocol: python-protocol.md
+  - Internals and evidence:
+      - Development: development.md
+      - Native bridge: native-bridge.md
+      - Symbol scanning: scanner-architecture.md
+      - FL version analysis: fl-version-analysis-2026-09-12.md
+      - Python validation: python-validation.md
+      - IDE validation: python-ide-validation.md
+      - Window validation: native-window-validation.md
+      - Reliability review: reliability-review.md
+      - API gaps: api-gaps.md
+      - Roadmap: roadmap.md
+  - Contribute:
+      - Edit and publish documentation: documentation.md
+      - FL MCP: https://github.com/Realynx/Fl-MCP/blob/master/docs/index.md

@@ -26,7 +26,8 @@ Source: [`native/bridge`](../native/bridge) (`dllmain.cpp`, `sigscan.h`/`sigscan
 - **Main-thread call marshaling.** Most FL engine routines are not thread-safe, so the bridge runs calls
   on FL's main/UI thread: it subclasses FL's main top-level window and dispatches a private
   `SendMessage`, whose window proc runs synchronously on the owning (main) thread. Every call is
-  SEH-guarded so a fault can't take FL down through the bridge.
+  SEH-guarded to contain ordinary native faults where possible. This is not a guarantee
+  against process crashes or state changes after a failed call.
 - **`sym:` tokens.** A call site can address an engine function by name — a `sym:NAME` token — instead of
   a raw address. The bridge resolves the name through its signature-scan table (below). This is additive:
   the legacy hex-address path is untouched, and an unknown `sym:` is refused loudly (`err:unknown-sym:…`)
@@ -128,9 +129,9 @@ same-process embedded Python, structured channel/tempo reads, save and clean clo
 x64 (must match FL Studio), MSVC via CMake:
 
 ```sh
-cmake -S sdk/native/bridge -B sdk/native/bridge/build -A x64
-cmake --build sdk/native/bridge/build --config Release
-# -> sdk/native/bridge/build/Release/FlBridge.dll
+cmake -S native/bridge -B native/bridge/build -A x64 -DFRUITYLINK_DEBUG=OFF
+cmake --build native/bridge/build --config Release
+# -> native/bridge/build/Release/FlBridge.dll
 ```
 
 The build uses MASM (`callthunk.asm` provides the XMM-capable call path for float-arg/float-return engine
@@ -145,8 +146,9 @@ named-pipe server and the debug tooling commands. Leave it **off** for productio
 The bridge has low-level verbs — `peek`/`poke` (raw memory read/write) and `call` (invoke an arbitrary
 address). Those are **never** handed to plugins. `IPluginContext` exposes only the typed
 [`INativeFlControl`](fl-control-api.md) surface; the raw primitives stay internal and capability-locked.
-No address ever crosses the plugin trust boundary — so a third-party plugin cannot reach FL's internals
-(or its DRM), only the vetted, typed operations. This is the same boundary described in
+No address crosses these typed APIs. This narrows the supported integration surface,
+but in-process plugins execute with FL Studio's permissions and are not sandboxed.
+This is the same API boundary described in
 [the FL control API](fl-control-api.md#error-behavior-and-the-trust-boundary).
 
 ## Clean-unload contract

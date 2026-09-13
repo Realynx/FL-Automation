@@ -1,6 +1,6 @@
 # FL control API
 
-`INativeFlControl` (in `FruityLink.Core.Abstractions`) is the **only** way a plugin touches FL Studio.
+`INativeFlControl` (in `FruityLink.Core.Abstractions`) is the supported typed surface for controlling FL Studio.
 You get it from `IPluginContext.Fl`. It executes operations natively inside the FL process via the
 bridge; the raw memory/call primitives are *not* exposed to plugins (see the trust-boundary note below
 and [native-bridge.md](native-bridge.md)).
@@ -17,7 +17,8 @@ See also: [Menus and toolbar](menus-and-toolbar.md) · [Plugin lifecycle](plugin
 if (!await ctx.Fl.IsAvailableAsync()) { ctx.Log("bridge not ready"); return; }
 ```
 
-`IsAvailableAsync` returns true when the injected bridge is loaded and responding.
+`IsAvailableAsync` checks that the bridge is available and FL has initialized its
+state and main window. It does not establish every operation's capability.
 
 ## Value conventions
 
@@ -70,7 +71,8 @@ unchanged).
 
 **Mixer.** `Get/SetMixerVolumeAsync`, `Get/SetMixerPanAsync`, `Get/SetMixerTrackMutedAsync`
 (track 0 = master), `GetMixerTrackCountAsync`, `Get/SetMixerTrackNameAsync`, `ListMixerTracksAsync`
-(name→index resolution), sends/EQ (`SetMixerSendAsync`, `SetMixerEqGainAsync`), and FX slots:
+(name→index resolution), `AddMixerTrackAsync` (append or insert an ordinary track),
+sends/EQ (`SetMixerSendAsync`, `SetMixerEqGainAsync`), and FX slots:
 `ListMixerEffectsAsync`, `AddMixerEffectAsync`, `RemoveMixerEffectAsync`, `CloneMixerEffectAsync`,
 `SetMixerFxParamAsync`.
 
@@ -113,13 +115,18 @@ those supported controls; the SDK does not substitute them for plugin parameter 
 The text list returns an explanatory message; structured queries and writes fail with that
 same diagnostic. An empty mixer effect slot receives a separate slot-specific diagnostic.
 
-Mixer track indices must fit `GetMixerTrackCountAsync()`, which includes Master and Current.
-For example, a project with 16 inserts has 18 tracks and valid indices `0..17`; callers must
-not assume that every project has 125 inserts.
+Use `IFlStructuredQuery.QueryMixerTracksAsync()` to enumerate addressable Master and
+active ordinary inserts. `GetMixerTrackCountAsync()` includes Master and the special
+Current track, whose physical index is 501 rather than `count - 1`. It is not a bound
+from which to construct an addressable index range. Requery after insertion.
 
-**Automation clips.** For a channel hosting the Automation Clip generator:
-`ListAutomationPointsAsync`, `AddAutomationPointAsync(channel, timeBeats, value, tension)`,
-`DeleteAutomationPointAsync`.
+**Automation clips.** `CreateAutomationClipAsync` creates and links an automation channel
+and places its first clip; `AddAutomationClipAsync` places an existing one again.
+`SetAutomationPointsAsync` replaces its full envelope. For a channel hosting the
+Automation Clip generator, `ListAutomationPointsAsync`,
+`AddAutomationPointAsync(channel, timeBeats, value, tension)`, and
+`DeleteAutomationPointAsync` read or edit points. See [linked automation clips](automation-clips.md)
+for point validation, exact-build requirements, and partial-failure behavior.
 
 **Render / export.** `OpenExportDialogAsync` opens FL's audio Export dialog for the user to finish.
 
@@ -187,4 +194,5 @@ compatibility scalar nor a version/year can create a missing `MixerLayout`. The 
   never let the exception reach the host.
 - The context exposes only this typed surface plus the menu/toolbar registrars. The bridge's raw
   peek/poke/call primitives are **internal and capability-locked** — no address ever crosses into a
-  plugin. This is by design (a third-party plugin can't reach FL's internals or DRM).
+  plugin through these interfaces. This narrows the supported API; it is not a security
+  sandbox. In-process plugins still execute with FL Studio's permissions.

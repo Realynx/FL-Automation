@@ -1,3 +1,8 @@
+---
+search:
+  boost: 0.3
+---
+
 # SDK reliability review — September 2026
 
 This review covers the open-source SDK, native bridge, plugin lifecycle, and UI hosting. The application,
