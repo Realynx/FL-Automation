@@ -1,5 +1,6 @@
 <ResourceDictionary xmlns="https://github.com/avaloniaui"
-                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                    x:Class="FruityLink.Ui.Avalonia.Theme.ProductTokens">
     <!-- ============================================================================
          FL Automate — design tokens for the interior UI.
          Single source of truth, mirrored from docs/ui-design-tokens.md (extracted from

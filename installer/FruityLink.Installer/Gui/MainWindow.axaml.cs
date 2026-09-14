@@ -14,6 +14,7 @@ using Avalonia.Platform.Storage;
 using Avalonia.Threading;
 using FruityLink.Installer.Cli;
 using FruityLink.Installer.Core;
+using FruityLink.Installer.Core.Mcp;
 
 namespace FruityLink.Installer.Gui;
 
@@ -29,6 +30,8 @@ public partial class MainWindow : Window
     private readonly bool _isPackaged;
     private readonly List<(CheckBox Box, CommunityPlugin Plugin)> _communityRows = new();
     private CheckBox? _mcpSelection;
+    private CheckBox? _pythonIdeSelection;
+    private CheckBox? _serumSupportSelection;
     private bool _busy;
 
     /// <summary>What we call the thing being installed: the sold product vs the open-source system.</summary>
@@ -57,6 +60,7 @@ public partial class MainWindow : Window
 
         ApplyEdition();
         AddBundledPlugins();
+        InitializeMcpClients();
 
         AppendLine(LogLevel.Info, $"FL Automate installer {InstallerInfo.Version} ({(_isPackaged ? "packaged" : "community")} edition)");
         AppendLine(LogLevel.Info, $"Payload root: {_payloadRoot}");
@@ -107,6 +111,8 @@ public partial class MainWindow : Window
         {
             var plugins = (await CommunityPluginCatalog.FetchAsync())
                 .Where(plugin => _mcpSelection is null || !plugin.Id.Equals(BundledMcp.Id, StringComparison.OrdinalIgnoreCase))
+                .Where(plugin => _pythonIdeSelection is null || !plugin.Id.Equals(BundledPythonIde.Id, StringComparison.OrdinalIgnoreCase))
+                .Where(plugin => _serumSupportSelection is null || !plugin.Id.Equals(BundledSerumSupport.Id, StringComparison.OrdinalIgnoreCase))
                 .ToList();
             if (plugins.Count == 0)
             {
@@ -140,13 +146,34 @@ public partial class MainWindow : Window
 
     private void AddBundledPlugins()
     {
-        if (!BundledMcp.IsAvailable(_payloadRoot)) return;
-        _mcpSelection = new CheckBox
+        int index = _isPackaged ? 1 : 0;
+        if (BundledMcp.IsAvailable(_payloadRoot))
         {
-            Content = BundledMcp.SelectionLabel,
-            IsChecked = !InstallerApp.WithoutMcp,
-        };
-        PluginList.Children.Insert(_isPackaged ? 1 : 0, _mcpSelection);
+            _mcpSelection = new CheckBox
+            {
+                Content = BundledMcp.SelectionLabel,
+                IsChecked = !InstallerApp.WithoutMcp,
+            };
+            PluginList.Children.Insert(index++, _mcpSelection);
+        }
+        if (BundledPythonIde.IsAvailable(_payloadRoot))
+        {
+            _pythonIdeSelection = new CheckBox
+            {
+                Content = BundledPythonIde.SelectionLabel,
+                IsChecked = !InstallerApp.WithoutPythonIde,
+            };
+            PluginList.Children.Insert(index++, _pythonIdeSelection);
+        }
+        if (BundledSerumSupport.IsAvailable(_payloadRoot))
+        {
+            _serumSupportSelection = new CheckBox
+            {
+                Content = BundledSerumSupport.SelectionLabel,
+                IsChecked = !InstallerApp.WithoutSerumSupport,
+            };
+            PluginList.Children.Insert(index, _serumSupportSelection);
+        }
     }
 
     // ------------------------------------------------------------ custom chrome ----
@@ -283,6 +310,8 @@ public partial class MainWindow : Window
         // Selected community plugins download + stage BEFORE the engine runs, so the install
         // plan already contains them (and the install record covers them for uninstall).
         var manifest = BundledMcp.Select(_manifest, _payloadRoot, include: _mcpSelection?.IsChecked == true);
+        manifest = BundledPythonIde.Select(manifest, _payloadRoot, include: _pythonIdeSelection?.IsChecked == true);
+        manifest = BundledSerumSupport.Select(manifest, _payloadRoot, include: _serumSupportSelection?.IsChecked == true);
         string? stagingRoot = null;
         if (install)
         {
@@ -310,17 +339,11 @@ public partial class MainWindow : Window
         AppendLine(LogLevel.Info, $"=== {verbName}{(dryRun ? " (dry run)" : "")} ===");
 
         var log = new UiThreadLog(this);
-        OperationResult result;
+        var mcpOptions = SelectedMcpOptions();
+        McpOperationOutcome outcome;
         try
         {
-            // No beforeExecute gate, so the pipeline never returns null (hence the !).
-            result = await Task.Run(() =>
-                install
-                    ? InstallerOperations.RunInstall(
-                          flPath, manifest, _payloadRoot, dryRun, log,
-                          "Aborting: required payload files are missing.",
-                          missingPayloadDryRunWarning: null, out _)!
-                    : InstallerOperations.RunUninstall(flPath, manifest, dryRun, log, out _)!);
+            outcome = await Task.Run(() => ExecuteWithMcp(install, dryRun, flPath, manifest, mcpOptions, log));
         }
         catch (Exception ex)
         {
@@ -334,7 +357,8 @@ public partial class MainWindow : Window
         }
 
         SetBusy(false);
-        ShowFinish(result, install, dryRun, flPath);
+        AppendMcpOutcome(outcome.Clients);
+        ShowFinish(outcome, install, dryRun, flPath);
     }
 
     /// <summary>
@@ -450,6 +474,9 @@ public partial class MainWindow : Window
                     "--payload-root", _payloadRoot,
                 };
                 if (_mcpSelection?.IsChecked != true) args.Add("--without-mcp");
+                if (_pythonIdeSelection?.IsChecked != true) args.Add("--without-python-ide");
+                if (_serumSupportSelection?.IsChecked != true) args.Add("--without-serum-support");
+                args.AddRange(McpElevationArguments.Create(SelectedMcpOptions()));
                 var selectedIds = SelectedCommunityPlugins().Select(p => p.Id).ToList();
                 if (selectedIds.Count > 0)
                 {
@@ -472,62 +499,25 @@ public partial class MainWindow : Window
     // ------------------------------------------------------------- finish page ----
 
     /// <summary>Routes to the finish page with an honest headline + summary for the real outcome.</summary>
-    private void ShowFinish(OperationResult result, bool install, bool dryRun, string flPath)
+    private void ShowFinish(McpOperationOutcome outcome, bool install, bool dryRun, string flPath)
     {
-        var verb = install ? "Install" : "Uninstall";
-        var offerLaunch = false;
-        string headline;
-        IBrush color;
+        var result = outcome.Files;
+        var finish = InstallerFinishState.Create(outcome, install, dryRun, ProductName,
+            File.Exists(Path.Combine(flPath, FlStudioLocator.ExeName)));
 
-        if (dryRun)
-        {
-            headline = "✓ Dry run complete — no changes were made";
-            color = Res("OkBrush");
-        }
-        else
-        {
-            switch (result.Outcome)
-            {
-                case OperationOutcome.Success:
-                    if (install)
-                    {
-                        headline = $"✓ {ProductName} is installed";
-                        offerLaunch = true; // ONLY after a successful real install
-                    }
-                    else
-                    {
-                        headline = result.FilesAffected == 0
-                            ? "✓ Nothing to remove — FL Studio is already stock"
-                            : "✓ Uninstall complete — FL Studio restored to stock";
-                    }
-                    // Success gets the hero headline gradient rather than a flat status colour.
-                    color = Res("HeadlineGradientBrush");
-                    break;
+        FinishHeadline.Text = finish.Headline;
+        FinishHeadline.Foreground = Res(finish.ColorResource);
+        FinishSummary.Text = BuildSummary(result, install, dryRun, flPath)
+            + McpFinishSummary(outcome.Clients, install, dryRun, outcome.FilesSkipped);
 
-                case OperationOutcome.RebootPending:
-                    headline = $"⚠ {verb} incomplete — {result.RebootPending.Count} file(s) pending reboot";
-                    color = Res("WarnBrush");
-                    break;
-
-                default: // Failed
-                    headline = $"✕ {verb} failed";
-                    color = Res("DangerBrush");
-                    break;
-            }
-        }
-
-        FinishHeadline.Text = headline;
-        FinishHeadline.Foreground = color;
-        FinishSummary.Text = BuildSummary(result, install, dryRun, flPath);
-
-        _launchFlDir = offerLaunch ? flPath : null;
-        LaunchCheck.IsVisible = offerLaunch;
-        if (offerLaunch)
-            LaunchCheck.IsChecked = File.Exists(Path.Combine(flPath, FlStudioLocator.ExeName));
+        _launchFlDir = finish.OfferLaunch ? flPath : null;
+        LaunchCheck.IsVisible = finish.OfferLaunch;
+        LaunchCheck.IsChecked = finish.LaunchInitiallyChecked;
 
         FinishLogBox.Text = LogBox.Text;
         ScrollLogToEnd(FinishLogBox);
-        DetailsExpander.IsExpanded = result.Outcome != OperationOutcome.Success && !dryRun;
+        DetailsExpander.IsExpanded = (result.Outcome != OperationOutcome.Success && !dryRun)
+            || outcome.Clients is { Success: false };
 
         StartPanel.IsVisible = false;
         FinishPanel.IsVisible = true;
@@ -635,6 +625,9 @@ public partial class MainWindow : Window
         PathBox.IsEnabled = !busy;
         DryRunCheck.IsEnabled = !busy;
         if (_mcpSelection is not null) _mcpSelection.IsEnabled = !busy;
+        if (_pythonIdeSelection is not null) _pythonIdeSelection.IsEnabled = !busy;
+        if (_serumSupportSelection is not null) _serumSupportSelection.IsEnabled = !busy;
+        UpdateMcpAvailability();
         foreach (var (box, _) in _communityRows)
             box.IsEnabled = !busy;
     }

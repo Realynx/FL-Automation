@@ -1,6 +1,7 @@
 using Avalonia;
 using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Markup.Xaml;
+using FruityLink.Installer.Core.Mcp;
 
 namespace FruityLink.Installer.Gui;
 
@@ -14,6 +15,13 @@ public sealed class InstallerApp : Application
     public static string? InitialFlPath { get; set; }
     public static string? InitialPayloadRoot { get; set; }
     public static bool WithoutMcp { get; set; }
+    public static bool WithoutPythonIde { get; set; }
+    public static bool WithoutSerumSupport { get; set; }
+    public static IReadOnlyList<string> InitialMcpClientIds { get; set; } = [];
+    public static McpUserPaths? InitialMcpUserPaths { get; set; }
+    public static string? InitialMcpPythonRuntime { get; set; }
+    public static string? InitialMcpTemplate { get; set; }
+    public static string? InitialMcpWorkspace { get; set; }
 
     /// <summary>--community-plugins ids to re-check after an elevation relaunch.</summary>
     public static IReadOnlyList<string> InitialCommunityPlugins { get; set; } = [];

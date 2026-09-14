@@ -25,6 +25,7 @@ public partial class ChatWindow : Window
 
     public ChatWindow()
     {
+        App.ApplyEmbeddedWindowTheme(this);
         // Load XAML directly (rather than a generated InitializeComponent) and resolve named
         // controls by lookup — robust regardless of the XAML name-generator configuration.
         AvaloniaXamlLoader.Load(this);
@@ -58,6 +59,9 @@ public partial class ChatWindow : Window
 
         ScrollToBottom();
     }
+
+    /// <summary>Focuses the existing composer without replacing its text or caret.</summary>
+    public void FocusComposer() => _inputBox.Focus();
 
     private void OnMessagesChanged(object? sender, NotifyCollectionChangedEventArgs e)
     {

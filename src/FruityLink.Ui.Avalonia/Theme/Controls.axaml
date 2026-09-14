@@ -1,5 +1,14 @@
 <Styles xmlns="https://github.com/avaloniaui"
-        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:theme="clr-namespace:FruityLink.Ui.Avalonia.Theme"
+        x:Class="FruityLink.Ui.Avalonia.Theme.ProductStyles">
+    <Styles.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <theme:ProductTokens />
+            </ResourceDictionary.MergedDictionaries>
+        </ResourceDictionary>
+    </Styles.Resources>
     <!-- ============================================================================
          Hero-themed control styles, layered on top of FluentTheme (dark).
          Everything keys off Theme/Tokens.axaml. Class-based selectors keep these opt-in

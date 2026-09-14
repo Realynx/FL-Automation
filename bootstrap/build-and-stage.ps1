@@ -5,6 +5,8 @@
 #   pwsh bootstrap\build-and-stage.ps1 -Production   # locked-down stage: NO debug pipe
 #
 # Output: bootstrap\dist\  ->  copy its contents into "...\Image-Line\FL Studio 2025\"
+# Close FL Studio before installing updated native or host files, then restart it. Connecting
+# to an existing session uses the installed MCP plugin; this script only builds and stages files.
 #   version.dll
 #   FruityLink\FlClrHost.dll
 #   FruityLink\FlBridge.dll
@@ -13,6 +15,7 @@
 #   FruityLink\FruityLink.Core.dll
 #   FruityLink\FruityLink.Plugins.Abstractions.dll
 #   FruityLink\FruityLink.Plugins.Host.dll
+#   FruityLink\FruityLink.Scripting.dll
 #   FruityLink\plugins\fl-agent\*           (the FL Automate plugin publish closure)
 param(
     # When set, build the bridge WITHOUT the external debug named-pipe server (production / lockdown).
@@ -37,7 +40,7 @@ cmake -S "$repo\sdk\native\bridge" -B "$repo\sdk\native\bridge\build" -A x64 "-D
 cmake --build "$repo\sdk\native\bridge\build" --config Release
 if ($LASTEXITCODE -ne 0) { throw "FlBridge.dll (C++ bridge) build FAILED — see errors above; refusing to stage a stale DLL." }
 
-# 3) managed: FruityLink.Host (+ runtimeconfig/deps + FlStudio/Core/Plugins.Abstractions/Plugins.Host)
+# 3) managed: FruityLink.Host (+ runtimeconfig/deps + FlStudio/Core/Plugins.Abstractions/Plugins.Host/Scripting)
 dotnet build "$repo\sdk\src\FruityLink.Host\FruityLink.Host.csproj" -c Release | Out-Null
 if ($LASTEXITCODE -ne 0) { throw "FruityLink.Host (C#) build FAILED — see 'dotnet build' output; refusing to stage." }
 
@@ -51,15 +54,21 @@ Copy-Item "$repo\bootstrap\build\CLRHost\Release\FlClrHost.dll"     "$dist\Fruit
 Copy-Item "$repo\sdk\native\bridge\build\Release\FlBridge.dll"           "$dist\FruityLink\" -Force
 
 $ho = "$repo\sdk\src\FruityLink.Host\bin\Release\net9.0-windows"
-foreach ($f in @(
-    "FruityLink.Host.dll",
-    "FruityLink.Host.runtimeconfig.json",
-    "FruityLink.Host.deps.json",
-    "FruityLink.FlStudio.dll",
-    "FruityLink.Core.dll",
-    "FruityLink.Plugins.Abstractions.dll",
-    "FruityLink.Plugins.Host.dll")) {
-    Copy-Item "$ho\$f" "$dist\FruityLink\" -Force
+$hostTarget = Join-Path $dist 'FruityLink'
+# The stable host owns Avalonia and its native renderer for every UI plugin. Preserve the
+# complete build closure, including lazily loaded runtimes, after any plugin shadow is removed.
+Get-ChildItem -LiteralPath $ho -Recurse -File | Where-Object { $_.Extension -ne '.pdb' } | ForEach-Object {
+    $relative = $_.FullName.Substring($ho.TrimEnd('\').Length + 1)
+    $destination = Join-Path $hostTarget $relative
+    New-Item -ItemType Directory -Path (Split-Path $destination -Parent) -Force | Out-Null
+    Copy-Item -LiteralPath $_.FullName -Destination $destination -Force
+}
+foreach ($requiredHostFile in @('FruityLink.Ui.Avalonia.Hosting.dll', 'Avalonia.Controls.dll',
+    'Avalonia.Themes.Fluent.dll', 'Avalonia.Fonts.Inter.dll', 'AvaloniaEdit.dll', 'runtimes\win-x64\native\libSkiaSharp.dll',
+    'runtimes\win-x64\native\libHarfBuzzSharp.dll')) {
+    if (-not (Test-Path -LiteralPath (Join-Path $hostTarget $requiredHostFile) -PathType Leaf)) {
+        throw "Shared Avalonia host closure is missing $requiredHostFile"
+    }
 }
 
 # 5) deploy the FL Automate plugin: publish its FULL closure into plugins\fl-agent\ so the host discovers

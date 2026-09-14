@@ -89,6 +89,6 @@ public static class InstallerOperations
         if (beforeExecute is not null && !beforeExecute())
             return null;
 
-        return engine.ExecuteUninstall(plan, dryRun, log);
+        return engine.ExecuteUninstall(plan, dryRun, log, flPath);
     }
 }

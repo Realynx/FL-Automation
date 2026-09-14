@@ -2,7 +2,7 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         x:Class="FruityLink.Installer.Gui.MainWindow"
         Title="FL Automate Installer"
-        Width="760" Height="620" MinWidth="620" MinHeight="520"
+        Width="820" Height="720" MinWidth="680" MinHeight="600"
         WindowStartupLocation="CenterScreen"
         Background="{StaticResource BaseBackgroundBrush}"
         ExtendClientAreaToDecorationsHint="True"
@@ -46,10 +46,13 @@
             <Panel Margin="30,8,30,26">
 
                 <!-- ============================ START PAGE ============================ -->
-                <Grid x:Name="StartPanel" RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,*,Auto">
+                <Grid x:Name="StartPanel" RowDefinitions="*,Auto">
+                    <ScrollViewer Grid.Row="0" VerticalScrollBarVisibility="Auto"
+                                  HorizontalScrollBarVisibility="Disabled">
+                    <StackPanel Margin="0,0,8,0">
 
                     <!-- Headline: white + hero gradient span, Space Grotesk. -->
-                    <StackPanel Grid.Row="0" Margin="0,4,0,18">
+                    <StackPanel Margin="0,4,0,18">
                         <StackPanel Orientation="Horizontal" Spacing="9">
                             <TextBlock Classes="h" FontSize="30" Text="Install" />
                             <TextBlock x:Name="HeadlineProduct" Classes="h" FontSize="30" Text="FL Automate"
@@ -61,9 +64,9 @@
                     </StackPanel>
 
                     <!-- FL path -->
-                    <TextBlock Grid.Row="1" Classes="meta" LetterSpacing="1.1" FontWeight="Medium"
+                    <TextBlock Classes="meta" LetterSpacing="1.1" FontWeight="Medium"
                                Text="FL STUDIO INSTALL FOLDER" Margin="2,0,0,7" />
-                    <Grid Grid.Row="2" ColumnDefinitions="*,Auto,Auto" Margin="0,0,0,7">
+                    <Grid ColumnDefinitions="*,Auto,Auto" Margin="0,0,0,7">
                         <TextBox x:Name="PathBox" Grid.Column="0" Classes="field"
                                  TextChanged="PathBox_TextChanged" />
                         <Button x:Name="BrowseBtn" Grid.Column="1" Classes="pill secondary" Content="Browse…"
@@ -71,13 +74,13 @@
                         <Button x:Name="DetectBtn" Grid.Column="2" Classes="pill secondary" Content="Detect"
                                 Margin="9,0,0,0" Click="Detect_Click" />
                     </Grid>
-                    <TextBlock x:Name="PathStatus" Grid.Row="3" FontSize="12" Margin="2,0,0,16"
+                    <TextBlock x:Name="PathStatus" FontSize="12" Margin="2,0,0,16"
                                Foreground="{StaticResource MutedTextBrush}" TextWrapping="Wrap" />
 
                     <!-- Plugin selection -->
-                    <TextBlock Grid.Row="4" Classes="meta" LetterSpacing="1.1" FontWeight="Medium"
+                    <TextBlock Classes="meta" LetterSpacing="1.1" FontWeight="Medium"
                                Text="PLUGINS TO INSTALL" Margin="2,0,0,7" />
-                    <Border Grid.Row="5" CornerRadius="12" Margin="0,0,0,14"
+                    <Border CornerRadius="12" Margin="0,0,0,18"
                             Background="{StaticResource Glass05Brush}"
                             BorderBrush="{StaticResource BorderWhite10Brush}" BorderThickness="1">
                         <ScrollViewer MaxHeight="150" VerticalScrollBarVisibility="Auto">
@@ -89,15 +92,46 @@
                         </ScrollViewer>
                     </Border>
 
+                    <!-- Client registration is a separate opt-in from installing the plugin. -->
+                    <StackPanel x:Name="McpSectionContainer" Spacing="7" Margin="0,0,0,18">
+                        <TextBlock Classes="meta" LetterSpacing="1.1" FontWeight="Medium"
+                                   Text="CONNECT YOUR AI APPS (OPTIONAL)" Margin="2,0,0,0" />
+                        <TextBlock x:Name="McpClientStatus" FontSize="12" TextWrapping="Wrap"
+                                   Foreground="{StaticResource MutedTextBrush}" />
+                        <Border x:Name="McpSection" CornerRadius="12"
+                                Background="{StaticResource Glass05Brush}"
+                                BorderBrush="{StaticResource BorderWhite10Brush}" BorderThickness="1">
+                            <StackPanel Margin="14,11" Spacing="10">
+                                <TextBlock FontSize="12" TextWrapping="Wrap"
+                                           Foreground="{StaticResource MutedTextBrush}"
+                                           Text="Enable FLMCP and connect the apps you select to this FL Studio installation. Your AI app can attach to an existing session or start a new managed project. Python runs inside FL Studio and is included; no Python or pip setup is needed." />
+                                <StackPanel x:Name="McpClientList" Spacing="6" />
+                                <Expander Header="Project defaults (optional)" IsExpanded="False"
+                                          Foreground="{StaticResource MutedTextBrush}">
+                                    <StackPanel Spacing="7" Margin="0,8,0,0">
+                                        <TextBlock Text="Starting FL project template" FontSize="12" />
+                                        <TextBox x:Name="McpTemplateBox" Classes="field"
+                                                 Watermark="Use this FL Studio installation's Empty template" />
+                                        <TextBlock Text="Project workspace folder" FontSize="12" Margin="0,4,0,0" />
+                                        <TextBox x:Name="McpWorkspaceBox" Classes="field"
+                                                 Watermark="Use the default private FLMCP workspace" />
+                                    </StackPanel>
+                                </Expander>
+                            </StackPanel>
+                        </Border>
+                    </StackPanel>
+
                     <!-- Log well (glass) -->
-                    <Border Grid.Row="6" CornerRadius="12"
+                    <Border CornerRadius="12" Height="150"
                             Background="{StaticResource SurfaceTranslucentBrush}"
                             BorderBrush="{StaticResource BorderWhite10Brush}" BorderThickness="1">
                         <TextBox x:Name="LogBox" Classes="log" />
                     </Border>
+                    </StackPanel>
+                    </ScrollViewer>
 
                     <!-- Footer / actions -->
-                    <Grid Grid.Row="7" ColumnDefinitions="Auto,*,Auto,Auto" Margin="0,18,0,0">
+                    <Grid Grid.Row="1" ColumnDefinitions="Auto,*,Auto,Auto" Margin="0,18,0,0">
                         <CheckBox x:Name="DryRunCheck" Grid.Column="0" VerticalAlignment="Center"
                                   Content="Dry run (preview only)" />
                         <ProgressBar x:Name="Progress" Grid.Column="1" Height="5" Margin="18,0"

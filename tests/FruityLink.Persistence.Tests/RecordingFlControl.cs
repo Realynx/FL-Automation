@@ -51,6 +51,7 @@ internal sealed class RecordingFlControl : INativeFlControl
     public Task SetMixerVolumeAsync(int track, int value, CancellationToken ct = default) => Task.CompletedTask;
     public Task<long> GetMixerVolumeAsync(int track, CancellationToken ct = default) => Task.FromResult(10000L);
     public Task<int> GetMixerTrackCountAsync(CancellationToken ct = default) => Task.FromResult(127);
+    public Task<int> AddMixerTrackAsync(int afterTrack = -1, CancellationToken ct = default) => Task.FromResult(afterTrack < 0 ? 126 : afterTrack + 1);
     public Task<string> GetMixerTrackNameAsync(int track, CancellationToken ct = default) => Task.FromResult(track == 0 ? "Master" : $"Insert {track}");
     public Task<string> ListMixerTracksAsync(CancellationToken ct = default) => Task.FromResult("0: Master");
     public Task SetMixerPanAsync(int track, int value, CancellationToken ct = default) => Task.CompletedTask;
@@ -149,6 +150,9 @@ internal sealed class RecordingFlControl : INativeFlControl
     public Task<string> GetArrangementNameAsync(int idx, CancellationToken ct = default) => Task.FromResult(string.Empty);
     public Task DeleteArrangementAsync(int idx, CancellationToken ct = default) => Task.CompletedTask;
     public Task SelectArrangementAsync(int idx, CancellationToken ct = default) => Task.CompletedTask;
+    public Task<FlAutomationClipResult> CreateAutomationClipAsync(FlAutomationTarget target, int track, int startTick, int lengthTick, string? name = null, CancellationToken ct = default) => Task.FromResult(new FlAutomationClipResult(0, 0));
+    public Task<int> AddAutomationClipAsync(int channel, int track, int startTick, int lengthTick, CancellationToken ct = default) => Task.FromResult(0);
+    public Task SetAutomationPointsAsync(int channel, IReadOnlyList<FlAutomationPointSpec> points, CancellationToken ct = default) => Task.CompletedTask;
     public Task<string> ListAutomationPointsAsync(int channel, CancellationToken ct = default) => Task.FromResult(string.Empty);
     public Task AddAutomationPointAsync(int channel, double timeBeats, double value, double tension, CancellationToken ct = default) => Task.CompletedTask;
     public Task DeleteAutomationPointAsync(int channel, int index, CancellationToken ct = default) => Task.CompletedTask;

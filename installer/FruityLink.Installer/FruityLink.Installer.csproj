@@ -48,10 +48,18 @@
     <PackageReference Include="Avalonia.Themes.Fluent" Version="11.3.18" />
     <!-- Embedded Inter default font — guaranteed fallback if Assets\Fonts is ever stripped. -->
     <PackageReference Include="Avalonia.Fonts.Inter" Version="11.3.18" />
+    <PackageReference Include="Tomlyn" Version="2.10.1" />
   </ItemGroup>
 
   <ItemGroup>
     <AvaloniaResource Include="Assets\**" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Update="licenses\**\*;THIRD-PARTY-NOTICES.md">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+    </None>
   </ItemGroup>
 
   <!-- The manually maintained verified-FL-builds + binary-hash list (see Core/FlCompatibility.cs).
@@ -64,17 +72,11 @@
     </None>
   </ItemGroup>
 
-  <!-- Payload travels next to the EXE under .\payload\ and is copied to the build output so
-       local dry-run / GUI runs can resolve it. Use Update (not Include) so we do not duplicate
-       the SDK default None glob. -->
+  <!-- Payload travels next to the EXE under .\payload\. Source staging can remove files when
+       configurations change, so do not retain the SDK's evaluation-time snapshot. The target
+       below includes the current files before AssignTargetPaths prepares all copy item lists. -->
   <ItemGroup>
-    <None Update="payload\**\*">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </None>
-    <!-- Debug symbols are dead weight in an install payload, and worse: a .pdb captured in this
-         glob but absent after a later re-stage fails the build ("Could not copy ... not found").
-         Keep the payload pdb-free end-to-end (see also the Delete in StagePayloadFromSource). -->
-    <None Remove="payload\**\*.pdb" />
+    <None Remove="payload\**\*" />
   </ItemGroup>
 
   <!-- ── Dev payload staging ─────────────────────────────────────────────────────────────────
@@ -96,13 +98,28 @@
       <ReferenceOutputAssembly>false</ReferenceOutputAssembly>
       <Private>false</Private>
     </ProjectReference>
+    <ProjectReference Include="$(RepoRoot)\sdk\src\FruityLink.SessionHost\FruityLink.SessionHost.csproj">
+      <ReferenceOutputAssembly>false</ReferenceOutputAssembly>
+      <Private>false</Private>
+    </ProjectReference>
     <ProjectReference Include="$(RepoRoot)\src\FruityLink.Plugins.FlAgent\FruityLink.Plugins.FlAgent.csproj">
       <ReferenceOutputAssembly>false</ReferenceOutputAssembly>
       <Private>false</Private>
     </ProjectReference>
   </ItemGroup>
 
-  <Target Name="StagePayloadFromSource" AfterTargets="Build" Condition="'$(HasSourceTree)' == 'true'">
+  <Target Name="RefreshPayloadItems" BeforeTargets="AssignTargetPaths"
+          DependsOnTargets="StagePayloadFromSource">
+    <ItemGroup>
+      <None Include="payload\**\*" Exclude="payload\**\*.pdb">
+        <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+        <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+      </None>
+    </ItemGroup>
+  </Target>
+
+  <Target Name="StagePayloadFromSource" DependsOnTargets="ResolveProjectReferences"
+          Condition="'$(HasSourceTree)' == 'true' and '$(DesignTimeBuild)' != 'true'">
     <!-- 1) FL Agent plugin: its FULL publish closure (a plain build output lacks the Avalonia
          native runtimes — libSkiaSharp etc. — and FL would crash on plugin enable). NoBuild: the
          ProjectReference above already built it in this same configuration. -->
@@ -111,25 +128,24 @@
              Properties="Configuration=$(Configuration);NoBuild=true;PublishDir=$(MSBuildProjectDirectory)\payload\FruityLink\plugins\fl-agent\" />
 
     <!-- The publish drags project + referenced .pdb files along; strip them so the payload stays
-         symbol-free regardless of configuration (matches the None Remove exclusion above). -->
+         symbol-free regardless of configuration (matches RefreshPayloadItems' exclusion). -->
     <ItemGroup>
       <PayloadPdbs Include="$(MSBuildProjectDirectory)\payload\**\*.pdb" />
     </ItemGroup>
     <Delete Files="@(PayloadPdbs)" />
 
-    <!-- 2) Host closure (same file list bootstrap\build-and-stage.ps1 stages). -->
+    <!-- 2) Host owns the process-wide Avalonia toolkit as well as Python. Publish
+         its full managed/native closure so plugins can safely share that runtime. -->
+    <MSBuild Projects="$(RepoRoot)\sdk\src\FruityLink.Host\FruityLink.Host.csproj"
+             Targets="Publish"
+             Properties="Configuration=$(Configuration);NoBuild=true;PublishDir=$(MSBuildProjectDirectory)\payload\FruityLink\" />
+    <MSBuild Projects="$(RepoRoot)\sdk\src\FruityLink.SessionHost\FruityLink.SessionHost.csproj"
+             Targets="Publish"
+             Properties="Configuration=$(Configuration);NoBuild=true;PublishDir=$(MSBuildProjectDirectory)\payload\FruityLink\tools\session-host\" />
     <ItemGroup>
-      <HostOut Include="$(RepoRoot)\sdk\src\FruityLink.Host\bin\$(Configuration)\net9.0-windows\" />
-      <HostPayload Include="@(HostOut->'%(Identity)FruityLink.Host.dll')" />
-      <HostPayload Include="@(HostOut->'%(Identity)FruityLink.Host.runtimeconfig.json')" />
-      <HostPayload Include="@(HostOut->'%(Identity)FruityLink.Host.deps.json')" />
-      <HostPayload Include="@(HostOut->'%(Identity)FruityLink.FlStudio.dll')" />
-      <HostPayload Include="@(HostOut->'%(Identity)FruityLink.Core.dll')" />
-      <HostPayload Include="@(HostOut->'%(Identity)FruityLink.Plugins.Abstractions.dll')" />
-      <HostPayload Include="@(HostOut->'%(Identity)FruityLink.Plugins.Host.dll')" />
+      <HostPayloadPdbs Include="$(MSBuildProjectDirectory)\payload\FruityLink\**\*.pdb" />
     </ItemGroup>
-    <Copy SourceFiles="@(HostPayload)" DestinationFolder="$(MSBuildProjectDirectory)\payload\FruityLink"
-          SkipUnchangedFiles="true" />
+    <Delete Files="@(HostPayloadPdbs)" />
 
     <!-- 2b) Ship the verified-builds list inside the installed FruityLink dir too, so the in-FL
          host can later enforce the same integrity policy at load time ("refuse to load"). -->
@@ -148,15 +164,6 @@
           DestinationFolder="$(MSBuildProjectDirectory)\payload\FruityLink"
           Condition="Exists('$(RepoRoot)\sdk\native\bridge\build\Release\FlBridge.dll')" SkipUnchangedFiles="true" />
 
-    <!-- 4) Mirror the refreshed payload into the output dir — that .\payload next to the EXE is
-         what InstallerInfo.ResolvePayloadRoot actually reads. The None-item copy above ran BEFORE
-         this target (with last build's snapshot), so re-copy here to make THIS build's exe fresh. -->
-    <ItemGroup>
-      <FreshPayload Include="$(MSBuildProjectDirectory)\payload\**\*" />
-    </ItemGroup>
-    <Copy SourceFiles="@(FreshPayload)"
-          DestinationFiles="@(FreshPayload->'$(OutDir)payload\%(RecursiveDir)%(Filename)%(Extension)')"
-          SkipUnchangedFiles="true" />
   </Target>
 
 </Project>

@@ -1,8 +1,12 @@
 # FruityLink Python
 
-Typed Python automation for FL Studio through the FruityLink scripting plugin.
-Requires Python 3.11 or later. Runtime uses the standard library; a direct connection
-requires Windows and an enabled scripting plugin inside FL Studio.
+Typed Python automation for FL Studio, supporting the host's embedded interpreter
+and external Python clients. FLMCP runs this library inside FL with bundled CPython
+3.14.6; users do not install Python for that workflow. See the
+[embedded runtime guide](../docs/embedded-python.md).
+
+The standalone client below requires Python 3.11 or later, Windows, and an enabled
+scripting plugin inside FL Studio. The package uses only the standard library.
 
 ```console
 python -m pip install ./python
@@ -63,7 +67,7 @@ from its `python` directory.
 
 Operations affect the currently connected project. Batches execute sequentially;
 they are not transactions and do not provide automatic rollback. The separate
-Python worker executes user code with the caller's ordinary OS permissions; it
-is not a security sandbox. Unsupported native capabilities fail explicitly.
+Python worker and embedded runtime execute trusted user code with ordinary OS
+permissions; neither is a security sandbox. Unsupported native capabilities fail explicitly.
 
 Licensed under the repository's MIT license.

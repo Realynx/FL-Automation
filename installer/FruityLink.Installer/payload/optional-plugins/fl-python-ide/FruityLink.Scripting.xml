@@ -1,0 +1,513 @@
+<?xml version="1.0"?>
+<doc>
+    <assembly>
+        <name>FruityLink.Scripting</name>
+    </assembly>
+    <members>
+        <member name="T:FruityLink.Scripting.EmbeddedPythonOptions">
+            <summary>Absolute locations of the private CPython 3.14 runtime and the SDK wheel or source directory.</summary>
+        </member>
+        <member name="M:FruityLink.Scripting.EmbeddedPythonOptions.#ctor(System.String,System.String)">
+            <summary>Absolute locations of the private CPython 3.14 runtime and the SDK wheel or source directory.</summary>
+        </member>
+        <member name="T:FruityLink.Scripting.IEmbeddedPythonRuntime">
+            <summary>Executes trusted Python inside the host process. Cancellation is cooperative and drains active work.</summary>
+        </member>
+        <member name="M:FruityLink.Scripting.IEmbeddedPythonRuntime.ExecuteAsync(System.String,System.Int32,System.Threading.CancellationToken)">
+            <summary>Runs with the typed SDK object <c>fl</c> and returns bounded output and the script's <c>result</c>.</summary>
+        </member>
+        <member name="T:FruityLink.Scripting.EmbeddedPythonRuntime">
+            <summary>
+            A plugin's lease on a process-lifetime, isolated CPython interpreter. Disposal cancels and drains this
+            lease without finalizing Python or unloading its DLL. Request handlers must themselves drain started
+            native work before completing, including when cancelled. Scripts execute with the host's privileges.
+            </summary>
+        </member>
+        <member name="M:FruityLink.Scripting.EmbeddedPythonRuntime.#ctor(FruityLink.Scripting.EmbeddedPythonOptions,System.Func{System.String,System.Text.Json.JsonElement,System.Threading.CancellationToken,System.Threading.Tasks.Task{System.Object}})">
+            <summary>Creates a lazy interpreter lease; the first execution initializes the private runtime.</summary>
+        </member>
+        <member name="M:FruityLink.Scripting.EmbeddedPythonRuntime.ExecuteAsync(System.String,System.Int32,System.Threading.CancellationToken)">
+            <inheritdoc />
+        </member>
+        <member name="M:FruityLink.Scripting.EmbeddedPythonRuntime.DisposeAsync">
+            <inheritdoc />
+        </member>
+        <member name="T:FruityLink.Scripting.EmbeddedPythonRuntimeLocator">
+            <summary>Finds the framework's private runtime without initializing Python or consulting a system interpreter.</summary>
+        </member>
+        <member name="M:FruityLink.Scripting.EmbeddedPythonRuntimeLocator.GetActiveOptions">
+            <summary>Returns the process-pinned configuration, including initialization in progress, or null before first use.</summary>
+        </member>
+        <member name="M:FruityLink.Scripting.EmbeddedPythonRuntimeLocator.Resolve(System.String,System.String,System.String)">
+            <summary>Resolves explicit method/environment overrides, an active interpreter, or the installed private runtime.
+            Host directory defaults to the shared Scripting assembly directory, never a plugin shadow-copy directory.
+            A complete legacy MCP bundle is preferred before first use so both plugins select the same interpreter.</summary>
+        </member>
+        <member name="T:FruityLink.Scripting.FlScriptingDispatcher">
+            <summary>
+            Exposes only explicitly allowlisted typed SDK interfaces. Every FL operation is serialized;
+            cancelling a caller stops queued work but never releases an active operation's gate prematurely.
+            Started native operations run to completion and disposal drains them. Batches are not transactions.
+            </summary>
+        </member>
+        <member name="M:FruityLink.Scripting.FlScriptingDispatcher.#ctor(FruityLink.Core.Abstractions.INativeFlControl,System.String)">
+            <summary>Creates a dispatcher for the safe SDK control surface and optional structured-query interface.</summary>
+        </member>
+        <member name="P:FruityLink.Scripting.FlScriptingDispatcher.InstanceId">
+            <summary>Unique identity of this dispatcher lifetime, echoed in endpoint discovery and capabilities.</summary>
+        </member>
+        <member name="P:FruityLink.Scripting.FlScriptingDispatcher.Pid">
+            <summary>The host process ID.</summary>
+        </member>
+        <member name="P:FruityLink.Scripting.FlScriptingDispatcher.Catalog">
+            <summary>All operations implemented by this dispatcher's explicitly allowed interfaces.</summary>
+        </member>
+        <member name="M:FruityLink.Scripting.FlScriptingDispatcher.HandleRequestAsync(System.String,System.Text.Json.JsonElement,System.Threading.CancellationToken)">
+            <summary>Handles one protocol method without transport or authentication concerns.</summary>
+        </member>
+        <member name="M:FruityLink.Scripting.FlScriptingDispatcher.InvokeAsync(System.String,System.Text.Json.JsonElement,System.Threading.CancellationToken)">
+            <summary>Invokes one snake_case operation with case-sensitive camelCase JSON arguments.</summary>
+        </member>
+        <member name="M:FruityLink.Scripting.FlScriptingDispatcher.GetCapabilitiesAsync(System.Threading.CancellationToken)">
+            <summary>Reports host identity and known native compatibility requirements.</summary>
+        </member>
+        <member name="M:FruityLink.Scripting.FlScriptingDispatcher.BatchAsync(System.Collections.Generic.IReadOnlyList{FruityLink.Scripting.ScriptingCall},System.Boolean,System.Threading.CancellationToken)">
+            <summary>Executes an ordered batch without interleaving; completed changes remain after a later failure.</summary>
+        </member>
+        <member name="M:FruityLink.Scripting.FlScriptingDispatcher.DisposeAsync">
+            <summary>Cancels queued work and waits for any started FL operation to complete before returning.</summary>
+        </member>
+        <member name="M:FruityLink.Scripting.FlScriptingDispatcher.DrainAsync">
+            <summary>Waits until previously queued or active FL work finishes, without stopping the dispatcher.
+            A transport can use this barrier before acknowledging cancellation to a process-owning caller.</summary>
+        </member>
+        <member name="M:FruityLink.Scripting.OperationDocumentation.MethodName">
+            <remarks>
+            Pattern:<br/>
+            <code>\\b(\\w+Async)\\(</code><br/>
+            Explanation:<br/>
+            <code>
+            ○ Match if at a word boundary.<br/>
+            ○ 1st capture group.<br/>
+                ○ Match a word character greedily at least once.<br/>
+                ○ Match the string "Async".<br/>
+            ○ Match '('.<br/>
+            </code>
+            </remarks>
+        </member>
+        <member name="M:FruityLink.Scripting.OperationDocumentation.Whitespace">
+            <remarks>
+            Pattern:<br/>
+            <code>\\s+</code><br/>
+            Explanation:<br/>
+            <code>
+            ○ Match a whitespace character atomically at least once.<br/>
+            </code>
+            </remarks>
+        </member>
+        <member name="T:FruityLink.Scripting.ScriptingParameter">
+            <summary>A public scripting operation's argument contract.</summary>
+            <param name="Name">Case-sensitive camelCase argument name.</param>
+            <param name="Type">Human-readable CLR-independent type name.</param>
+            <param name="Required">Whether the argument must be present, independently of nullability.</param>
+            <param name="DefaultValue">Value used when an optional argument is omitted.</param>
+            <param name="Schema">JSON Schema describing accepted values.</param>
+        </member>
+        <member name="M:FruityLink.Scripting.ScriptingParameter.#ctor(System.String,System.String,System.Boolean,System.Object,System.Text.Json.JsonElement)">
+            <summary>A public scripting operation's argument contract.</summary>
+            <param name="Name">Case-sensitive camelCase argument name.</param>
+            <param name="Type">Human-readable CLR-independent type name.</param>
+            <param name="Required">Whether the argument must be present, independently of nullability.</param>
+            <param name="DefaultValue">Value used when an optional argument is omitted.</param>
+            <param name="Schema">JSON Schema describing accepted values.</param>
+        </member>
+        <member name="P:FruityLink.Scripting.ScriptingParameter.Name">
+            <summary>Case-sensitive camelCase argument name.</summary>
+        </member>
+        <member name="P:FruityLink.Scripting.ScriptingParameter.Type">
+            <summary>Human-readable CLR-independent type name.</summary>
+        </member>
+        <member name="P:FruityLink.Scripting.ScriptingParameter.Required">
+            <summary>Whether the argument must be present, independently of nullability.</summary>
+        </member>
+        <member name="P:FruityLink.Scripting.ScriptingParameter.DefaultValue">
+            <summary>Value used when an optional argument is omitted.</summary>
+        </member>
+        <member name="P:FruityLink.Scripting.ScriptingParameter.Schema">
+            <summary>JSON Schema describing accepted values.</summary>
+        </member>
+        <member name="T:FruityLink.Scripting.ScriptingOperation">
+            <summary>An allowlisted SDK operation and its input/output description.</summary>
+            <param name="Name">Stable snake_case operation name.</param>
+            <param name="Description">SDK documentation for the operation.</param>
+            <param name="Parameters">Named parameters, excluding the internal cancellation token.</param>
+            <param name="ReturnType">Human-readable result type, or null for a command.</param>
+            <param name="Mutates">Whether this operation may change project or application state.</param>
+            <param name="Requires">Runtime capabilities required before dispatch.</param>
+            <param name="ReturnSchema">JSON Schema describing a successful result, or null for a command.</param>
+        </member>
+        <member name="M:FruityLink.Scripting.ScriptingOperation.#ctor(System.String,System.String,System.Collections.Generic.IReadOnlyList{FruityLink.Scripting.ScriptingParameter},System.String,System.Boolean,System.Collections.Generic.IReadOnlyList{System.String},System.Nullable{System.Text.Json.JsonElement})">
+            <summary>An allowlisted SDK operation and its input/output description.</summary>
+            <param name="Name">Stable snake_case operation name.</param>
+            <param name="Description">SDK documentation for the operation.</param>
+            <param name="Parameters">Named parameters, excluding the internal cancellation token.</param>
+            <param name="ReturnType">Human-readable result type, or null for a command.</param>
+            <param name="Mutates">Whether this operation may change project or application state.</param>
+            <param name="Requires">Runtime capabilities required before dispatch.</param>
+            <param name="ReturnSchema">JSON Schema describing a successful result, or null for a command.</param>
+        </member>
+        <member name="P:FruityLink.Scripting.ScriptingOperation.Name">
+            <summary>Stable snake_case operation name.</summary>
+        </member>
+        <member name="P:FruityLink.Scripting.ScriptingOperation.Description">
+            <summary>SDK documentation for the operation.</summary>
+        </member>
+        <member name="P:FruityLink.Scripting.ScriptingOperation.Parameters">
+            <summary>Named parameters, excluding the internal cancellation token.</summary>
+        </member>
+        <member name="P:FruityLink.Scripting.ScriptingOperation.ReturnType">
+            <summary>Human-readable result type, or null for a command.</summary>
+        </member>
+        <member name="P:FruityLink.Scripting.ScriptingOperation.Mutates">
+            <summary>Whether this operation may change project or application state.</summary>
+        </member>
+        <member name="P:FruityLink.Scripting.ScriptingOperation.Requires">
+            <summary>Runtime capabilities required before dispatch.</summary>
+        </member>
+        <member name="P:FruityLink.Scripting.ScriptingOperation.ReturnSchema">
+            <summary>JSON Schema describing a successful result, or null for a command.</summary>
+        </member>
+        <member name="T:FruityLink.Scripting.ScriptingCatalog">
+            <summary>The versioned, machine-readable SDK operation catalogue.</summary>
+            <param name="ApiVersion">Scripting protocol version.</param>
+            <param name="Operations">Operations supported by the supplied typed control interfaces.</param>
+        </member>
+        <member name="M:FruityLink.Scripting.ScriptingCatalog.#ctor(System.Int32,System.Collections.Generic.IReadOnlyList{FruityLink.Scripting.ScriptingOperation})">
+            <summary>The versioned, machine-readable SDK operation catalogue.</summary>
+            <param name="ApiVersion">Scripting protocol version.</param>
+            <param name="Operations">Operations supported by the supplied typed control interfaces.</param>
+        </member>
+        <member name="P:FruityLink.Scripting.ScriptingCatalog.ApiVersion">
+            <summary>Scripting protocol version.</summary>
+        </member>
+        <member name="P:FruityLink.Scripting.ScriptingCatalog.Operations">
+            <summary>Operations supported by the supplied typed control interfaces.</summary>
+        </member>
+        <member name="T:FruityLink.Scripting.ScriptingCapabilities">
+            <summary>Identity and availability of the current scripting backend.</summary>
+            <param name="ApiVersion">Scripting protocol version.</param>
+            <param name="Pid">Process hosting the control surface.</param>
+            <param name="InstanceId">Unique dispatcher lifetime identifier.</param>
+            <param name="OperationCount">Number of catalogued operations.</param>
+            <param name="Available">Whether the control surface currently responds.</param>
+            <param name="Symbols">Optional native version/scanner diagnostics.</param>
+            <param name="MixerLayoutAvailable">Whether complete mixer offsets are verified.</param>
+            <param name="UnavailableOperations">Operation names with an explanation when a known capability is missing.</param>
+        </member>
+        <member name="M:FruityLink.Scripting.ScriptingCapabilities.#ctor(System.Int32,System.Int32,System.String,System.Int32,System.Boolean,FruityLink.Core.Abstractions.FlSymbolStatus,System.Boolean,System.Collections.Generic.IReadOnlyDictionary{System.String,System.String})">
+            <summary>Identity and availability of the current scripting backend.</summary>
+            <param name="ApiVersion">Scripting protocol version.</param>
+            <param name="Pid">Process hosting the control surface.</param>
+            <param name="InstanceId">Unique dispatcher lifetime identifier.</param>
+            <param name="OperationCount">Number of catalogued operations.</param>
+            <param name="Available">Whether the control surface currently responds.</param>
+            <param name="Symbols">Optional native version/scanner diagnostics.</param>
+            <param name="MixerLayoutAvailable">Whether complete mixer offsets are verified.</param>
+            <param name="UnavailableOperations">Operation names with an explanation when a known capability is missing.</param>
+        </member>
+        <member name="P:FruityLink.Scripting.ScriptingCapabilities.ApiVersion">
+            <summary>Scripting protocol version.</summary>
+        </member>
+        <member name="P:FruityLink.Scripting.ScriptingCapabilities.Pid">
+            <summary>Process hosting the control surface.</summary>
+        </member>
+        <member name="P:FruityLink.Scripting.ScriptingCapabilities.InstanceId">
+            <summary>Unique dispatcher lifetime identifier.</summary>
+        </member>
+        <member name="P:FruityLink.Scripting.ScriptingCapabilities.OperationCount">
+            <summary>Number of catalogued operations.</summary>
+        </member>
+        <member name="P:FruityLink.Scripting.ScriptingCapabilities.Available">
+            <summary>Whether the control surface currently responds.</summary>
+        </member>
+        <member name="P:FruityLink.Scripting.ScriptingCapabilities.Symbols">
+            <summary>Optional native version/scanner diagnostics.</summary>
+        </member>
+        <member name="P:FruityLink.Scripting.ScriptingCapabilities.MixerLayoutAvailable">
+            <summary>Whether complete mixer offsets are verified.</summary>
+        </member>
+        <member name="P:FruityLink.Scripting.ScriptingCapabilities.UnavailableOperations">
+            <summary>Operation names with an explanation when a known capability is missing.</summary>
+        </member>
+        <member name="T:FruityLink.Scripting.ScriptingError">
+            <summary>A normalized error suitable for local scripting clients.</summary>
+            <param name="Code">Stable machine-readable error code.</param>
+            <param name="Message">Human-readable error detail, without a stack trace.</param>
+            <param name="Data">Optional structured detail.</param>
+        </member>
+        <member name="M:FruityLink.Scripting.ScriptingError.#ctor(System.String,System.String,System.Object)">
+            <summary>A normalized error suitable for local scripting clients.</summary>
+            <param name="Code">Stable machine-readable error code.</param>
+            <param name="Message">Human-readable error detail, without a stack trace.</param>
+            <param name="Data">Optional structured detail.</param>
+        </member>
+        <member name="P:FruityLink.Scripting.ScriptingError.Code">
+            <summary>Stable machine-readable error code.</summary>
+        </member>
+        <member name="P:FruityLink.Scripting.ScriptingError.Message">
+            <summary>Human-readable error detail, without a stack trace.</summary>
+        </member>
+        <member name="P:FruityLink.Scripting.ScriptingError.Data">
+            <summary>Optional structured detail.</summary>
+        </member>
+        <member name="M:FruityLink.Scripting.ScriptingError.FromException(System.Exception)">
+            <summary>Maps an exception without exposing internal stack traces.</summary>
+        </member>
+        <member name="T:FruityLink.Scripting.ScriptingException">
+            <summary>An expected scripting failure with a stable protocol code.</summary>
+        </member>
+        <member name="M:FruityLink.Scripting.ScriptingException.#ctor(System.String,System.String)">
+            <summary>Creates a scripting failure.</summary>
+        </member>
+        <member name="P:FruityLink.Scripting.ScriptingException.Code">
+            <summary>Machine-readable error code.</summary>
+        </member>
+        <member name="T:FruityLink.Scripting.ScriptingCall">
+            <summary>One operation in a serialized, non-transactional batch.</summary>
+            <param name="Operation">Catalogue operation name.</param>
+            <param name="Arguments">Named operation arguments.</param>
+        </member>
+        <member name="M:FruityLink.Scripting.ScriptingCall.#ctor(System.String,System.Text.Json.JsonElement)">
+            <summary>One operation in a serialized, non-transactional batch.</summary>
+            <param name="Operation">Catalogue operation name.</param>
+            <param name="Arguments">Named operation arguments.</param>
+        </member>
+        <member name="P:FruityLink.Scripting.ScriptingCall.Operation">
+            <summary>Catalogue operation name.</summary>
+        </member>
+        <member name="P:FruityLink.Scripting.ScriptingCall.Arguments">
+            <summary>Named operation arguments.</summary>
+        </member>
+        <member name="T:FruityLink.Scripting.ScriptingBatchItem">
+            <summary>The outcome of a single attempted batch operation.</summary>
+            <param name="Operation">Operation name.</param>
+            <param name="Result">Successful return value, including null for commands.</param>
+            <param name="Error">Failure detail, or null on success.</param>
+        </member>
+        <member name="M:FruityLink.Scripting.ScriptingBatchItem.#ctor(System.String,System.Object,FruityLink.Scripting.ScriptingError)">
+            <summary>The outcome of a single attempted batch operation.</summary>
+            <param name="Operation">Operation name.</param>
+            <param name="Result">Successful return value, including null for commands.</param>
+            <param name="Error">Failure detail, or null on success.</param>
+        </member>
+        <member name="P:FruityLink.Scripting.ScriptingBatchItem.Operation">
+            <summary>Operation name.</summary>
+        </member>
+        <member name="P:FruityLink.Scripting.ScriptingBatchItem.Result">
+            <summary>Successful return value, including null for commands.</summary>
+        </member>
+        <member name="P:FruityLink.Scripting.ScriptingBatchItem.Error">
+            <summary>Failure detail, or null on success.</summary>
+        </member>
+        <member name="T:FruityLink.Scripting.ScriptingBatchResult">
+            <summary>A batch's ordered outcomes; completed changes are never rolled back.</summary>
+            <param name="Results">Outcomes of attempted operations.</param>
+            <param name="StoppedOnError">Whether the remaining operations were skipped after a failure.</param>
+        </member>
+        <member name="M:FruityLink.Scripting.ScriptingBatchResult.#ctor(System.Collections.Generic.IReadOnlyList{FruityLink.Scripting.ScriptingBatchItem},System.Boolean)">
+            <summary>A batch's ordered outcomes; completed changes are never rolled back.</summary>
+            <param name="Results">Outcomes of attempted operations.</param>
+            <param name="StoppedOnError">Whether the remaining operations were skipped after a failure.</param>
+        </member>
+        <member name="P:FruityLink.Scripting.ScriptingBatchResult.Results">
+            <summary>Outcomes of attempted operations.</summary>
+        </member>
+        <member name="P:FruityLink.Scripting.ScriptingBatchResult.StoppedOnError">
+            <summary>Whether the remaining operations were skipped after a failure.</summary>
+        </member>
+        <member name="T:FruityLink.Scripting.ScriptingEndpoint">
+            <summary>Per-user discovery metadata for one authenticated local endpoint.</summary>
+            <param name="ApiVersion">Scripting protocol version.</param>
+            <param name="Pid">Process hosting the endpoint.</param>
+            <param name="InstanceId">Unique endpoint lifetime identifier.</param>
+            <param name="PipeName">Windows named-pipe name without a path prefix.</param>
+            <param name="Token">Secret authenticating this endpoint's local requests.</param>
+            <param name="CreatedAt">UTC creation timestamp.</param>
+        </member>
+        <member name="M:FruityLink.Scripting.ScriptingEndpoint.#ctor(System.Int32,System.Int32,System.String,System.String,System.String,System.DateTimeOffset)">
+            <summary>Per-user discovery metadata for one authenticated local endpoint.</summary>
+            <param name="ApiVersion">Scripting protocol version.</param>
+            <param name="Pid">Process hosting the endpoint.</param>
+            <param name="InstanceId">Unique endpoint lifetime identifier.</param>
+            <param name="PipeName">Windows named-pipe name without a path prefix.</param>
+            <param name="Token">Secret authenticating this endpoint's local requests.</param>
+            <param name="CreatedAt">UTC creation timestamp.</param>
+        </member>
+        <member name="P:FruityLink.Scripting.ScriptingEndpoint.ApiVersion">
+            <summary>Scripting protocol version.</summary>
+        </member>
+        <member name="P:FruityLink.Scripting.ScriptingEndpoint.Pid">
+            <summary>Process hosting the endpoint.</summary>
+        </member>
+        <member name="P:FruityLink.Scripting.ScriptingEndpoint.InstanceId">
+            <summary>Unique endpoint lifetime identifier.</summary>
+        </member>
+        <member name="P:FruityLink.Scripting.ScriptingEndpoint.PipeName">
+            <summary>Windows named-pipe name without a path prefix.</summary>
+        </member>
+        <member name="P:FruityLink.Scripting.ScriptingEndpoint.Token">
+            <summary>Secret authenticating this endpoint's local requests.</summary>
+        </member>
+        <member name="P:FruityLink.Scripting.ScriptingEndpoint.CreatedAt">
+            <summary>UTC creation timestamp.</summary>
+        </member>
+        <member name="T:FruityLink.Scripting.ScriptingJson">
+            <summary>Strict, shared JSON settings for the scripting protocol.</summary>
+        </member>
+        <member name="P:FruityLink.Scripting.ScriptingJson.Options">
+            <summary>Immutable camelCase settings: case-sensitive arguments, named enums, and required constructor arguments.</summary>
+        </member>
+        <member name="P:FruityLink.Scripting.ScriptingJson.EmptyObject">
+            <summary>An empty JSON object for operations without arguments.</summary>
+        </member>
+        <member name="T:FruityLink.Scripting.ScriptingPipeFraming">
+            <summary>Length-prefixed UTF-8 JSON framing shared by local scripting transports.</summary>
+        </member>
+        <member name="F:FruityLink.Scripting.ScriptingPipeFraming.MaximumFrameBytes">
+            <summary>Maximum JSON frame payload, excluding the four-byte little-endian length.</summary>
+        </member>
+        <member name="M:FruityLink.Scripting.ScriptingPipeFraming.ReadAsync(System.IO.Stream,System.Threading.CancellationToken)">
+            <summary>Reads one complete JSON frame, refusing truncated or oversized input.</summary>
+        </member>
+        <member name="M:FruityLink.Scripting.ScriptingPipeFraming.WriteAsync(System.IO.Stream,System.Object,System.Threading.CancellationToken)">
+            <summary>Writes a single bounded JSON frame.</summary>
+        </member>
+        <member name="T:FruityLink.Scripting.ScriptingPipeServer">
+            <summary>
+            Authenticated, current-user-only Windows named-pipe endpoint with one request per connection.
+            Owns the supplied dispatcher; disposal stops connections, removes owned discovery, and drains FL work.
+            </summary>
+        </member>
+        <member name="M:FruityLink.Scripting.ScriptingPipeServer.#ctor(FruityLink.Scripting.FlScriptingDispatcher,FruityLink.Scripting.ScriptingServerOptions)">
+            <summary>Creates an inactive endpoint with a fresh cryptographic token.</summary>
+        </member>
+        <member name="P:FruityLink.Scripting.ScriptingPipeServer.Endpoint">
+            <summary>Endpoint identity. Its token is a secret and must not be logged or sent to another user.</summary>
+        </member>
+        <member name="M:FruityLink.Scripting.ScriptingPipeServer.StartAsync(System.Threading.CancellationToken)">
+            <summary>Starts listening and atomically publishes discovery metadata after the first pipe exists.</summary>
+        </member>
+        <member name="M:FruityLink.Scripting.ScriptingPipeServer.DisposeAsync">
+            <summary>Stops accepting requests and drains the owned dispatcher before releasing discovery ownership.</summary>
+        </member>
+        <member name="T:FruityLink.Scripting.ScriptingServerOptions">
+            <summary>Host-owned configuration for an authenticated local scripting endpoint.</summary>
+        </member>
+        <member name="P:FruityLink.Scripting.ScriptingServerOptions.PipeName">
+            <summary>Named-pipe name; the default is FruityLinkScripting followed by the current process ID.</summary>
+        </member>
+        <member name="P:FruityLink.Scripting.ScriptingServerOptions.DiscoveryDirectory">
+            <summary>Directory holding per-process discovery files. Its ACL is restricted to the current Windows user.</summary>
+        </member>
+        <member name="P:FruityLink.Scripting.ScriptingServerOptions.PublishDiscovery">
+            <summary>Whether to publish per-user discovery metadata.</summary>
+        </member>
+        <member name="P:FruityLink.Scripting.ScriptingServerOptions.RequestTimeout">
+            <summary>Maximum time to receive or handle one request. Started native work is drained after this deadline.</summary>
+        </member>
+        <member name="P:FruityLink.Scripting.ScriptingServerOptions.MaximumConnections">
+            <summary>Maximum number of connected clients, including clients waiting for serialized FL access.</summary>
+        </member>
+        <member name="P:FruityLink.Scripting.ScriptingServerOptions.Log">
+            <summary>Optional diagnostic sink. Tokens and request contents are never logged.</summary>
+        </member>
+        <member name="T:System.Text.RegularExpressions.Generated.MethodName_0">
+            <summary>Custom <see cref="T:System.Text.RegularExpressions.Regex"/>-derived type for the MethodName method.</summary>
+        </member>
+        <member name="F:System.Text.RegularExpressions.Generated.MethodName_0.Instance">
+            <summary>Cached, thread-safe singleton instance.</summary>
+        </member>
+        <member name="M:System.Text.RegularExpressions.Generated.MethodName_0.#ctor">
+            <summary>Initializes the instance.</summary>
+        </member>
+        <member name="T:System.Text.RegularExpressions.Generated.MethodName_0.RunnerFactory">
+            <summary>Provides a factory for creating <see cref="T:System.Text.RegularExpressions.RegexRunner"/> instances to be used by methods on <see cref="T:System.Text.RegularExpressions.Regex"/>.</summary>
+        </member>
+        <member name="M:System.Text.RegularExpressions.Generated.MethodName_0.RunnerFactory.CreateInstance">
+            <summary>Creates an instance of a <see cref="T:System.Text.RegularExpressions.RegexRunner"/> used by methods on <see cref="T:System.Text.RegularExpressions.Regex"/>.</summary>
+        </member>
+        <member name="T:System.Text.RegularExpressions.Generated.MethodName_0.RunnerFactory.Runner">
+            <summary>Provides the runner that contains the custom logic implementing the specified regular expression.</summary>
+        </member>
+        <member name="M:System.Text.RegularExpressions.Generated.MethodName_0.RunnerFactory.Runner.Scan(System.ReadOnlySpan{System.Char})">
+            <summary>Scan the <paramref name="inputSpan"/> starting from base.runtextstart for the next match.</summary>
+            <param name="inputSpan">The text being scanned by the regular expression.</param>
+        </member>
+        <member name="M:System.Text.RegularExpressions.Generated.MethodName_0.RunnerFactory.Runner.TryFindNextPossibleStartingPosition(System.ReadOnlySpan{System.Char})">
+            <summary>Search <paramref name="inputSpan"/> starting from base.runtextpos for the next location a match could possibly start.</summary>
+            <param name="inputSpan">The text being scanned by the regular expression.</param>
+            <returns>true if a possible match was found; false if no more matches are possible.</returns>
+        </member>
+        <member name="M:System.Text.RegularExpressions.Generated.MethodName_0.RunnerFactory.Runner.TryMatchAtCurrentPosition(System.ReadOnlySpan{System.Char})">
+            <summary>Determine whether <paramref name="inputSpan"/> at base.runtextpos is a match for the regular expression.</summary>
+            <param name="inputSpan">The text being scanned by the regular expression.</param>
+            <returns>true if the regular expression matches at the current position; otherwise, false.</returns>
+        </member>
+        <member name="T:System.Text.RegularExpressions.Generated.Whitespace_1">
+            <summary>Custom <see cref="T:System.Text.RegularExpressions.Regex"/>-derived type for the Whitespace method.</summary>
+        </member>
+        <member name="F:System.Text.RegularExpressions.Generated.Whitespace_1.Instance">
+            <summary>Cached, thread-safe singleton instance.</summary>
+        </member>
+        <member name="M:System.Text.RegularExpressions.Generated.Whitespace_1.#ctor">
+            <summary>Initializes the instance.</summary>
+        </member>
+        <member name="T:System.Text.RegularExpressions.Generated.Whitespace_1.RunnerFactory">
+            <summary>Provides a factory for creating <see cref="T:System.Text.RegularExpressions.RegexRunner"/> instances to be used by methods on <see cref="T:System.Text.RegularExpressions.Regex"/>.</summary>
+        </member>
+        <member name="M:System.Text.RegularExpressions.Generated.Whitespace_1.RunnerFactory.CreateInstance">
+            <summary>Creates an instance of a <see cref="T:System.Text.RegularExpressions.RegexRunner"/> used by methods on <see cref="T:System.Text.RegularExpressions.Regex"/>.</summary>
+        </member>
+        <member name="T:System.Text.RegularExpressions.Generated.Whitespace_1.RunnerFactory.Runner">
+            <summary>Provides the runner that contains the custom logic implementing the specified regular expression.</summary>
+        </member>
+        <member name="M:System.Text.RegularExpressions.Generated.Whitespace_1.RunnerFactory.Runner.Scan(System.ReadOnlySpan{System.Char})">
+            <summary>Scan the <paramref name="inputSpan"/> starting from base.runtextstart for the next match.</summary>
+            <param name="inputSpan">The text being scanned by the regular expression.</param>
+        </member>
+        <member name="M:System.Text.RegularExpressions.Generated.Whitespace_1.RunnerFactory.Runner.TryFindNextPossibleStartingPosition(System.ReadOnlySpan{System.Char})">
+            <summary>Search <paramref name="inputSpan"/> starting from base.runtextpos for the next location a match could possibly start.</summary>
+            <param name="inputSpan">The text being scanned by the regular expression.</param>
+            <returns>true if a possible match was found; false if no more matches are possible.</returns>
+        </member>
+        <member name="M:System.Text.RegularExpressions.Generated.Whitespace_1.RunnerFactory.Runner.TryMatchAtCurrentPosition(System.ReadOnlySpan{System.Char})">
+            <summary>Determine whether <paramref name="inputSpan"/> at base.runtextpos is a match for the regular expression.</summary>
+            <param name="inputSpan">The text being scanned by the regular expression.</param>
+            <returns>true if the regular expression matches at the current position; otherwise, false.</returns>
+        </member>
+        <member name="T:System.Text.RegularExpressions.Generated.Utilities">
+            <summary>Helper methods used by generated <see cref="T:System.Text.RegularExpressions.Regex"/>-derived implementations.</summary>
+        </member>
+        <member name="F:System.Text.RegularExpressions.Generated.Utilities.s_defaultTimeout">
+            <summary>Default timeout value set in <see cref="T:System.AppContext"/>, or <see cref="F:System.Text.RegularExpressions.Regex.InfiniteMatchTimeout"/> if none was set.</summary>
+        </member>
+        <member name="F:System.Text.RegularExpressions.Generated.Utilities.s_hasTimeout">
+            <summary>Whether <see cref="F:System.Text.RegularExpressions.Generated.Utilities.s_defaultTimeout"/> is non-infinite.</summary>
+        </member>
+        <member name="M:System.Text.RegularExpressions.Generated.Utilities.IndexOfAnyWordChar(System.ReadOnlySpan{System.Char})">
+            <summary>Finds the next index of any character that matches a word character.</summary>
+        </member>
+        <member name="M:System.Text.RegularExpressions.Generated.Utilities.IsBoundary(System.ReadOnlySpan{System.Char},System.Int32)">
+            <summary>Determines whether the specified index is a boundary.</summary>
+        </member>
+        <member name="M:System.Text.RegularExpressions.Generated.Utilities.IsWordChar(System.Char)">
+            <summary>Determines whether the character is part of the [\w] set.</summary>
+        </member>
+        <member name="F:System.Text.RegularExpressions.Generated.Utilities.s_asciiExceptWordChars">
+            <summary>Supports searching for characters in or not in "\0\u0001\u0002\u0003\u0004\u0005\u0006\a\b\t\n\v\f\r\u000e\u000f\u0010\u0011\u0012\u0013\u0014\u0015\u0016\u0017\u0018\u0019\u001a\u001b\u001c\u001d\u001e\u001f !\"#$%&amp;'()*+,-./:;&lt;=&gt;?@[\\]^`{|}~\u007f".</summary>
+        </member>
+        <member name="F:System.Text.RegularExpressions.Generated.Utilities.s_whitespace">
+            <summary>Supports searching for characters in or not in "\t\n\v\f\r \u0085             \u2028\u2029  　".</summary>
+        </member>
+    </members>
+</doc>

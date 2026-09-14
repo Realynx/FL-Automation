@@ -25,7 +25,9 @@ param(
     [string]$Configuration = 'Release',
     [string]$McpDistributionPath,
     [string]$McpSourceRoot,
-    [string]$McpPythonWheel
+    [string]$McpPythonWheel,
+    [string]$McpPythonRuntimeCacheDirectory,
+    [string]$SerumSupportWheel
 )
 
 $ErrorActionPreference = 'Stop'
@@ -74,9 +76,22 @@ Write-Host '==> Stage and verify bundled FL MCP plugin + companion'
     -DistributionPath $McpDistributionPath `
     -McpSourceRoot $McpSourceRoot `
     -PythonWheel $McpPythonWheel `
+    -PythonRuntimeCacheDirectory $McpPythonRuntimeCacheDirectory `
     -SdkRoot (Join-Path (Split-Path $PSScriptRoot -Parent) 'sdk') `
     -PayloadRoot (Join-Path $ProjectDir 'payload')
 if (-not $?) { throw 'FL MCP staging failed.' }
+
+Write-Host '==> Stage the Python editor plugin and framework-owned interpreter'
+& (Join-Path $PSScriptRoot 'stage-python-ide.ps1') -Configuration $Configuration -PayloadRoot (Join-Path $ProjectDir 'payload')
+if (-not $?) { throw 'Python IDE staging failed.' }
+
+Write-Host '==> Stage and verify the Serum support extension wheel'
+& (Join-Path $PSScriptRoot 'stage-serum-support.ps1') -PayloadRoot (Join-Path $ProjectDir 'payload') -SerumWheel $SerumSupportWheel
+if (-not $?) { throw 'Serum support staging failed.' }
+
+Write-Host '==> Stage the SDK session host for standalone Python builds'
+& (Join-Path $PSScriptRoot 'stage-session-host.ps1') -Configuration $Configuration -PayloadRoot (Join-Path $ProjectDir 'payload')
+if (-not $?) { throw 'SDK session host staging failed.' }
 
 # Step 2: the actual publish. HasSourceTree=false skips the staging target and
 # its ProjectReferences on purpose: the single-file/RID global properties would
@@ -119,11 +134,31 @@ Get-ChildItem -LiteralPath $PublishDir -Recurse -Filter *.pdb -File | ForEach-Ob
 
 # Validate the final optional component again after publish and symbol removal.
 & {
-    param($helper, $bundle)
+    param($helper, $bundle, $sharedHostRoot, $ideBundle)
     . $helper
     Assert-McpChecksums $bundle
     Assert-McpChecksums (Join-Path $bundle 'companion')
-} (Join-Path $PSScriptRoot 'stage-mcp.ps1') (Join-Path $PayloadDst 'optional-plugins/fl-mcp')
+    Assert-McpPythonRuntime (Join-Path $bundle 'companion')
+    Assert-McpSharedHost $sharedHostRoot (Join-Path $bundle 'plugin')
+    Assert-McpChecksums $ideBundle
+    Assert-McpChecksums (Join-Path $sharedHostRoot 'python')
+    Assert-McpDependencyClosure $ideBundle 'FruityLink.Plugins.PythonIde.deps.json' $sharedHostRoot
+    Assert-McpDependencyClosure $sharedHostRoot 'FruityLink.Host.deps.json' $sharedHostRoot
+} (Join-Path $PSScriptRoot 'stage-mcp.ps1') (Join-Path $PayloadDst 'optional-plugins/fl-mcp') (Join-Path $PayloadDst 'FruityLink') (Join-Path $PayloadDst 'optional-plugins/fl-python-ide')
+
+& {
+    param($helper, $bundle)
+    . $helper
+    Assert-SerumSupportPayload $bundle
+} (Join-Path $PSScriptRoot 'stage-serum-support.ps1') (Join-Path $PayloadDst 'optional-plugins/serum-support')
+
+. (Join-Path $PSScriptRoot 'shared-ui-payload.ps1')
+$sharedUiHost = Join-Path $PayloadDst 'FruityLink'
+Assert-SharedUiPayload $sharedUiHost (Join-Path $PayloadDst 'optional-plugins/fl-python-ide')
+$productUiPlugin = Join-Path $sharedUiHost 'plugins/fl-agent'
+if (Test-Path -LiteralPath $productUiPlugin -PathType Container) {
+    Assert-SharedUiPayload $sharedUiHost $productUiPlugin
+}
 
 # --- Zip: ONE publish, TWO editions ---------------------------------------------
 # Entry-by-entry with normalized forward-slash names: .NET Framework's
@@ -135,7 +170,7 @@ Get-ChildItem -LiteralPath $PublishDir -Recurse -Filter *.pdb -File | ForEach-Ob
 #       The sold product: full payload including the FL Automate plugin
 #       (payload/FruityLink/plugins/fl-agent/). Uploaded to the marketing site.
 #   * COMMUNITY fruitylink-installer-v<ver>.zip
-#       The FruityLink plugin system and bundled optional FL MCP — SAME exe,
+#       The FruityLink plugin system, Python IDE, and optional FL MCP — SAME exe,
 #       fl-agent payload stripped. FL MCP keeps its PolyForm Noncommercial license.
 #       The installer detects the edition at runtime from
 #       payload presence (InstallerInfo.IsPackagedEdition). Published as a
@@ -169,9 +204,26 @@ function New-InstallerZip {
     $zip = [System.IO.Compression.ZipFile]::OpenRead($ZipPath)
     try {
         foreach ($required in @('payload/optional-plugins/fl-mcp/plugin/FlMcp.Plugin.dll',
+            'payload/FruityLink/FruityLink.Scripting.dll',
+            'payload/FruityLink/python/runtime/python314.dll',
+            'payload/FruityLink/python/FRUITYLINK-LICENSE.txt',
+            'payload/optional-plugins/fl-python-ide/FruityLink.Plugins.PythonIde.dll',
+            'payload/optional-plugins/fl-python-ide/AvaloniaEdit.dll',
+            'payload/optional-plugins/fl-python-ide/LICENSE',
+            'payload/optional-plugins/serum-support/fruitylink_serum.whl',
+            'payload/optional-plugins/serum-support/LICENSE',
+            'payload/optional-plugins/serum-support/SHA256SUMS.json',
             'payload/optional-plugins/fl-mcp/companion/server/FlMcp.Server.dll',
             'payload/optional-plugins/fl-mcp/companion/python/fruitylink_python-0.2.0-py3-none-any.whl',
-            'payload/optional-plugins/fl-mcp/companion/register-codex.ps1',
+            'payload/optional-plugins/fl-mcp/companion/python/runtime/python.exe',
+            'payload/optional-plugins/fl-mcp/companion/python/runtime/python314.dll',
+            'payload/optional-plugins/fl-mcp/companion/python/runtime/python314._pth',
+            'payload/optional-plugins/fl-mcp/companion/python/runtime/LICENSE.txt',
+            'payload/optional-plugins/fl-mcp/companion/python/RUNTIME-PROVENANCE.json',
+            'payload/optional-plugins/fl-mcp/companion/INSTALLER-SETUP.md',
+            'payload/optional-plugins/fl-mcp/companion/SOURCE-README.md',
+            'licenses/Tomlyn-2.10.1-LICENSE.txt',
+            'THIRD-PARTY-NOTICES.md',
             'payload/optional-plugins/fl-mcp/companion/LICENSE')) {
             if ($null -eq $zip.GetEntry($required)) { throw "Installer ZIP is missing bundled FL MCP file: $required" }
         }
@@ -190,6 +242,6 @@ function New-InstallerZip {
 Write-Host '==> Packaged edition (sold plugin included)'
 New-InstallerZip -ZipPath (Join-Path $ArtifactDir "fl-automate-installer-v$Version.zip")
 
-Write-Host '==> Community edition (FruityLink + optional FL MCP; FL Agent excluded)'
+Write-Host '==> Community edition (FruityLink + Python IDE + optional FL MCP; FL Agent excluded)'
 New-InstallerZip -ZipPath (Join-Path $ArtifactDir "fruitylink-installer-v$Version.zip") `
     -ExcludePrefixes @('payload/FruityLink/plugins/fl-agent/')

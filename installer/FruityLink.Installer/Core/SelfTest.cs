@@ -94,7 +94,7 @@ public static class SelfTest
             var record = engine.TryLoadRecord(flDir, manifest);
             Check(record is not null, "install record reloads");
             var uplan = engine.PlanUninstall(flDir, manifest, record, log);
-            var uninstall = engine.ExecuteUninstall(uplan, dryRun: false, log);
+            var uninstall = engine.ExecuteUninstall(uplan, dryRun: false, log, flDir);
             Check(uninstall.Success, "uninstall reported success");
 
             // --- Assert restored state. ---

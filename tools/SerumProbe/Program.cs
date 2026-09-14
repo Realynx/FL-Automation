@@ -453,23 +453,16 @@ if (args.Length > 0 && args[0].Equals("arrangetest2", StringComparison.OrdinalIg
     bool rangeCovers = maxSong >= furthestEnd - barTicks;
     Console.WriteLine($"ASSERT range-covers-clips: {(rangeCovers ? "PASS" : "FAIL")} (playRange max={maxSong}, need >= {furthestEnd - barTicks}; min={minSong})");
 
-    // STEP-2 ISOLATION: prove the mode-independent DIRECT recompute grows the cached song length even when
-    // FL's own gated scan (FUN_00d37450, needs b00>=2 & non-null d04) leaves it stale — the exact failure
-    // that makes the shipped SetCurrentArrangement-only path silently no-op in some project states. Force b04
-    // to 1 bar (simulate a failed scan), then run ONLY the direct grow-recompute and confirm it restores the
-    // true furthest clip end.
-    static int Field(string s, string key) { var m = System.Text.RegularExpressions.Regex.Match(s, key + @"=(-?\d+)"); return m.Success ? int.Parse(m.Groups[1].Value) : int.MinValue; }
-    string scope0 = await fl.DiagSongScopeAsync(ct: ct);
-    int maxClipEnd = Field(scope0, "maxClipEnd");
-    Console.WriteLine("scope (real)             : " + scope0);
-    await fl.DiagSongScopeAsync(forceB04: barTicks, ct: ct);                     // stomp b04 -> 1 bar (stale)
-    string scopeStale = await fl.DiagSongScopeAsync(ct: ct);
-    Console.WriteLine("scope (forced stale b04) : " + scopeStale);
-    string scopeFixed = await fl.DiagSongScopeAsync(recompute: true, ct: ct);    // DIRECT grow-recompute only
-    int b04Fixed = Field(scopeFixed, "b04");
-    Console.WriteLine("scope (after direct recompute): " + scopeFixed);
-    bool directGrows = maxClipEnd > 0 && b04Fixed == maxClipEnd;
-    Console.WriteLine($"ASSERT direct-recompute-grows-b04: {(directGrows ? "PASS" : "FAIL")} (b04 {Field(scopeStale, "b04")} -> {b04Fixed}, maxClipEnd={maxClipEnd})");
+    // Check the public content-length report without changing private object fields. The legacy +0xB04
+    // diagnostic poke overwrites part of a viewport double on FL 2026; use native arrangement refresh only.
+    static long Field(string s, string key) { var m = System.Text.RegularExpressions.Regex.Match(s, key + @"=(-?\d+)"); return m.Success ? long.Parse(m.Groups[1].Value) : long.MinValue; }
+    string scope = await fl.DiagSongScopeAsync(ct: ct);
+    long maxClipEnd = Field(scope, "maxClipEnd");
+    string publicState = await fl.GetSongStateAsync(ct);
+    long expectedBars = maxClipEnd > 0 ? (maxClipEnd + barTicks - 1) / barTicks : 0;
+    bool lengthMatchesClips = maxClipEnd >= furthestEnd && Field(publicState, "songLength") == expectedBars;
+    Console.WriteLine("scope (read-only): " + scope);
+    Console.WriteLine($"ASSERT reported-length-covers-clips: {(lengthMatchesClips ? "PASS" : "FAIL")} (maxClipEnd={maxClipEnd}, expectedBars={expectedBars}; {publicState})");
 
     // PLAY from the top; playhead must advance.
     try { await fl.SeekAsync(0, ct); } catch (Exception ex) { Console.WriteLine("seek0 note: " + ex.Message); }
@@ -510,8 +503,8 @@ if (args.Length > 0 && args[0].Equals("arrangetest2", StringComparison.OrdinalIg
     if (toDelete.Count > 0) { try { await fl.DeleteClipsAsync(toDelete, ct); Console.WriteLine($"cleaned up: deleted {toDelete.Count} scratch clips"); } catch (Exception ex) { Console.WriteLine("cleanup note: " + ex.Message); } }
     try { await fl.SetSongModeAsync(false, ct); } catch { }
 
-    bool overall = rangeCovers && advanced && reached && directGrows;
-    Console.WriteLine($"OVERALL: {(overall ? "PASS" : "FAIL")} (rangeCovers={rangeCovers} advances={advanced} reaches={reached} directGrows={directGrows})");
+    bool overall = rangeCovers && advanced && reached && lengthMatchesClips;
+    Console.WriteLine($"OVERALL: {(overall ? "PASS" : "FAIL")} (rangeCovers={rangeCovers} advances={advanced} reaches={reached} lengthMatchesClips={lengthMatchesClips})");
     Console.WriteLine($"FL alive: {await fl.IsAvailableAsync(ct)}");
     Console.WriteLine("=== ARRANGETEST2 DONE ===");
     return overall ? 0 : 8;

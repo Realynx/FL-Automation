@@ -5,7 +5,7 @@ public static class BundledMcp
 {
     public const string Id = "fl-mcp";
     public const string SourceDirectory = "optional-plugins/fl-mcp";
-    public const string SelectionLabel = "FLMCP — MCP server and Python SDK (included; PolyForm NonCommercial)";
+    public const string SelectionLabel = "FLMCP — MCP server with Python included (PolyForm Noncommercial)";
 
     /// <summary>A missing bundle keeps older standalone installer payloads usable.</summary>
     public static bool IsAvailable(string payloadRoot) =>
@@ -18,7 +18,7 @@ public static class BundledMcp
         var manifest = InstallManifest.FromJson(basis.ToJson());
         if (!include || !IsAvailable(payloadRoot)) return manifest;
         manifest.Items.Add(Component("plugin", "FruityLink/plugins/fl-mcp", "FLMCP plugin"));
-        manifest.Items.Add(Component("companion", "FruityLink/tools/fl-mcp", "FLMCP server, Python SDK, documentation, and licenses"));
+        manifest.Items.Add(Component("companion", "FruityLink/tools/fl-mcp", "FLMCP server, private Python runtime, SDK, documentation, and licenses"));
         return manifest;
     }
 

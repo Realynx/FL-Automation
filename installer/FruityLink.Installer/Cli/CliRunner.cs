@@ -42,11 +42,15 @@ public static class CliRunner
             return ExitCodes.BadArgs;
         }
 
-        if (opts.Install && opts.Uninstall)
+        if ((opts.Install ? 1 : 0) + (opts.Uninstall ? 1 : 0) + (opts.ConfigureMcp ? 1 : 0) > 1)
         {
-            log.Error("Specify only one of --install or --uninstall.");
+            log.Error("Specify only one of --install, --uninstall, or --configure-mcp.");
             return ExitCodes.BadArgs;
         }
+
+        if (!McpCli.Validate(opts, log)) return ExitCodes.BadArgs;
+        if (opts.ListMcpClients) return McpCli.List(opts, log);
+        if (opts.ConfigureMcp) return RunConfigureMcp(opts, log);
 
         if (opts.PrintManifest)
         {
@@ -102,6 +106,14 @@ public static class CliRunner
         if (result is null)
             return elevationCode;
 
+        if (result.Success && !McpCli.Apply(flPath, opts, remove: false, log))
+        {
+            log.Error(opts.DryRun
+                ? "MCP client setup preview needs attention. No installation changes were made."
+                : "FruityLink files were installed, but MCP client setup needs attention. Retry with --configure-mcp.");
+            return ExitCodes.Error;
+        }
+
         log.Info("");
         return Report(result, log, install: true, flPath);
     }
@@ -121,15 +133,31 @@ public static class CliRunner
         var result = InstallerOperations.RunUninstall(
             flPath, manifest, opts.DryRun, log,
             out var nothingToUninstall,
-            beforeExecute: () => opts.DryRun || EnsureWritable(flPath, opts, log, install: false, out elevationCode));
+            beforeExecute: () => PrepareUninstall(flPath, opts, log, out elevationCode));
 
         if (nothingToUninstall)
-            return ExitCodes.Success;
+            return McpCli.Apply(flPath, opts, remove: true, log) ? ExitCodes.Success : ExitCodes.Error;
         if (result is null)
             return elevationCode;
 
         log.Info("");
         return Report(result, log, install: false, flPath);
+    }
+
+    private static int RunConfigureMcp(CliOptions opts, IProgressLog log)
+    {
+        if (!TryResolveFlPath(opts, log, out var flPath)) return ExitCodes.FlNotFound;
+        return McpCli.Apply(flPath, opts, remove: false, log) ? ExitCodes.Success : ExitCodes.Error;
+    }
+
+    private static bool PrepareUninstall(string flPath, CliOptions opts, IProgressLog log, out int exitCode)
+    {
+        exitCode = ExitCodes.Success;
+        if (!opts.DryRun && !EnsureWritable(flPath, opts, log, install: false, out exitCode)) return false;
+        if (McpCli.Apply(flPath, opts, remove: true, log)) return true;
+        log.Error("MCP client cleanup needs attention. Installed files were retained.");
+        exitCode = ExitCodes.Error;
+        return false;
     }
 
     // ------------------------------------------------- compatibility / integrity ----
@@ -210,8 +238,12 @@ public static class CliRunner
             }
         }
 
-        return BundledMcp.Select(InstallManifest.Default(),
-            InstallerInfo.ResolvePayloadRoot(opts.PayloadRoot), include: !opts.WithoutMcp);
+        string payloadRoot = InstallerInfo.ResolvePayloadRoot(opts.PayloadRoot);
+        return BundledSerumSupport.Select(
+            BundledPythonIde.Select(
+                BundledMcp.Select(InstallManifest.Default(), payloadRoot, include: !opts.WithoutMcp),
+                payloadRoot, include: !opts.WithoutPythonIde),
+            payloadRoot, include: !opts.WithoutSerumSupport);
     }
 
     /// <summary>Resolves FL path: flag, else auto-detect, else default. Validates the result.</summary>
@@ -286,8 +318,11 @@ public static class CliRunner
         var args = new System.Collections.Generic.List<string> { verb, "--silent", "--fl-path", flPath };
         if (opts.DryRun) args.Add("--dry-run");
         if (opts.WithoutMcp) args.Add("--without-mcp");
+        if (opts.WithoutPythonIde) args.Add("--without-python-ide");
+        if (opts.WithoutSerumSupport) args.Add("--without-serum-support");
         if (!string.IsNullOrWhiteSpace(opts.ManifestPath)) { args.Add("--manifest"); args.Add(opts.ManifestPath!); }
         if (!string.IsNullOrWhiteSpace(opts.PayloadRoot)) { args.Add("--payload-root"); args.Add(opts.PayloadRoot!); }
+        McpCli.AppendElevationArguments(args, opts);
         return args.ToArray();
     }
 

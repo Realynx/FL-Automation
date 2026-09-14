@@ -1,4 +1,5 @@
 using System;
+using FruityLink.Plugins.Abstractions;
 using FruityLink.Ui.Avalonia.ViewModels;
 using FruityLink.Ui.Avalonia.Views;
 
@@ -47,6 +48,15 @@ public sealed class AvaloniaChatView
     /// the UI thread.
     /// </summary>
     public IntPtr Handle => _view.Handle;
+
+    /// <summary>Preferred content dimensions in physical pixels for the native FL frame.</summary>
+    public FlWindowOptions GetWindowOptions(string caption) => _view.GetWindowOptions(caption);
+
+    /// <summary>Keep the embedded child aligned with the FL frame's client area as it resizes.</summary>
+    public void PinToHostContent(int insetX, int insetY) => _view.PinToHostContent(insetX, insetY);
+
+    /// <summary>Restore typing focus after an explicit user request to show the chat.</summary>
+    public void FocusComposer() => ((ChatWindow)_view.Window).FocusComposer();
 
     /// <summary>
     /// Make the window child-embed-friendly BEFORE the reparent: no OS chrome (FL draws the chrome), no

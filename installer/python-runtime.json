@@ -1,0 +1,17 @@
+{
+  "version": "3.14.6",
+  "architecture": "windows-x64",
+  "releaseUrl": "https://www.python.org/downloads/release/python-3146/",
+  "documentationUrl": "https://docs.python.org/3.14/using/windows.html#the-embeddable-package",
+  "archive": {
+    "fileName": "python-3.14.6-embed-amd64.zip",
+    "url": "https://www.python.org/ftp/python/3.14.6/python-3.14.6-embed-amd64.zip",
+    "sha256": "df901e84a896ff1ee720ad03377e0c8d8c2244fda79808aeeaff6316df1cb75c",
+    "sizeBytes": 12570832
+  },
+  "executable": "python.exe",
+  "library": "python314.dll",
+  "standardLibrary": "python314.zip",
+  "pathConfiguration": "python314._pth",
+  "license": "LICENSE.txt"
+}

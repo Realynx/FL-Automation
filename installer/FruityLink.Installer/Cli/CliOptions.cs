@@ -18,10 +18,22 @@ public sealed class CliOptions
     public bool ForceGui { get; private set; }
     public bool Force { get; private set; }
     public bool WithoutMcp { get; private set; }
+    public bool WithoutPythonIde { get; private set; }
+    public bool WithoutSerumSupport { get; private set; }
+    public bool ConfigureMcp { get; private set; }
+    public bool ListMcpClients { get; private set; }
 
     public string? FlPath { get; private set; }
     public string? ManifestPath { get; private set; }
     public string? PayloadRoot { get; private set; }
+    public string? McpProfile { get; private set; }
+    public string? McpAppData { get; private set; }
+    public string? McpLocalAppData { get; private set; }
+    public string? McpCodexHome { get; private set; }
+    public string? McpPythonRuntime { get; private set; }
+    public string? McpTemplate { get; private set; }
+    public string? McpWorkspace { get; private set; }
+    public List<string> McpClientIds { get; } = new();
 
     /// <summary>
     /// Community plugin ids to pre-select in the GUI (internal: preserves the user's checkbox
@@ -35,7 +47,7 @@ public sealed class CliOptions
     public bool RunGui => ForceGui || (!IsHeadlessVerb && !Help && !ShowVersion);
 
     /// <summary>True when a headless verb/flag was supplied.</summary>
-    public bool IsHeadlessVerb => Install || Uninstall || SelfTest || PrintManifest || PrintFlHashes;
+    public bool IsHeadlessVerb => Install || Uninstall || SelfTest || PrintManifest || PrintFlHashes || ConfigureMcp || ListMcpClients;
 
     public static CliOptions Parse(string[] args)
     {
@@ -61,6 +73,8 @@ public sealed class CliOptions
                 if (i + 1 < args.Length && !args[i + 1].StartsWith('-')) return args[++i];
                 return null;
             }
+
+            if (TryParseMcpOption(o, arg.ToLowerInvariant(), Value)) continue;
 
             switch (arg.ToLowerInvariant())
             {
@@ -113,6 +127,12 @@ public sealed class CliOptions
                 case "--without-mcp":
                     o.WithoutMcp = true;
                     break;
+                case "--without-python-ide":
+                    o.WithoutPythonIde = true;
+                    break;
+                case "--without-serum-support":
+                    o.WithoutSerumSupport = true;
+                    break;
                 case "--gui":
                 case "-g":
                     o.ForceGui = true;
@@ -148,6 +168,29 @@ public sealed class CliOptions
         return o;
     }
 
+    private static bool TryParseMcpOption(CliOptions options, string arg, Func<string?> value)
+    {
+        if (arg == "--configure-mcp") { options.ConfigureMcp = true; return true; }
+        if (arg == "--list-mcp-clients") { options.ListMcpClients = true; return true; }
+        if (!McpValues.TryGetValue(arg, out var assign)) return false;
+        var supplied = value();
+        if (string.IsNullOrWhiteSpace(supplied)) options.Unknown.Add(arg + " requires a value");
+        else assign(options, supplied);
+        return true;
+    }
+
+    private static readonly Dictionary<string, Action<CliOptions, string>> McpValues = new()
+    {
+        ["--mcp-clients"] = (o, v) => o.McpClientIds.AddRange(v.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)),
+        ["--mcp-profile"] = (o, v) => o.McpProfile = v,
+        ["--mcp-app-data"] = (o, v) => o.McpAppData = v,
+        ["--mcp-local-app-data"] = (o, v) => o.McpLocalAppData = v,
+        ["--mcp-codex-home"] = (o, v) => o.McpCodexHome = v,
+        ["--mcp-python-runtime"] = (o, v) => o.McpPythonRuntime = v,
+        ["--mcp-template"] = (o, v) => o.McpTemplate = v,
+        ["--mcp-workspace"] = (o, v) => o.McpWorkspace = v,
+    };
+
     public const string Usage = """
 FruityLink Installer - installs / uninstalls FruityLink (proxy version.dll) into FL Studio.
 
@@ -159,6 +202,8 @@ USAGE
 VERBS
   --install, -i            Copy the FruityLink payload into FL Studio (backs up version.dll).
   --uninstall, -u          Remove FruityLink and restore the original version.dll.
+  --configure-mcp         Connect selected clients to an already installed FLMCP.
+  --list-mcp-clients      List supported MCP clients and local detection results.
   --self-test              Run an end-to-end install+uninstall against a throwaway temp FL dir.
   --print-manifest         Print the effective payload manifest (JSON) and exit.
   --print-fl-hashes        Hash the FL install's binaries into a compatibility.json entry (dev tool
@@ -172,7 +217,17 @@ OPTIONS
   --silent, --headless, -s No prompts; for unattended / GitHub one-line installs.
   --manifest <file>, -m    Use an external manifest.json instead of the built-in default.
   --payload-root <dir>     Where the payload files live. Default: <exe dir>\payload.
-  --without-mcp           Exclude the bundled FLMCP plugin, server, and Python wheel (selected by default).
+  --without-mcp           Exclude FLMCP (selected by default); keep the framework Python backend.
+  --without-python-ide    Exclude the Python editor plugin (selected by default).
+  --without-serum-support Exclude Serum preset inventory and audition helpers (selected by default).
+  --mcp-clients <ids>     Connect only these clients; comma-separated IDs from --list-mcp-clients.
+  --mcp-template <file>   Saved FLP template. Default: FL's Data\Templates\Empty\Empty.flp.
+  --mcp-workspace <dir>   Project/output directory. Default: <local app data>\FlMcp\Projects.
+  --mcp-python-runtime <dir> Optional CPython runtime directory. Default: bundled private Python.
+  --mcp-profile <dir>     Target user profile (preserved across elevation).
+  --mcp-app-data <dir>    Target user's roaming application data directory.
+  --mcp-local-app-data <dir> Target user's local application data directory.
+  --mcp-codex-home <dir>  Codex config directory. Default: CODEX_HOME or <profile>\.codex.
   --force, -f              Proceed past non-fatal validation warnings, INCLUDING the verified-build
                            and file-integrity gates (unsupported; for development only).
   --help, -h               Show this help.
@@ -193,5 +248,7 @@ EXAMPLES
   FruityLink.Installer --install --silent
   FruityLink.Installer --install --fl-path "D:\FL Studio 2025" --dry-run
   FruityLink.Installer --uninstall --silent
+  FruityLink.Installer --install --silent --mcp-clients codex,claude-code
+  FruityLink.Installer --configure-mcp --mcp-clients codex --dry-run
 """;
 }

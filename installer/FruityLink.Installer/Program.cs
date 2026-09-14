@@ -19,7 +19,7 @@ public static class Program
     {
         var opts = CliOptions.Parse(args);
 
-        if (opts.RunGui)
+        if (opts.RunGui && opts.Unknown.Count == 0)
             return RunGui(opts);
 
         ConsoleHost.EnsureConsole(opts.Silent);
@@ -43,7 +43,15 @@ public static class Program
         InstallerApp.InitialFlPath = opts.FlPath;
         InstallerApp.InitialPayloadRoot = opts.PayloadRoot;
         InstallerApp.WithoutMcp = opts.WithoutMcp;
+        InstallerApp.WithoutPythonIde = opts.WithoutPythonIde;
+        InstallerApp.WithoutSerumSupport = opts.WithoutSerumSupport;
         InstallerApp.InitialCommunityPlugins = opts.CommunityPluginIds;
+        var mcp = McpCli.ResolveOptions(opts);
+        InstallerApp.InitialMcpClientIds = mcp.ClientIds;
+        InstallerApp.InitialMcpUserPaths = mcp.UserPaths;
+        InstallerApp.InitialMcpPythonRuntime = mcp.PythonRuntimeDirectory;
+        InstallerApp.InitialMcpTemplate = mcp.TemplatePath;
+        InstallerApp.InitialMcpWorkspace = mcp.WorkspacePath;
         return AppBuilder.Configure<InstallerApp>()
             .UsePlatformDetect()
             .WithInterFont()   // guaranteed body-font fallback (Avalonia.Fonts.Inter)

@@ -241,8 +241,8 @@ public sealed class InstallEngine
 
         // FL's version.dll (and the other in-process DLLs) are LOADED while FL runs, so they can't be
         // backed up / overwritten until every FL instance exits. Close FL before touching any file.
-        if (!dryRun)
-            CloseFlStudio(result, log);
+        if (!dryRun && !PrepareProcesses(flPath, result, log))
+            return result;
 
         foreach (var action in plan)
         {
@@ -438,15 +438,15 @@ public sealed class InstallEngine
     }
 
     public OperationResult ExecuteUninstall(
-        IReadOnlyList<InstallAction> plan, bool dryRun, IProgressLog log)
+        IReadOnlyList<InstallAction> plan, bool dryRun, IProgressLog log, string? flPath = null)
     {
         var result = new OperationResult { DryRun = dryRun, ActionsPlanned = plan.Count };
 
         // The proxy version.dll + the in-process FruityLink DLLs stay LOCKED while FL runs (this is the
         // bug we hit: an uninstall "succeeded" but left them behind because FL was never closed). Close
         // every FL instance and wait for the locks to release before deleting anything.
-        if (!dryRun)
-            CloseFlStudio(result, log);
+        if (!dryRun && !PrepareProcesses(flPath, result, log))
+            return result;
 
         foreach (var action in plan)
         {
@@ -498,6 +498,16 @@ public sealed class InstallEngine
     }
 
     // ------------------------------------------------------- FL + locked-file handling ----
+
+    private bool PrepareProcesses(string? flPath, OperationResult result, IProgressLog log)
+    {
+        CloseFlStudio(result, log);
+        if (flPath is null || _processes.CloseMcpCompanions(flPath, log)) return true;
+        const string message = "MCP companion shutdown was not confirmed. No installation files were changed.";
+        result.Errors.Add(message);
+        log.Error(message);
+        return false;
+    }
 
     /// <summary>Closes every running FL Studio instance and records how many, so files unlock.</summary>
     private void CloseFlStudio(OperationResult result, IProgressLog log)

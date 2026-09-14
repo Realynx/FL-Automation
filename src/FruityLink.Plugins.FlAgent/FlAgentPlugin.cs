@@ -29,9 +29,10 @@ namespace FruityLink.Plugins.FlAgent;
 /// (<see cref="IPluginContext.Fl"/>). The legacy WPF chat is kept as a fallback (set
 /// <c>FRUITYLINK_UI=wpf</c>) and is also the automatic fallback if Avalonia can't initialize in-process
 /// (e.g. a missing native), so FL is never left broken. On disable it closes the window and releases
-/// what it owns, leaving FL untouched. Both are idempotent and never throw the host down.
+/// what it owns, leaving FL untouched. Lifecycle failures are reported to the plugin manager, which
+/// retains ownership when native cleanup cannot be confirmed.
 /// </summary>
-public sealed class FlAgentPlugin : IFlPlugin, IFlPreWarmPlugin
+public sealed partial class FlAgentPlugin : IFlPlugin, IFlPreWarmPlugin
 {
     private readonly object _gate = new();
 
@@ -115,11 +116,10 @@ public sealed class FlAgentPlugin : IFlPlugin, IFlPreWarmPlugin
             _context = context;
             context.Log("[fl-agent] enabling…");
 
-            // Phase 1 (task #22): embed the chat INSIDE an FL native window-host form (TScriptDialog, FL skinned
-            // chrome — border/close/drag/close-reopen all work). DEFAULT ON; set FRUITYLINK_EMBED=0 to force an
+            // Embed the chat inside its own FL native frame. Set FRUITYLINK_EMBED=0 to force an
             // external window. Must be default-on (not env-gated) so an INSTALLER-launched FL — which doesn't
-            // inherit our dev-loop env var — still embeds. ALWAYS degrades to an external top-level window if the
-            // embed can't happen (bridge absent / reparent fails).
+            // inherit our dev-loop env var — still embeds. External fallback is allowed only after the
+            // SDK confirms that no native child remains attached.
             bool wantEmbed = Environment.GetEnvironmentVariable("FRUITYLINK_EMBED") != "0";
 
             // Avalonia is the flagship embedded surface. FRUITYLINK_UI=wpf forces the legacy WPF chat; Avalonia
@@ -129,12 +129,13 @@ public sealed class FlAgentPlugin : IFlPlugin, IFlPreWarmPlugin
             if (!forceWpf)
             {
                 try { started = await EnableAvaloniaAsync(wantEmbed, context, ct).ConfigureAwait(false); }
-                catch (Exception ex) { context.Log("[fl-agent] Avalonia UI init failed; falling back to WPF: " + ex.Message); }
+                catch (Exception ex) when (ex is not NativeWindowHostingException && !_embedded)
+                { context.Log("[fl-agent] Avalonia UI init failed; falling back to WPF: " + ex.Message); }
             }
             if (!started)
                 await EnableWpfFallbackAsync(wantEmbed, context, ct).ConfigureAwait(false);
 
-            _chatVisible = true;
+            _chatVisible = (context.Windows as IFlWindowVisibilityState)?.StartupVisible != false;
 
             // Dogfood the menu-contribution SDK: add an "FL Agent" toggle to FL's native View menu
             // (where FL keeps its window show/hide toggles). ✓ reflects the chat window's visibility;
@@ -174,9 +175,11 @@ public sealed class FlAgentPlugin : IFlPlugin, IFlPreWarmPlugin
         }
         catch (Exception ex)
         {
-            // Never take the host down. Roll back the enabled flag so the user can retry.
+            // Keep partial UI ownership until cleanup succeeds. The manager reports a failed enable
+            // and retains the plugin if native detachment needs another attempt.
             try { context.Log("[fl-agent] EnableAsync failed: " + ex); } catch { /* logging is best-effort */ }
-            lock (_gate) _enabled = false;
+            await DisableAsync(CancellationToken.None).ConfigureAwait(false);
+            throw;
         }
     }
 
@@ -259,24 +262,32 @@ public sealed class FlAgentPlugin : IFlPlugin, IFlPreWarmPlugin
 
         EmbeddedAvaloniaHost host = prepared.Host;
         AvaloniaChatView chat = prepared.Chat;
+        lock (_gate) _prepared = prepared; // Retain ownership until embedding commits or cleanup succeeds.
 
         IFlWindowHost windows = context.Windows;   // the SDK's FL window-embed + hint-bar host
         bool embedded = false;
-        if (wantEmbed && windows.IsBridgeAvailable())
+        if (wantEmbed && (windows is IAsyncFlWindowHost || windows.IsBridgeAvailable()))
         {
             // Do the HWND grab AND the reparent on the child's OWN (Avalonia UI) thread — mirrors the
             // bridge's cross-thread contract (see IFlWindowHost).
-            embedded = host.Invoke(() =>
+            embedded = await host.Invoke(async () =>
             {
                 try
                 {
                     if (chat.Handle == IntPtr.Zero) chat.PrepareForEmbedding();  // ensure HWND (pre-warm normally did this)
                     IntPtr hwnd = chat.Handle;
                     if (hwnd == IntPtr.Zero) return false;
-                    return windows.TryEmbed(hwnd, show: true);
+                    bool attached = await EmbedWindowAsync(windows, hwnd, chat.GetWindowOptions(Name), ct);
+                    if (attached)
+                    {
+                        try { chat.PinToHostContent(windows.LastInsetX, windows.LastInsetY); }
+                        catch (Exception error) { throw new NativeWindowHostingException("The native chat window was attached but could not be aligned.", error); }
+                    }
+                    return attached;
                 }
-                catch { return false; }
-            });
+                catch when (windows is not IAsyncFlWindowHost) { return false; }
+            }).ConfigureAwait(false);
+            _embedded = embedded; // A later setup failure must clean up this child before considering another toolkit.
 
             if (embedded)
             {
@@ -290,7 +301,10 @@ public sealed class FlAgentPlugin : IFlPlugin, IFlPreWarmPlugin
         }
 
         if (!embedded)
-            chat.ShowExternal();   // zero-risk external top-level fallback
+        {
+            if ((windows as IFlWindowVisibilityState)?.StartupVisible != false) chat.ShowExternal();
+            else chat.SetVisible(false);
+        }
 
         // UI is up (embedded or external) — clear the native "loading plugin host…" hint the host set at boot.
         windows.SetStatusHint("FL Automate ready");
@@ -318,7 +332,7 @@ public sealed class FlAgentPlugin : IFlPlugin, IFlPreWarmPlugin
         (IDictationService? dictation, bool ownsDictation) = AgentComposition.ResolveOrBuildDictation(context);
         try { await agent.ConfigureAsync(ct).ConfigureAwait(false); }
         catch (Exception cfgEx) { context.Log("[fl-agent] backend not configured yet: " + cfgEx.Message); }
-        EnableWpf(agent, dictation, ownsDictation, wantEmbed, context);
+        await EnableWpfAsync(agent, dictation, ownsDictation, wantEmbed, context, ct).ConfigureAwait(false);
     }
 
     /// <summary>The external (non-embedded) window's OS-close (X): hide instead of destroy (mirrors FL's
@@ -326,18 +340,20 @@ public sealed class FlAgentPlugin : IFlPlugin, IFlPreWarmPlugin
     private void OnExternalWindowHidden()
     {
         _chatVisible = false;
+        (_context?.Windows as IFlWindowVisibilityState)?.RememberVisibility(false);
         try { _context?.Menu.Refresh(); } catch { /* update the View ✓; best-effort */ }
         try { _context?.Toolbar.Refresh(); } catch { /* update the toolbar button's lit state; best-effort */ }
     }
 
     /// <summary>Legacy WPF chat surface (fallback). Same embed machinery, on a WPF dispatcher thread.</summary>
-    private void EnableWpf(
-        FruityLink.Agent.FlAgent agent, IDictationService? dictation, bool ownsDictation, bool wantEmbed, IPluginContext context)
+    private async Task EnableWpfAsync(
+        FruityLink.Agent.FlAgent agent, IDictationService? dictation, bool ownsDictation, bool wantEmbed, IPluginContext context, CancellationToken ct)
     {
         IFlWindowHost windows = context.Windows;   // the SDK's FL window-embed + hint-bar host
         var ui = new UiHost();
         ui.Start();
-        ui.Dispatcher.Invoke(() =>
+        lock (_gate) { _useAvalonia = false; _ui = ui; }
+        await ui.Dispatcher.InvokeAsync(async () =>
         {
             var window = new FlAgentChatWindow(agent, context.Log, dictation, ownsDictation);
             // Match FL's View-menu windows: the X HIDES the window (keeps it alive to re-show)
@@ -347,14 +363,17 @@ public sealed class FlAgentPlugin : IFlPlugin, IFlPreWarmPlugin
             _window = window;
 
             bool embedded = false;
-            if (wantEmbed && windows.IsBridgeAvailable())
+            if (wantEmbed && (windows is IAsyncFlWindowHost || windows.IsBridgeAvailable()))
             {
                 try
                 {
                     window.PrepareForEmbedding();           // borderless, off-screen, no taskbar/activation
                     window.Show();                          // force a WPF layout/render pass before reparenting
                     IntPtr hwnd = window.EnsureNativeHandle();
-                    embedded = windows.TryEmbed(hwnd, show: true);
+                    var dpi = System.Windows.Media.VisualTreeHelper.GetDpi(window);
+                    var options = new FlWindowOptions(Name, Pixels(window.Width, dpi.DpiScaleX), Pixels(window.Height, dpi.DpiScaleY),
+                        Pixels(window.MinWidth, dpi.DpiScaleX), Pixels(window.MinHeight, dpi.DpiScaleY));
+                    embedded = await EmbedWindowAsync(windows, hwnd, options, ct);
                     if (embedded)
                     {
                         try { window.PinToHostContent(windows.LastInsetX, windows.LastInsetY); } catch { /* best-effort */ }
@@ -364,7 +383,7 @@ public sealed class FlAgentPlugin : IFlPlugin, IFlPreWarmPlugin
                         ? "[fl-agent] chat embedded inside an FL window host (WPF)."
                         : "[fl-agent] embed unavailable (host-form/reparent failed); using external window. bridge=" + windows.LastEmbedReply);
                 }
-                catch (Exception ex)
+                catch (Exception ex) when (windows is not IAsyncFlWindowHost)
                 {
                     context.Log("[fl-agent] embed attempt threw; using external window: " + ex.Message);
                     embedded = false;
@@ -375,23 +394,25 @@ public sealed class FlAgentPlugin : IFlPlugin, IFlPreWarmPlugin
             {
                 // FALLBACK: the external top-level window (zero-risk, always works).
                 try { window.RestoreExternalChrome(); } catch { /* PrepareForEmbedding may not have run */ }
-                window.Show();
-                window.Activate();
+                if ((windows as IFlWindowVisibilityState)?.StartupVisible != false)
+                {
+                    window.Show();
+                    window.Activate();
+                }
+                else window.Hide();
             }
             _embedded = embedded;
-        });
-        lock (_gate) { _useAvalonia = false; _ui = ui; }
+        }).Task.Unwrap().ConfigureAwait(false);
 
         // UI is up (embedded or external) — clear the native "loading plugin host…" hint set at boot.
         windows.SetStatusHint("FL Automate ready");
     }
 
     /// <summary>
-    /// View-menu toggle handler: show the chat window if hidden, hide it if shown. The visibility flag
-    /// is flipped synchronously so the subsequent native menu refresh reads the new ✓ state; the actual
-    /// Show/Hide is marshalled to the window's UI thread (non-blocking, so this never stalls FL).
+    /// Serialized window toggle work, dispatched off the native menu callback. Native display changes
+    /// are awaited without blocking FL or the child's UI dispatcher.
     /// </summary>
-    private void ToggleChatVisible()
+    private async Task ToggleChatVisibleCoreAsync()
     {
         UiHost? ui;
         FlAgentChatWindow? window;
@@ -412,8 +433,8 @@ public sealed class FlAgentPlugin : IFlPlugin, IFlPreWarmPlugin
         }
 
         // When embedded, the chat is a child of the FL HOST form — drive the host's visibility (FL's
-        // sanctioned app-window show) rather than the window directly. This runs on FL's UI thread
-        // (the native menu-click path), and the bridge marshals back to it, so there's no deadlock.
+        // sanctioned app-window show) rather than the child directly. The async host keeps both
+        // FL and the shared toolkit UI thread free to pump during the transition.
         if (embedded)
         {
             IFlWindowHost? windows = _context?.Windows;
@@ -421,11 +442,25 @@ public sealed class FlAgentPlugin : IFlPlugin, IFlPreWarmPlugin
             // Toggle off the REAL host visibility (the user may have hidden it via the native X, which our
             // WM_CLOSE handler turns into a hide) so a click always flips correctly + re-shows the live form.
             bool vis = windows.IsHostVisible();
-            windows.SetVisible(!vis);
+            if (windows is IAsyncFlWindowHost asynchronous)
+            {
+                if (!await asynchronous.SetVisibleAsync(!vis, activate: !vis).ConfigureAwait(false))
+                    throw new InvalidOperationException("FL Automate could not change its native window visibility.");
+            }
+            else windows.SetVisible(!vis);
             lock (_gate) { _chatVisible = !vis; }
             if (!vis)   // just re-shown → repaint (else blank until an input event)
             {
-                try { if (useAvalonia) avChat?.ForceRender(); else window?.ForceRerender(); } catch { /* best-effort */ }
+                try
+                {
+                    if (useAvalonia)
+                    {
+                        avChat?.ForceRender();
+                        _avHost?.Post(() => avChat?.FocusComposer());
+                    }
+                    else window?.ForceRerender();
+                }
+                catch { /* best-effort */ }
             }
             try { _context?.Menu.Refresh(); } catch { /* update the View ✓ to match */ }
             try { _context?.Toolbar.Refresh(); } catch { /* update the toolbar button's lit state to match */ }
@@ -435,19 +470,23 @@ public sealed class FlAgentPlugin : IFlPlugin, IFlPreWarmPlugin
         // External (non-embedded) window: show/hide directly on its own UI thread.
         if (useAvalonia)
         {
-            avChat?.SetVisible(show);
+            if (show) avChat?.ShowExternal();
+            else avChat?.SetVisible(false);
+            (_context?.Windows as IFlWindowVisibilityState)?.RememberVisibility(show);
+            if (show) _avHost?.Post(() => avChat?.FocusComposer());
             return;
         }
         if (ui is null || window is null) return;
-        ui.Dispatcher.BeginInvoke(() =>
+        await ui.Dispatcher.InvokeAsync(() =>
         {
             try
             {
                 if (show) { window.Show(); window.Activate(); }
                 else window.Hide();
+                (_context?.Windows as IFlWindowVisibilityState)?.RememberVisibility(show);
             }
             catch { /* window may be closing; visibility change is best-effort */ }
-        });
+        }).Task.ConfigureAwait(false);
     }
 
     /// <summary>
@@ -460,12 +499,13 @@ public sealed class FlAgentPlugin : IFlPlugin, IFlPreWarmPlugin
         if (_disposing) return;     // plugin is being disabled → let it really close
         e.Cancel = true;
         _chatVisible = false;
+        (_context?.Windows as IFlWindowVisibilityState)?.RememberVisibility(false);
         try { (sender as System.Windows.Window)?.Hide(); } catch { /* best-effort */ }
         try { _context?.Menu.Refresh(); } catch { /* update the View ✓ now; best-effort */ }
         try { _context?.Toolbar.Refresh(); } catch { /* update the toolbar button's lit state now; best-effort */ }
     }
 
-    public Task DisableAsync(CancellationToken ct = default)
+    private async Task DisableCoreAsync()
     {
         UiHost? ui;
         FlAgentChatWindow? window;
@@ -479,13 +519,11 @@ public sealed class FlAgentPlugin : IFlPlugin, IFlPreWarmPlugin
         bool useAvalonia;
         lock (_gate)
         {
-            if (!_enabled && _prepared is null) return Task.CompletedTask;   // idempotent (nothing enabled or pre-warmed)
-            _enabled = false;
+            if (!_enabled && _prepared is null && _window is null && _avChat is null) return;
             _disposing = true;                           // allow the window's Closing to really close
             _prepareAttempted = false;                   // a later re-enable may pre-warm again
             _chatVisible = false;
             embedded = _embedded;
-            _embedded = false;
             useAvalonia = _useAvalonia;
             ui = _ui;
             window = _window;
@@ -495,14 +533,6 @@ public sealed class FlAgentPlugin : IFlPlugin, IFlPreWarmPlugin
             prepared = _prepared;                        // non-null only if pre-warmed but never enabled
             menuToggle = _menuToggle;
             toolbarToggle = _toolbarToggle;
-            _ui = null;
-            _window = null;
-            _avHost = null;
-            _avChat = null;
-            _avPresenter = null;
-            _prepared = null;
-            _menuToggle = null;
-            _toolbarToggle = null;
         }
 
         // Remove the "FL Agent" entry from FL's View menu (also auto-removed by the manager on disable).
@@ -510,22 +540,11 @@ public sealed class FlAgentPlugin : IFlPlugin, IFlPreWarmPlugin
         // Remove the "AI" toggle button from FL's toolbar (also auto-removed by the manager on disable).
         try { toolbarToggle?.Dispose(); } catch { /* best-effort */ }
 
-        // If embedded, detach our child + hide the FL host form BEFORE the window is destroyed. The bridge
-        // also restores the host subclass on full unload (eject-safe), independent of this.
-        if (embedded)
+        // Detach the child and release its native frame before destroying the toolkit window. An
+        // unconfirmed native or toolkit cleanup retains the plugin instance for a later retry.
+        if (embedded || _context?.Windows is IAsyncFlWindowHost)
         {
-            try
-            {
-                IFlWindowHost? windows = _context?.Windows;
-                // Detach on the child's OWN thread (Avalonia UI thread for Avalonia; the disable thread has
-                // historically worked for the WPF path).
-                if (windows is not null)
-                {
-                    if (useAvalonia && avHost is not null) avHost.Invoke(() => windows.Close());
-                    else windows.Close();
-                }
-            }
-            catch { /* best-effort */ }
+            await DetachWindowAsync(_context?.Windows, avHost ?? prepared?.Host, ui).ConfigureAwait(false);
         }
 
         try
@@ -533,11 +552,11 @@ public sealed class FlAgentPlugin : IFlPlugin, IFlPreWarmPlugin
             if (useAvalonia)
             {
                 try { avPresenter?.Dispose(); } catch { /* best-effort */ }
-                try { avChat?.Close(); } catch { /* best-effort */ }   // closes the window; Avalonia THREAD stays alive
+                if (avHost is not null) avHost.Invoke(() => avChat?.Close());
             }
             else if (ui is not null)
             {
-                ui.Dispatcher.Invoke(() => { try { window?.Close(); } catch { /* already closed */ } });
+                ui.Dispatcher.Invoke(() => window?.Close());
                 ui.Stop();   // tears down only a dispatcher thread we own; host's is left alone
             }
 
@@ -546,17 +565,23 @@ public sealed class FlAgentPlugin : IFlPlugin, IFlPreWarmPlugin
             if (prepared is not null && !ReferenceEquals(prepared.Chat, avChat))
             {
                 try { prepared.Presenter.Dispose(); } catch { /* best-effort */ }
-                try { prepared.Chat.Close(); } catch { /* best-effort */ }
+                prepared.Host.Invoke(prepared.Chat.Close);
             }
 
             _context?.Log("[fl-agent] disabled.");
+            lock (_gate)
+            {
+                _enabled = _embedded = false;
+                _ui = null; _window = null; _avHost = null; _avChat = null; _avPresenter = null;
+                _prepared = null; _menuToggle = null; _toolbarToggle = null;
+            }
         }
         catch (Exception ex)
         {
             try { _context?.Log("[fl-agent] DisableAsync error: " + ex.Message); } catch { /* best-effort */ }
+            throw;
         }
 
-        return Task.CompletedTask;
     }
 
     /// <summary>The FL-independent Avalonia surface built during pre-warm (host + chat + presenter, HWND

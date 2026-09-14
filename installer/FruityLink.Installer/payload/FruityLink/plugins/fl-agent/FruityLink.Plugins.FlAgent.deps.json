@@ -6,17 +6,17 @@
   "compilationOptions": {},
   "targets": {
     ".NETCoreApp,Version=v9.0": {
-      "FruityLink.Plugins.FlAgent/0.1.9": {
+      "FruityLink.Plugins.FlAgent/0.1.29": {
         "dependencies": {
-          "FruityLink.Agent": "0.1.9",
-          "FruityLink.AppCore": "0.1.9",
+          "FruityLink.Agent": "0.1.29",
+          "FruityLink.AppCore": "0.1.29",
           "FruityLink.Core": "0.2.0",
-          "FruityLink.Knowledge": "0.1.9",
-          "FruityLink.Llm": "0.1.9",
-          "FruityLink.Persistence": "0.1.9",
+          "FruityLink.Knowledge": "0.1.29",
+          "FruityLink.Llm": "0.1.29",
+          "FruityLink.Persistence": "0.1.29",
           "FruityLink.Plugins.Abstractions": "0.2.0",
-          "FruityLink.Speech": "0.1.9",
-          "FruityLink.Ui.Avalonia": "0.1.9",
+          "FruityLink.Speech": "0.1.29",
+          "FruityLink.Ui.Avalonia": "0.1.29",
           "Microsoft.Extensions.AI": "10.7.0",
           "Microsoft.Extensions.AI.Abstractions": "10.7.0"
         },
@@ -103,6 +103,29 @@
           }
         }
       },
+      "Avalonia.AvaloniaEdit/11.3.0": {
+        "dependencies": {
+          "Avalonia": "11.3.18"
+        },
+        "runtime": {
+          "lib/net6.0/AvaloniaEdit.dll": {
+            "assemblyVersion": "11.3.0.0",
+            "fileVersion": "11.3.0.0"
+          }
+        }
+      },
+      "Avalonia.Controls.ColorPicker/11.3.18": {
+        "dependencies": {
+          "Avalonia": "11.3.18",
+          "Avalonia.Remote.Protocol": "11.3.18"
+        },
+        "runtime": {
+          "lib/net8.0/Avalonia.Controls.ColorPicker.dll": {
+            "assemblyVersion": "11.3.18.0",
+            "fileVersion": "11.3.18.0"
+          }
+        }
+      },
       "Avalonia.Desktop/11.3.18": {
         "dependencies": {
           "Avalonia": "11.3.18",
@@ -113,6 +136,19 @@
         },
         "runtime": {
           "lib/net8.0/Avalonia.Desktop.dll": {
+            "assemblyVersion": "11.3.18.0",
+            "fileVersion": "11.3.18.0"
+          }
+        }
+      },
+      "Avalonia.Diagnostics/11.3.18": {
+        "dependencies": {
+          "Avalonia": "11.3.18",
+          "Avalonia.Controls.ColorPicker": "11.3.18",
+          "Avalonia.Themes.Simple": "11.3.18"
+        },
+        "runtime": {
+          "lib/net8.0/Avalonia.Diagnostics.dll": {
             "assemblyVersion": "11.3.18.0",
             "fileVersion": "11.3.18.0"
           }
@@ -188,6 +224,17 @@
         },
         "runtime": {
           "lib/net8.0/Avalonia.Themes.Fluent.dll": {
+            "assemblyVersion": "11.3.18.0",
+            "fileVersion": "11.3.18.0"
+          }
+        }
+      },
+      "Avalonia.Themes.Simple/11.3.18": {
+        "dependencies": {
+          "Avalonia": "11.3.18"
+        },
+        "runtime": {
+          "lib/net8.0/Avalonia.Themes.Simple.dll": {
             "assemblyVersion": "11.3.18.0",
             "fileVersion": "11.3.18.0"
           }
@@ -1116,28 +1163,28 @@
           }
         }
       },
-      "FruityLink.Agent/0.1.9": {
+      "FruityLink.Agent/0.1.29": {
         "dependencies": {
-          "FruityLink.AppCore": "0.1.9",
+          "FruityLink.AppCore": "0.1.29",
           "FruityLink.Core": "0.2.0",
-          "FruityLink.Llm": "0.1.9",
+          "FruityLink.Llm": "0.1.29",
           "Microsoft.SemanticKernel": "1.77.0"
         },
         "runtime": {
           "FruityLink.Agent.dll": {
-            "assemblyVersion": "0.1.9.0",
-            "fileVersion": "0.1.9.0"
+            "assemblyVersion": "0.1.29.0",
+            "fileVersion": "0.1.29.0"
           }
         }
       },
-      "FruityLink.AppCore/0.1.9": {
+      "FruityLink.AppCore/0.1.29": {
         "dependencies": {
           "FruityLink.Core": "0.2.0"
         },
         "runtime": {
           "FruityLink.AppCore.dll": {
-            "assemblyVersion": "0.1.9.0",
-            "fileVersion": "0.1.9.0"
+            "assemblyVersion": "0.1.29.0",
+            "fileVersion": "0.1.29.0"
           }
         }
       },
@@ -1149,44 +1196,44 @@
           }
         }
       },
-      "FruityLink.Knowledge/0.1.9": {
+      "FruityLink.Knowledge/0.1.29": {
         "dependencies": {
           "AngleSharp": "1.5.1",
-          "FruityLink.AppCore": "0.1.9",
+          "FruityLink.AppCore": "0.1.29",
           "FruityLink.Core": "0.2.0",
           "Microsoft.Data.Sqlite": "9.0.11",
           "PdfPig": "0.1.15"
         },
         "runtime": {
           "FruityLink.Knowledge.dll": {
-            "assemblyVersion": "0.1.9.0",
-            "fileVersion": "0.1.9.0"
+            "assemblyVersion": "0.1.29.0",
+            "fileVersion": "0.1.29.0"
           }
         }
       },
-      "FruityLink.Llm/0.1.9": {
+      "FruityLink.Llm/0.1.29": {
         "dependencies": {
-          "FruityLink.AppCore": "0.1.9",
+          "FruityLink.AppCore": "0.1.29",
           "FruityLink.Core": "0.2.0",
           "Microsoft.SemanticKernel": "1.77.0",
           "Microsoft.SemanticKernel.Connectors.OpenAI": "1.77.0"
         },
         "runtime": {
           "FruityLink.Llm.dll": {
-            "assemblyVersion": "0.1.9.0",
-            "fileVersion": "0.1.9.0"
+            "assemblyVersion": "0.1.29.0",
+            "fileVersion": "0.1.29.0"
           }
         }
       },
-      "FruityLink.Persistence/0.1.9": {
+      "FruityLink.Persistence/0.1.29": {
         "dependencies": {
-          "FruityLink.AppCore": "0.1.9",
+          "FruityLink.AppCore": "0.1.29",
           "FruityLink.Core": "0.2.0"
         },
         "runtime": {
           "FruityLink.Persistence.dll": {
-            "assemblyVersion": "0.1.9.0",
-            "fileVersion": "0.1.9.0"
+            "assemblyVersion": "0.1.29.0",
+            "fileVersion": "0.1.29.0"
           }
         }
       },
@@ -1201,24 +1248,25 @@
           }
         }
       },
-      "FruityLink.Speech/0.1.9": {
+      "FruityLink.Speech/0.1.29": {
         "dependencies": {
-          "FruityLink.AppCore": "0.1.9",
+          "FruityLink.AppCore": "0.1.29",
           "FruityLink.Core": "0.2.0",
           "NAudio": "2.3.0",
           "Whisper.net": "1.9.1"
         },
         "runtime": {
           "FruityLink.Speech.dll": {
-            "assemblyVersion": "0.1.9.0",
-            "fileVersion": "0.1.9.0"
+            "assemblyVersion": "0.1.29.0",
+            "fileVersion": "0.1.29.0"
           }
         }
       },
-      "FruityLink.Ui.Avalonia/0.1.9": {
+      "FruityLink.Ui.Avalonia/0.1.29": {
         "dependencies": {
           "Avalonia": "11.3.18",
           "Avalonia.Desktop": "11.3.18",
+          "Avalonia.Diagnostics": "11.3.18",
           "Avalonia.Fonts.Inter": "11.3.18",
           "Avalonia.Themes.Fluent": "11.3.18",
           "FruityLink.Ui.Avalonia.Hosting": "0.2.0",
@@ -1226,15 +1274,19 @@
         },
         "runtime": {
           "FruityLink.Ui.Avalonia.dll": {
-            "assemblyVersion": "0.1.9.0",
-            "fileVersion": "0.1.9.0"
+            "assemblyVersion": "0.1.29.0",
+            "fileVersion": "0.1.29.0"
           }
         }
       },
       "FruityLink.Ui.Avalonia.Hosting/0.2.0": {
         "dependencies": {
           "Avalonia": "11.3.18",
-          "Avalonia.Desktop": "11.3.18"
+          "Avalonia.AvaloniaEdit": "11.3.0",
+          "Avalonia.Desktop": "11.3.18",
+          "Avalonia.Fonts.Inter": "11.3.18",
+          "Avalonia.Themes.Fluent": "11.3.18",
+          "FruityLink.Plugins.Abstractions": "0.2.0"
         },
         "runtime": {
           "FruityLink.Ui.Avalonia.Hosting.dll": {
@@ -1246,7 +1298,7 @@
     }
   },
   "libraries": {
-    "FruityLink.Plugins.FlAgent/0.1.9": {
+    "FruityLink.Plugins.FlAgent/0.1.29": {
       "type": "project",
       "serviceable": false,
       "sha512": ""
@@ -1272,12 +1324,33 @@
       "path": "avalonia.angle.windows.natives/2.1.25547.20250602",
       "hashPath": "avalonia.angle.windows.natives.2.1.25547.20250602.nupkg.sha512"
     },
+    "Avalonia.AvaloniaEdit/11.3.0": {
+      "type": "package",
+      "serviceable": true,
+      "sha512": "sha512-9M/jJb4DPqQmKtNMZn6+vpqlf+ZGMtK8vEBpPVP3De1xRCu1hv4ZAtoA8hY6bYj2hgv/luete3ixoOsEQ++YJQ==",
+      "path": "avalonia.avaloniaedit/11.3.0",
+      "hashPath": "avalonia.avaloniaedit.11.3.0.nupkg.sha512"
+    },
+    "Avalonia.Controls.ColorPicker/11.3.18": {
+      "type": "package",
+      "serviceable": true,
+      "sha512": "sha512-gcl2yQLQpS38Ur9MduD98GXzYaZEbwzYhaBmTh7Hp0YyXI4B2FlXXPdB4nijPI6WuoYdM24akdnF6uCeWL6q3Q==",
+      "path": "avalonia.controls.colorpicker/11.3.18",
+      "hashPath": "avalonia.controls.colorpicker.11.3.18.nupkg.sha512"
+    },
     "Avalonia.Desktop/11.3.18": {
       "type": "package",
       "serviceable": true,
       "sha512": "sha512-bilMPa5vYiis6fbNovb6esKytBnOCEGojBa1XFegLCRHCP6g6PvZwS0XF/YOAGkENRlHG8dI7lohOpQ9bIkq1g==",
       "path": "avalonia.desktop/11.3.18",
       "hashPath": "avalonia.desktop.11.3.18.nupkg.sha512"
+    },
+    "Avalonia.Diagnostics/11.3.18": {
+      "type": "package",
+      "serviceable": true,
+      "sha512": "sha512-LQpL/zsaHpJ+mM1/ABmjPCQJbyyhtmTYuiPDCwTM6GVzyUne2InauVjAlFY5FaxgoHUx2ZDAkfJn3vdHn1/gsQ==",
+      "path": "avalonia.diagnostics/11.3.18",
+      "hashPath": "avalonia.diagnostics.11.3.18.nupkg.sha512"
     },
     "Avalonia.Fonts.Inter/11.3.18": {
       "type": "package",
@@ -1320,6 +1393,13 @@
       "sha512": "sha512-+Q/TJoynD0zNuu5w2gD+xcTl7GNKJFxlPYAndRLs/mTDrNbbsvv/271WyIysbMPsXSjCyBDp7RCZzQkpD6x5Bg==",
       "path": "avalonia.themes.fluent/11.3.18",
       "hashPath": "avalonia.themes.fluent.11.3.18.nupkg.sha512"
+    },
+    "Avalonia.Themes.Simple/11.3.18": {
+      "type": "package",
+      "serviceable": true,
+      "sha512": "sha512-aDCqBg6NnvUJOd9Ejt49htV6vwUIOV6K8jTNm7/bp9NqNr3h3xDR1vkw+Q48hm+ee8v6Gm4jiBy3g9O8k7Yv2w==",
+      "path": "avalonia.themes.simple/11.3.18",
+      "hashPath": "avalonia.themes.simple.11.3.18.nupkg.sha512"
     },
     "Avalonia.Win32/11.3.18": {
       "type": "package",
@@ -1769,12 +1849,12 @@
       "path": "whisper.net/1.9.1",
       "hashPath": "whisper.net.1.9.1.nupkg.sha512"
     },
-    "FruityLink.Agent/0.1.9": {
+    "FruityLink.Agent/0.1.29": {
       "type": "project",
       "serviceable": false,
       "sha512": ""
     },
-    "FruityLink.AppCore/0.1.9": {
+    "FruityLink.AppCore/0.1.29": {
       "type": "project",
       "serviceable": false,
       "sha512": ""
@@ -1784,17 +1864,17 @@
       "serviceable": false,
       "sha512": ""
     },
-    "FruityLink.Knowledge/0.1.9": {
+    "FruityLink.Knowledge/0.1.29": {
       "type": "project",
       "serviceable": false,
       "sha512": ""
     },
-    "FruityLink.Llm/0.1.9": {
+    "FruityLink.Llm/0.1.29": {
       "type": "project",
       "serviceable": false,
       "sha512": ""
     },
-    "FruityLink.Persistence/0.1.9": {
+    "FruityLink.Persistence/0.1.29": {
       "type": "project",
       "serviceable": false,
       "sha512": ""
@@ -1804,12 +1884,12 @@
       "serviceable": false,
       "sha512": ""
     },
-    "FruityLink.Speech/0.1.9": {
+    "FruityLink.Speech/0.1.29": {
       "type": "project",
       "serviceable": false,
       "sha512": ""
     },
-    "FruityLink.Ui.Avalonia/0.1.9": {
+    "FruityLink.Ui.Avalonia/0.1.29": {
       "type": "project",
       "serviceable": false,
       "sha512": ""

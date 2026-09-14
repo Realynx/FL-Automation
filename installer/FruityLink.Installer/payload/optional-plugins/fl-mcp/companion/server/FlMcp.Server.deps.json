@@ -6,9 +6,9 @@
   "compilationOptions": {},
   "targets": {
     ".NETCoreApp,Version=v10.0": {
-      "FlMcp.Server/0.1.0": {
+      "FlMcp.Server/0.2.0": {
         "dependencies": {
-          "FlMcp.Protocol": "0.1.0",
+          "FlMcp.Protocol": "0.2.0",
           "Microsoft.Extensions.Hosting": "10.0.0",
           "ModelContextProtocol": "2.2.0"
         },
@@ -442,18 +442,18 @@
           }
         }
       },
-      "FlMcp.Protocol/0.1.0": {
+      "FlMcp.Protocol/0.2.0": {
         "runtime": {
           "FlMcp.Protocol.dll": {
-            "assemblyVersion": "0.1.0.0",
-            "fileVersion": "0.1.0.0"
+            "assemblyVersion": "0.2.0.0",
+            "fileVersion": "0.2.0.0"
           }
         }
       }
     }
   },
   "libraries": {
-    "FlMcp.Server/0.1.0": {
+    "FlMcp.Server/0.2.0": {
       "type": "project",
       "serviceable": false,
       "sha512": ""
@@ -682,7 +682,7 @@
       "path": "system.diagnostics.eventlog/10.0.0",
       "hashPath": "system.diagnostics.eventlog.10.0.0.nupkg.sha512"
     },
-    "FlMcp.Protocol/0.1.0": {
+    "FlMcp.Protocol/0.2.0": {
       "type": "project",
       "serviceable": false,
       "sha512": ""

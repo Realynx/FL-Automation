@@ -6,9 +6,9 @@
   "compilationOptions": {},
   "targets": {
     ".NETCoreApp,Version=v9.0": {
-      "FlMcp.Plugin/0.1.0": {
+      "FlMcp.Plugin/0.2.0": {
         "dependencies": {
-          "FlMcp.Protocol": "0.1.0",
+          "FlMcp.Protocol": "0.2.0",
           "FruityLink.Plugins.Abstractions": "0.2.0",
           "FruityLink.Scripting": "0.2.0"
         },
@@ -16,11 +16,11 @@
           "FlMcp.Plugin.dll": {}
         }
       },
-      "FlMcp.Protocol/0.1.0": {
+      "FlMcp.Protocol/0.2.0": {
         "runtime": {
           "FlMcp.Protocol.dll": {
-            "assemblyVersion": "0.1.0.0",
-            "fileVersion": "0.1.0.0"
+            "assemblyVersion": "0.2.0.0",
+            "fileVersion": "0.2.0.0"
           }
         }
       },
@@ -57,12 +57,12 @@
     }
   },
   "libraries": {
-    "FlMcp.Plugin/0.1.0": {
+    "FlMcp.Plugin/0.2.0": {
       "type": "project",
       "serviceable": false,
       "sha512": ""
     },
-    "FlMcp.Protocol/0.1.0": {
+    "FlMcp.Protocol/0.2.0": {
       "type": "project",
       "serviceable": false,
       "sha512": ""

@@ -5,6 +5,7 @@
     <Project Path="sdk/src/FruityLink.Host/FruityLink.Host.csproj" />
     <Project Path="sdk/src/FruityLink.Plugins.Abstractions/FruityLink.Plugins.Abstractions.csproj" />
     <Project Path="sdk/src/FruityLink.Plugins.Host/FruityLink.Plugins.Host.csproj" />
+    <Project Path="sdk/src/FruityLink.Scripting/FruityLink.Scripting.csproj" />
     <Project Path="sdk/src/FruityLink.Ui.Avalonia.Hosting/FruityLink.Ui.Avalonia.Hosting.csproj" />
   </Folder>
   <Folder Name="/src/">
@@ -17,6 +18,7 @@
     <Project Path="src/FruityLink.Ui.Avalonia/FruityLink.Ui.Avalonia.csproj" />
   </Folder>
   <Folder Name="/plugins/">
+    <Project Path="sdk/src/FruityLink.Plugins.PythonIde/FruityLink.Plugins.PythonIde.csproj" />
     <Project Path="src/FruityLink.Plugins.FlAgent/FruityLink.Plugins.FlAgent.csproj" />
   </Folder>
   <Folder Name="/installer/">

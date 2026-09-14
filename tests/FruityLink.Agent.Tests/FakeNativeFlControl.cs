@@ -42,6 +42,8 @@ internal sealed class FakeNativeFlControl : INativeFlControl
 
     // --- mixer ---
     public Task<int> GetMixerTrackCountAsync(CancellationToken ct = default) => Record($"GetMixerTrackCountAsync()", 127);
+    public Task<int> AddMixerTrackAsync(int afterTrack = -1, CancellationToken ct = default) =>
+        Record($"AddMixerTrackAsync({afterTrack})", afterTrack < 0 ? 126 : afterTrack + 1);
     public Task<string> GetMixerTrackNameAsync(int track, CancellationToken ct = default) => Record($"GetMixerTrackNameAsync({track})", track == 0 ? "Master" : $"Insert {track}");
     public Task<string> ListMixerTracksAsync(CancellationToken ct = default) => Record($"ListMixerTracksAsync()", "0: Master");
     public Task SetMixerVolumeAsync(int track, int value, CancellationToken ct = default) => Record($"SetMixerVolumeAsync({track},{value})");
@@ -273,6 +275,19 @@ internal sealed class FakeNativeFlControl : INativeFlControl
         if (!_autos.TryGetValue(channel, out var list)) _autos[channel] = list = new();
         list.Add(new FakePoint { Time = time, Value = value, Tension = tension, Curve = curve });
         list.Sort((a, b) => a.Time.CompareTo(b.Time));
+    }
+
+    public Task<FlAutomationClipResult> CreateAutomationClipAsync(FlAutomationTarget target, int track, int startTick, int lengthTick, string? name = null, CancellationToken ct = default) =>
+        Record($"CreateAutomationClipAsync({target},{track},{startTick},{lengthTick},{name})", new FlAutomationClipResult(3, 2));
+
+    public Task<int> AddAutomationClipAsync(int channel, int track, int startTick, int lengthTick, CancellationToken ct = default) =>
+        Record($"AddAutomationClipAsync({channel},{track},{startTick},{lengthTick})", 2);
+
+    public Task SetAutomationPointsAsync(int channel, IReadOnlyList<FlAutomationPointSpec> points, CancellationToken ct = default)
+    {
+        Calls.Add(FormattableString.Invariant($"SetAutomationPointsAsync({channel},[{points.Count} points])"));
+        _autos[channel] = points.Select(p => new FakePoint { Time = p.TimeBeats, Value = p.Value, Tension = p.Tension, Curve = p.Curve }).ToList();
+        return Task.CompletedTask;
     }
 
     public Task<string> ListAutomationPointsAsync(int channel, CancellationToken ct = default)

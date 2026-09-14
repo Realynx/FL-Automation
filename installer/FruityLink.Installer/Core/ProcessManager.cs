@@ -31,6 +31,10 @@ public interface IProcessManager
     /// the OS releases the file locks. Returns how many were running and how many confirmed-exited.
     /// </summary>
     FlCloseResult CloseFlStudio(IProgressLog log);
+
+    /// <summary>Stops MCP companion servers belonging to the selected FL directory only.</summary>
+    /// <returns>False when shutdown could not be confirmed; file changes must not begin.</returns>
+    bool CloseMcpCompanions(string flPath, IProgressLog log) => true;
 }
 
 /// <summary>Does nothing (tests, self-test) — never touches real processes.</summary>
@@ -59,6 +63,9 @@ public sealed class RealProcessManager : IProcessManager
         _exitTimeout = exitTimeout ?? TimeSpan.FromSeconds(15);
         _settle = settle ?? TimeSpan.FromMilliseconds(750);
     }
+
+    public bool CloseMcpCompanions(string flPath, IProgressLog log) =>
+        new McpCompanionProcesses(exitTimeout: _exitTimeout).Close(flPath, log);
 
     public FlCloseResult CloseFlStudio(IProgressLog log)
     {
