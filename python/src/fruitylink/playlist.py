@@ -3,9 +3,11 @@
 from collections.abc import Iterator, Sequence
 
 from ._collection import checked_index, iter_pages
+from ._gaps import GapList, IntervalMap, gaps_in_range, note_intervals
 from ._properties import IndexedObject, NativeProperty
-from .models import ClipInfo, PlaylistTrackInfo
+from .models import ClipInfo, NoteInfo, PlaylistTrackInfo
 from .operations import Operations
+from .patterns import Notes
 from .records import ClipMove, ClipResize, PatternClipSpec, Timebase
 
 
@@ -106,3 +108,58 @@ class Playlist:
 
     def add_patterns(self, clips: Sequence[PatternClipSpec]) -> None:
         self._ops.add_pattern_clips(clips=clips)
+
+    def first_free_track(self, start_tick: int, end_tick: int, *, above: int = 1) -> int:
+        """Lowest one-based track >= ``above`` with no clip of any kind overlapping [start_tick, end_tick).
+
+        Pattern, audio and automation clips all count; muted clips still occupy their track.
+        Raises LookupError when tracks up to 500 are all occupied.
+        """
+        if any(type(value) is not int for value in (start_tick, end_tick, above)):
+            raise ValueError("Tick positions and the starting track must be integers.")
+        if start_tick < 0 or end_tick <= start_tick or not 1 <= above <= 500:
+            raise ValueError("Require 0 <= start_tick < end_tick and a starting track 1..500.")
+        occupied = {clip.track for clip in self.clips.list()
+                    if clip.start_tick < end_tick and clip.start_tick + clip.length_tick > start_tick}
+        track = above
+        while track in occupied:
+            track += 1
+        if track > 500:
+            raise LookupError("No free playlist track in 1..500 for that range.")
+        return track
+
+    def gaps(self, start_bar: int, end_bar: int, channel: int | None = None, min_beats: float = 1.0,
+             *, beats_per_bar: int = 4) -> GapList:
+        """Rest regions per channel across bars ``start_bar``..``end_bar`` inclusive (one-based), absolute ticks.
+
+        Reads every unmuted pattern clip overlapping the range and that pattern's notes: a note
+        starting inside its clip sounds for its full length (even past the clip end); notes
+        starting after the clip end do not sound; muted notes are silent. Clips are assumed to
+        start at their pattern's beginning (sliced clips with an offset are not distinguishable
+        here). ``channel=None`` reports every channel with notes in those clips.
+        """
+        if channel is not None:
+            checked_index(channel)
+        timebase = Timebase(self._ops.get_ppq())
+        start = timebase.bar_start(start_bar, beats_per_bar=beats_per_bar)
+        end = timebase.bar_start(end_bar + 1, beats_per_bar=beats_per_bar)
+        if end <= start:
+            raise ValueError("end_bar must not precede start_bar.")
+        notes_by_pattern: dict[int, tuple[NoteInfo, ...]] = {}
+        intervals: IntervalMap = {}
+        channels: set[int] = set()
+        for clip in self.clips.list():
+            if clip.source_kind != "pattern" or clip.muted or clip.start_tick >= end \
+                    or clip.start_tick + clip.length_tick <= start:
+                continue
+            if clip.source_index not in notes_by_pattern:
+                notes_by_pattern[clip.source_index] = Notes(self._ops, clip.source_index).list()
+            notes = notes_by_pattern[clip.source_index]
+            channels.update(note.channel for note in notes if not note.muted)
+            for key, spans in note_intervals(notes, offset=clip.start_tick, within=clip.length_tick,
+                                             channel=channel).items():
+                intervals.setdefault(key, []).extend(spans)
+        if channel is not None:
+            channels = {channel}
+        return gaps_in_range(intervals, channels, start=start, end=end, min_ticks=timebase.ticks(min_beats),
+                             ppq=timebase.ppq)

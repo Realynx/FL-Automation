@@ -38,17 +38,17 @@ public sealed partial class FlInjectBridge
     }
 
     /// <summary>Exclusively select a channel so the piano roll edits it. FLcr_SelectOneChannelByIndex.</summary>
-    public async Task SelectChannelAsync(int index, CancellationToken ct = default)
+    public async Task SelectChannelAsync(int channel, CancellationToken ct = default)
     {
         int count = await GetChannelCountAsync(ct);
-        if (index < 0 || index >= count) throw new InvalidOperationException($"Channel {index} does not exist (only {count} channel(s)).");
-        await CallAsync("10e3eb0", new ulong[] { (uint)index }, ct);
+        if (channel < 0 || channel >= count) throw new InvalidOperationException($"Channel {channel} does not exist (only {count} channel(s)).");
+        await CallAsync("10e3eb0", new ulong[] { (uint)channel }, ct);
     }
 
-    public async Task<string> GetChannelNameAsync(int index, CancellationToken ct = default)
+    public async Task<string> GetChannelNameAsync(int channel, CancellationToken ct = default)
     {
-        ulong ch = await ChannelObjAsync(index, ct);
-        return ch == 0 ? $"Channel {index}" : await GetChannelNameCoreAsync(ch, index, ct);
+        ulong ch = await ChannelObjAsync(channel, ct);
+        return ch == 0 ? $"Channel {channel}" : await GetChannelNameCoreAsync(ch, channel, ct);
     }
 
     private async Task<string> GetChannelNameCoreAsync(ulong ch, int index, CancellationToken ct)
@@ -66,11 +66,11 @@ public sealed partial class FlInjectBridge
     /// <summary>Rename a channel via its Delphi setName (vtbl+0x70) — symmetric with the getName (vtbl+0x68)
     /// path above. Uses an FL-OWNED heap string so the setter's UStrAsg-share persists across scratch reuse
     /// and save/reload.</summary>
-    public async Task SetChannelNameAsync(int index, string name, CancellationToken ct = default)
+    public async Task SetChannelNameAsync(int channel, string name, CancellationToken ct = default)
     {
-        ulong ch = await ChannelObjAsync(index, ct);
-        if (ch == 0) throw new InvalidOperationException($"Channel {index} not found.");
-        LogOp("SetChannelName", $"index={index}");
+        ulong ch = await ChannelObjAsync(channel, ct);
+        if (ch == 0) throw new InvalidOperationException($"Channel {channel} not found.");
+        LogOp("SetChannelName", $"channel={channel}");
         using (var scratch = await LeaseScratchAsync(ct).ConfigureAwait(false))
         {
             ulong str = await MakeOwnedDelphiStringAsync(name ?? string.Empty, scratch, ct);
@@ -82,11 +82,11 @@ public sealed partial class FlInjectBridge
     /// <summary>Toggle exclusive channel solo via FLcr_ApplyChannelSolo (the same op the rack's channel
     /// solo-click invokes; carries the exclusive-solo bookkeeping + undo step, non-modal). Toggle: solo again
     /// un-solos. Refreshes the rack so the strip repaints.</summary>
-    public async Task SetChannelSoloAsync(int index, CancellationToken ct = default)
+    public async Task SetChannelSoloAsync(int channel, CancellationToken ct = default)
     {
-        ulong ch = await ChannelObjAsync(index, ct);
-        if (ch == 0) throw new InvalidOperationException($"Channel {index} not found.");
-        LogOp("SetChannelSolo", $"index={index}");
+        ulong ch = await ChannelObjAsync(channel, ct);
+        if (ch == 0) throw new InvalidOperationException($"Channel {channel} not found.");
+        LogOp("SetChannelSolo", $"channel={channel}");
         await CallAsync("e012f0", new ulong[] { ch, 0 }, ct);   // FLcr_ApplyChannelSolo(chObj, mode 0 = toggle)
         await RefreshRackAsync(ct);
     }
@@ -144,13 +144,27 @@ public sealed partial class FlInjectBridge
         return Task.FromResult(names.Count == 0 ? "(none found)" : string.Join("\n", names));
     }
 
-    /// <summary>Resolves a plugin display name to its .fst path in the plugin database.</summary>
-    private static string? ResolveFstPath(string name, bool effects)
+    /// <summary>Resolves a plugin name to its .fst path in the plugin database. Matching is tolerant
+    /// (see <see cref="PluginNameResolver"/>): exact file name first, then case/punctuation-insensitive,
+    /// then a unique containment such as a vendor prefix ("FabFilter Pro-R 2" -> "Pro-R 2"). Throws with the
+    /// closest installed names when nothing matches, or with every candidate when the name is ambiguous.
+    /// When the same display name exists in several database folders, the first enumerated file wins
+    /// (unchanged from the exact-match lookup this replaces).</summary>
+    private static string ResolveFstPath(string name, bool effects)
     {
+        string kind = effects ? "Effect" : "Generator";
         string dir = Path.Combine(PluginDbDir, effects ? "Effects" : "Generators");
-        if (!Directory.Exists(dir)) return null;
-        return Directory.EnumerateFiles(dir, "*.fst", SearchOption.AllDirectories)
-            .FirstOrDefault(f => string.Equals(Path.GetFileNameWithoutExtension(f), name, StringComparison.OrdinalIgnoreCase));
+        if (!Directory.Exists(dir))
+            throw new InvalidOperationException($"{kind} plugin '{name}' not found: the plugin database folder is missing ({dir}).");
+        var files = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        foreach (string f in Directory.EnumerateFiles(dir, "*.fst", SearchOption.AllDirectories))
+        {
+            string n = Path.GetFileNameWithoutExtension(f);
+            if (!string.IsNullOrEmpty(n)) files.TryAdd(n, f);
+        }
+        var match = PluginNameResolver.Match(name, files.Keys);
+        if (match.Name is null) throw new InvalidOperationException(PluginNameResolver.DescribeFailure(kind, name, match));
+        return files[match.Name];
     }
 
     private static string? FlInstallDir()
@@ -240,8 +254,7 @@ public sealed partial class FlInjectBridge
     /// <summary>Adds a new channel-rack channel hosting the named generator plugin; returns its index.</summary>
     public async Task<int> AddChannelAsync(string pluginName, CancellationToken ct = default)
     {
-        string? path = ResolveFstPath(pluginName, effects: false)
-            ?? throw new InvalidOperationException($"Generator plugin '{pluginName}' not found (try native_list_available_plugins).");
+        string path = ResolveFstPath(pluginName, effects: false);
         int before = await GetChannelCountAsync(ct);
         ulong ch = await CallAsync("f215e0", new ulong[] { (uint)before, 0, 0 }, ct);  // FLcr_InsertChannel
         if (ch == 0) throw new InvalidOperationException("Could not insert a channel.");

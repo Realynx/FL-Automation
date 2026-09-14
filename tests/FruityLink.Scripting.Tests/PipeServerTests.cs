@@ -43,7 +43,7 @@ public sealed class PipeServerTests
         fixture.Recorder.Handler = (method, _) => method.Name == "GetChannelNameAsync"
             ? Task.FromResult("音楽 🎛️\nline two") : RecordingControl.DefaultReturn(method);
         await fixture.Server.StartAsync();
-        var response = await fixture.RequestAsync("invoke", new { operation = "get_channel_name", arguments = new { index = 0 } });
+        var response = await fixture.RequestAsync("invoke", new { operation = "get_channel_name", arguments = new { channel = 0 } });
         Assert.Equal("音楽 🎛️\nline two", response.GetProperty("result").GetString());
         var batch = await fixture.RequestAsync("batch", new
         {
@@ -91,7 +91,7 @@ public sealed class PipeServerTests
         fixture.Recorder.Handler = (method, _) => method.Name == "GetChannelNameAsync"
             ? Task.FromResult(new string('x', ScriptingPipeFraming.MaximumFrameBytes)) : RecordingControl.DefaultReturn(method);
         await fixture.Server.StartAsync();
-        var response = await fixture.RequestAsync("invoke", new { operation = "get_channel_name", arguments = new { index = 0 } });
+        var response = await fixture.RequestAsync("invoke", new { operation = "get_channel_name", arguments = new { channel = 0 } });
         Assert.Equal("response_too_large", response.GetProperty("error").GetProperty("code").GetString());
     }
 

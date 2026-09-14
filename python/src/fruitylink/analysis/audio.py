@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import math
 import struct
+import sys
 from array import array
 from collections.abc import Sequence
 from dataclasses import dataclass
@@ -143,8 +144,27 @@ def _format(fmt: bytes) -> tuple[int, int, int, int, str]:
     return tag, channels, rate, align, f"{'pcm' if tag == 1 else 'float'}{bits}le"
 
 
+def _typecode(tag: int, width: int) -> str | None:
+    """A native array typecode of exactly this width, or None for 8/24-bit PCM."""
+    for code in ("fd" if tag == 3 else "hilq"):
+        if array(code).itemsize == width:
+            return code
+    return None
+
+
 def _decode(data: bytes, tag: int, width: int, channels: tuple[array[float], ...]) -> None:
     count = len(channels)
+    code = _typecode(tag, width)
+    if code is not None:
+        interleaved = array(code)
+        interleaved.frombytes(data)
+        if sys.byteorder != "little":  # pragma: no cover - the SDK targets little-endian hosts
+            interleaved.byteswap()
+        scale = 1 if tag == 3 else 1 / 2 ** (width * 8 - 1)
+        for i, channel in enumerate(channels):
+            channel.extend(array("d", interleaved[i::count]) if scale == 1 else
+                           array("d", [value * scale for value in interleaved[i::count]]))
+        return
     for i, position in enumerate(range(0, len(data), width)):
         raw = data[position:position + width]
         if tag == 3:

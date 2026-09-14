@@ -17,7 +17,7 @@ public interface INativeFlControl
     Task SetTempoAsync(double bpm, CancellationToken ct = default);
     /// <summary>Read tempo in beats per minute.</summary>
     Task<double> GetTempoAsync(CancellationToken ct = default);
-    /// <summary>Master volume, 0..12800 (≈7624 ≈ 0 dB).</summary>
+    /// <summary>Master volume as a raw native integer, 0..12800. No dB conversion is defined.</summary>
     Task SetMasterVolumeAsync(int value, CancellationToken ct = default);
     /// <summary>Read master volume, 0..12800 (symmetric with <see cref="SetMasterVolumeAsync"/>).</summary>
     Task<int> GetMasterVolumeAsync(CancellationToken ct = default);
@@ -31,13 +31,13 @@ public interface INativeFlControl
     Task<int> GetShuffleAsync(CancellationToken ct = default);
 
     // --- mixer (live-verified track volume; same protocol for pan/FX) ---
-    /// <summary>Mixer track volume 0..12800 (track 0 = master).</summary>
+    /// <summary>Mixer track volume as a raw native integer, 0..12800 (track 0 = master). No dB conversion is defined.</summary>
     Task SetMixerVolumeAsync(int track, int value, CancellationToken ct = default);
     /// <summary>Read a mixer track volume 0..12800 (symmetric with <see cref="SetMixerVolumeAsync"/>).</summary>
     Task<long> GetMixerVolumeAsync(int track, CancellationToken ct = default);
-    /// <summary>Mixer track pan 0..12800 (6400 = center).</summary>
+    /// <summary>Mixer track pan as a SIGNED native integer, -6400..6400: 0 = center, negative = left, 6400 = hard right. This scale differs from channel pan (0..12800, 6400 = center); a mixer value of 6400 or more is fully right. Live-verified by isolated renders (Ember Tides v006).</summary>
     Task SetMixerPanAsync(int track, int value, CancellationToken ct = default);
-    /// <summary>Read a mixer track pan 0..12800 (symmetric with <see cref="SetMixerPanAsync"/>).</summary>
+    /// <summary>Read a mixer track pan -6400..6400 (0 = center; symmetric with <see cref="SetMixerPanAsync"/>). Untouched tracks read 0.</summary>
     Task<int> GetMixerPanAsync(int track, CancellationToken ct = default);
     /// <summary>Mute/unmute a mixer track (the enabled flag; solo state untouched).</summary>
     Task SetMixerTrackMutedAsync(int track, bool muted, CancellationToken ct = default);
@@ -47,7 +47,7 @@ public interface INativeFlControl
     Task SetMixerFxParamAsync(int track, int slot, int paramIndex, long value, CancellationToken ct = default);
 
     // --- channel rack (live-verified) ---
-    /// <summary>Channel volume 0..12800 (10000 = default 78%).</summary>
+    /// <summary>Channel volume as a raw native integer, 0..12800.</summary>
     Task SetChannelVolumeAsync(int channel, int value, CancellationToken ct = default);
     /// <summary>Read channel volume 0..12800 (symmetric with <see cref="SetChannelVolumeAsync"/>).</summary>
     Task<long> GetChannelVolumeAsync(int channel, CancellationToken ct = default);
@@ -104,18 +104,18 @@ public interface INativeFlControl
     // --- channel rack ---
     /// <summary>Read the number of channels in the rack.</summary>
     Task<int> GetChannelCountAsync(CancellationToken ct = default);
-    /// <summary>Exclusively select a channel (so the piano roll edits it).</summary>
-    Task SelectChannelAsync(int index, CancellationToken ct = default);
+    /// <summary>Exclusively select a zero-based channel (so the piano roll edits it).</summary>
+    Task SelectChannelAsync(int channel, CancellationToken ct = default);
     /// <summary>Read the name of a zero-based channel.</summary>
-    Task<string> GetChannelNameAsync(int index, CancellationToken ct = default);
+    Task<string> GetChannelNameAsync(int channel, CancellationToken ct = default);
     /// <summary>List channel indices and names.</summary>
     Task<string> ListChannelsAsync(CancellationToken ct = default);
     /// <summary>Rename a channel (persists across save/reload) so the model's own name→index lookups keep
     /// working on channels it created.</summary>
-    Task SetChannelNameAsync(int index, string name, CancellationToken ct = default);
+    Task SetChannelNameAsync(int channel, string name, CancellationToken ct = default);
     /// <summary>Toggle exclusive SOLO on a channel (solo again = un-solo) — hear one part without muting
-    /// every other channel by hand.</summary>
-    Task SetChannelSoloAsync(int index, CancellationToken ct = default);
+    /// every other channel by hand. The channel is zero-based, like every other channel operation.</summary>
+    Task SetChannelSoloAsync(int channel, CancellationToken ct = default);
 
     // --- mixer tracks (identity: resolve a bus/track NAME to its index) ---
     /// <summary>Native mixer cardinality: Master + active ordinary inserts + Current. Current has a special physical index, not count-1; use IFlStructuredQuery.QueryMixerTracksAsync to enumerate addressable Master/insert tracks.</summary>
@@ -175,6 +175,39 @@ public interface INativeFlControl
     /// <summary>Replace an existing channel's sample with a new audio file.</summary>
     Task ReplaceChannelSampleAsync(int channel, string samplePath, CancellationToken ct = default);
 
+    // --- plugin state / preset files (live-verified with Serum 2 on FL 26.1.3) ---
+    /// <summary>Load a plugin state or preset file into the generator ALREADY hosted by a channel, without
+    /// replacing the plugin instance. Uses the wrapper's own state-file loader (dispatcher opcode 0x12).
+    /// Live-verified on FL 26.1.3 with Serum 2: a VST3 <c>.vstpreset</c> whose class id is the plugin's GUID
+    /// string with braces/dashes removed loads and changes the state in place; a plugin's proprietary preset
+    /// file (e.g. <c>.SerumPreset</c>) is silently ignored. Set <paramref name="useChannelLoader"/> to route an
+    /// FL <c>.fst</c> through FL's channel file loader instead (the drag-and-drop path), which may swap the
+    /// generator, rename the channel and start the transport; that route is refused for other formats because
+    /// live it applied no state and renamed the channel. Prefer the default dispatcher route.
+    /// Refuses channels without a hosted plugin and, for <c>.fst</c> files, files that do not name the channel's
+    /// current plugin. Returns a verification line: plugin name, same-instance check, parameter count and a
+    /// comparison of the plugin's wrapper state record before and after the load (sizes, short hashes and the
+    /// number of differing bytes), or an explicit "unavailable" note when no snapshot could be taken. Confirm
+    /// the sound with parameter displays in a separate request or an isolated render.</summary>
+    Task<string> LoadChannelPluginStateAsync(int channel, string path, bool useChannelLoader = false, CancellationToken ct = default);
+    /// <summary>Load a plugin state or preset file into the effect ALREADY loaded in a mixer FX slot (0-9)
+    /// through the wrapper's state-file loader (dispatcher opcode 0x12). Same format and identity rules as
+    /// <see cref="LoadChannelPluginStateAsync"/>. Refuses empty slots.</summary>
+    Task<string> LoadMixerEffectStateAsync(int track, int slot, string path, CancellationToken ct = default);
+    /// <summary>Read the CURRENT state of the generator hosted by a channel as base64 of its FL wrapper
+    /// plugin-data record: the same bytes an FL project stores for the plugin (for a VST3 such as Serum 2 this
+    /// embeds the processor and controller component states). Implemented through FL's own serializer: a
+    /// temporary project copy is written with the direct writer used by SaveCopyAsync and the channel's record
+    /// is extracted, so project note validation applies and the live project's path, title and dirty flag do
+    /// not change. Pair with <see cref="LoadChannelPluginStateAsync"/> to learn parameter mappings by
+    /// set-then-read, or to snapshot a patch without saving the project. Refuses channels without a hosted
+    /// plugin; built-in Sampler channels store no wrapper record.</summary>
+    Task<string> GetChannelPluginStateAsync(int channel, CancellationToken ct = default);
+    /// <summary>Read the CURRENT state of the effect in a mixer FX slot (0-9; track 0 = Master) as base64 of
+    /// its FL wrapper plugin-data record, through the same temporary project copy as
+    /// <see cref="GetChannelPluginStateAsync"/>. Refuses empty slots.</summary>
+    Task<string> GetMixerEffectStateAsync(int track, int slot, CancellationToken ct = default);
+
     // --- notes (read) ---
     /// <summary>Read piano-roll notes of a pattern (1-based, or &lt;=0 = current); channel&lt;0 = all.
     /// Paged: offset skips the first N notes (raw index); the output's continuation hint feeds it back in.</summary>
@@ -184,13 +217,18 @@ public interface INativeFlControl
     /// <summary>Edit EXISTING piano-roll notes in place, WITHOUT clearing the pattern (every other note is
     /// untouched, including fields the read tool doesn't surface — pan, fine pitch, release, cut, res). Each
     /// <see cref="NoteEdit"/> identifies a note by the (channel, key, startTick) triple <see cref="GetNotesAsync"/>
-    /// shows and applies whichever new fields it carries. Returns the number of notes changed.</summary>
-    Task<int> EditNotesAsync(int pattern, IReadOnlyList<NoteEdit> edits, CancellationToken ct = default);
+    /// shows, optionally narrowed by its current lengthTick, and applies whichever new fields it carries.
+    /// FL allows several notes with the same triple (stacked duplicates), so an edit that matches more than
+    /// one note is refused before anything is written unless <paramref name="allowMultiple"/> is true, in which
+    /// case every matching note receives the edit. Returns the number of notes changed.</summary>
+    Task<int> EditNotesAsync(int pattern, IReadOnlyList<NoteEdit> edits, bool allowMultiple = false, CancellationToken ct = default);
 
-    /// <summary>Delete SPECIFIC existing piano-roll notes (matched by the (channel, key, startTick) triple),
-    /// leaving the rest of the pattern intact — the surgical counterpart to <see cref="ClearPatternAsync"/>.
+    /// <summary>Delete SPECIFIC existing piano-roll notes (matched by the (channel, key, startTick) triple,
+    /// optionally narrowed by lengthTick), leaving the rest of the pattern intact — the surgical counterpart to
+    /// <see cref="ClearPatternAsync"/>. A target that matches several stacked duplicates is refused before
+    /// anything is deleted unless <paramref name="allowMultiple"/> is true, which deletes all of them.
     /// Returns the number of notes deleted.</summary>
-    Task<int> DeleteNotesAsync(int pattern, IReadOnlyList<NoteRef> targets, CancellationToken ct = default);
+    Task<int> DeleteNotesAsync(int pattern, IReadOnlyList<NoteRef> targets, bool allowMultiple = false, CancellationToken ct = default);
 
     // --- patterns (clone) ---
     /// <summary>Duplicate a pattern's notes into a new empty pattern; returns the new pattern's 1-based index
@@ -284,6 +322,8 @@ public interface INativeFlControl
     Task<string> ListMarkersAsync(CancellationToken ct = default);
     /// <summary>Add a named song marker at a tick position.</summary>
     Task AddMarkerAsync(int tick, string name, CancellationToken ct = default);
+    /// <summary>Delete a song time marker by its zero-based index in <see cref="ListMarkersAsync"/> order. Refuses a missing index without changing the project. FL extends renders and the play range to the last marker, so remove trailing markers to shorten an audition.</summary>
+    Task DeleteMarkerAsync(int index, CancellationToken ct = default);
 
     // --- project lifecycle ---
     /// <summary>Open the project at the specified path.</summary>
@@ -332,8 +372,10 @@ public interface INativeFlControl
     Task<string> ListAutomationPointsAsync(int channel, CancellationToken ct = default);
     /// <summary>Add an automation point: time in beats, value 0..1, tension -1..1 (inserts in time order).</summary>
     Task AddAutomationPointAsync(int channel, double timeBeats, double value, double tension, CancellationToken ct = default);
-    /// <summary>Delete an automation point by index and recompute its curve.</summary>
+    /// <summary>Delete an automation point by index and recompute its curve. The first and last points are protected endpoints and cannot be deleted; edit them with <see cref="SetAutomationPointAsync"/>.</summary>
     Task DeleteAutomationPointAsync(int channel, int index, CancellationToken ct = default);
+    /// <summary>Change one existing automation point's value 0..1 and tension -1..1 in place, keeping its time. Works for the protected first and last points. Refuses a missing index and curves that contain non-linear points (replace those with <see cref="SetAutomationPointsAsync"/>).</summary>
+    Task SetAutomationPointAsync(int channel, int index, double value, double tension, CancellationToken ct = default);
 
     // --- render / export ---
     /// <summary>Opens FL's audio Export dialog for the user to finish (format/path/Render).</summary>
@@ -354,14 +396,17 @@ public interface INativeFlControl
 /// startTick/lengthTick in PPQ ticks, velocity 0..127.</summary>
 public readonly record struct NoteSpec(int Channel, int Key, int StartTick, int LengthTick, int Velocity);
 
-/// <summary>Identifies ONE existing note by the (Channel, Key, StartTick) triple that
-/// <see cref="INativeFlControl.GetNotesAsync"/> reports — stable (two notes can't share all three on one
-/// channel), so the model can target a note without a fragile array index.</summary>
-public readonly record struct NoteRef(int Channel, int Key, int StartTick);
+/// <summary>Identifies an existing note by the (Channel, Key, StartTick) triple that
+/// <see cref="INativeFlControl.GetNotesAsync"/> reports, so the model can target a note without a fragile array
+/// index. FL does allow stacked duplicates that share the triple; set <see cref="LengthTick"/> (the note's current
+/// length) to pick one of them, or pass allowMultiple to the operation to address all of them.</summary>
+public readonly record struct NoteRef(int Channel, int Key, int StartTick, int? LengthTick = null);
 
 /// <summary>An edit to ONE existing note: <see cref="Channel"/>/<see cref="Key"/>/<see cref="StartTick"/>
-/// locate it (original values), and each nullable field, when set, is the note's NEW value (null = leave
-/// unchanged). Changing <see cref="NewKey"/>/<see cref="NewStartTick"/> moves the note; the others don't.</summary>
+/// (and optionally the current <see cref="LengthTick"/>) locate it (original values), and each nullable "New"
+/// field, when set, is the note's NEW value (null = leave unchanged). Changing <see cref="NewKey"/>/
+/// <see cref="NewStartTick"/> moves the note; the others don't.</summary>
 public readonly record struct NoteEdit(
     int Channel, int Key, int StartTick,
-    int? NewKey = null, int? NewStartTick = null, int? NewLength = null, int? NewVelocity = null, bool? Muted = null);
+    int? NewKey = null, int? NewStartTick = null, int? NewLength = null, int? NewVelocity = null, bool? Muted = null,
+    int? LengthTick = null);

@@ -34,7 +34,7 @@ public sealed partial class FlInjectBridge
     public async Task<double> GetTempoAsync(CancellationToken ct = default)
         => await GetParamAsync(CmdSetTempo, ct) / 1000.0;
 
-    /// <summary>Master volume, 0..12800 (≈7624 default). Live-verified.</summary>
+    /// <summary>Master volume as a raw native integer, 0..12800. No dB conversion is defined. Live-verified.</summary>
     public Task SetMasterVolumeAsync(int value, CancellationToken ct = default)
         => SetParamAsync(CmdMasterVolume, Math.Clamp(value, 0, 12800), ct);
 
@@ -69,7 +69,7 @@ public sealed partial class FlInjectBridge
     public static uint MixerFxParamId(int track, int slot, int paramIndex)
         => (uint)(((track * 0x40 + slot) << 16) + paramIndex) + 0x70008000u;
 
-    /// <summary>Set a mixer track volume 0..12800 (track 0 = master). Live-verified.</summary>
+    /// <summary>Set mixer track volume as a raw native integer, 0..12800 (track 0 = master). No dB conversion is defined. Live-verified.</summary>
     public async Task SetMixerVolumeAsync(int track, int value, CancellationToken ct = default)
     {
         await ValidateAddressableMixerTrackAsync(track, ct);
@@ -83,18 +83,23 @@ public sealed partial class FlInjectBridge
         return await GetParamAsync(MixerTrackParamId(track, MixerVolOffset), ct);
     }
 
-    /// <summary>Set a mixer track pan 0..12800 (6400 = center).</summary>
+    /// <summary>Mixer pan magnitude at hard left/right. The mixer pan bus value is SIGNED with 0 = center,
+    /// unlike channel pan (0..12800, 6400 = center). Live evidence (Ember Tides v006): untouched tracks
+    /// read 0, and a stored 6800 rendered with a silent left channel; 0 rendered L/R within 0.04 dB.</summary>
+    public const int MixerPanLimit = 6400;
+
+    /// <summary>Set a mixer track pan -6400..6400 (0 = center, negative = left). Values outside are clamped.</summary>
     public async Task SetMixerPanAsync(int track, int value, CancellationToken ct = default)
     {
         await ValidateAddressableMixerTrackAsync(track, ct);
-        await SetParamAsync(MixerTrackParamId(track, MixerPanOffset), Math.Clamp(value, 0, 12800), ct);
+        await SetParamAsync(MixerTrackParamId(track, MixerPanOffset), Math.Clamp(value, -MixerPanLimit, MixerPanLimit), ct);
     }
 
-    /// <summary>Read a mixer track pan 0..12800 (bus GET; symmetric with the setter).</summary>
+    /// <summary>Read a mixer track pan -6400..6400 (bus GET; low-32-bit signed so left values round-trip).</summary>
     public async Task<int> GetMixerPanAsync(int track, CancellationToken ct = default)
     {
         await ValidateAddressableMixerTrackAsync(track, ct);
-        return (int)await GetParamAsync(MixerTrackParamId(track, MixerPanOffset), ct);
+        return unchecked((int)await GetParamAsync(MixerTrackParamId(track, MixerPanOffset), ct));
     }
 
     /// <summary>Set a mixer FX-slot plugin parameter (normalized fixed-point value).</summary>
@@ -112,7 +117,7 @@ public sealed partial class FlInjectBridge
     /// for reordered/deleted-channel projects, resolve the channel's recEventId first.</summary>
     public static uint ChannelParamId(int channel, uint paramIndex) => (uint)(channel << 16) + paramIndex;
 
-    /// <summary>Set channel volume 0..12800 (10000 = default 78%). Live-verified.</summary>
+    /// <summary>Set channel volume as a raw native integer, 0..12800. Live-verified.</summary>
     public Task SetChannelVolumeAsync(int channel, int value, CancellationToken ct = default)
         => SetParamAsync(ChannelParamId(channel, ChanVol), Math.Clamp(value, 0, 12800), ct);
 

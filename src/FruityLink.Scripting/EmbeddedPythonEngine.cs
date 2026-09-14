@@ -25,7 +25,8 @@ internal sealed class EmbeddedPythonEngine
         {
             _instance ??= new(options);
             if (!SamePath(_instance._options.RuntimeDirectory, options.RuntimeDirectory) ||
-                !SamePath(_instance._options.PythonPackagePath, options.PythonPackagePath))
+                !SamePath(_instance._options.PythonPackagePath, options.PythonPackagePath) ||
+                !SamePaths(_instance._options.ExtensionPackagePaths, options.ExtensionPackagePaths))
                 throw new InvalidOperationException("The process already owns another embedded Python configuration. Restart FL to change it.");
             return _instance;
         }
@@ -97,6 +98,8 @@ internal sealed class EmbeddedPythonEngine
     }
 
     private static bool SamePath(string first, string second) => string.Equals(first, second, StringComparison.OrdinalIgnoreCase);
+    private static bool SamePaths(IReadOnlyList<string> first, IReadOnlyList<string> second) => first.Count == second.Count &&
+        first.Zip(second).All(pair => SamePath(pair.First, pair.Second));
 }
 
 internal sealed class EmbeddedPythonJob(string code, int seconds,

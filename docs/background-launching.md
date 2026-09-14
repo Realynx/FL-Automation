@@ -61,6 +61,8 @@ with launch(
     session.render(r"C:\jobs\new-song.wav")
 ```
 
+`session.render_range(path, start_tick=..., length_tick=...)` renders one section instead: it trims the live project with [`fruitylink.audition.isolate_range`](python/api.md#render-one-section) and then behaves like `render()`. The WAV ends exactly at the range unless `tail_beats` keeps an `End` marker past it for the tails.
+
 `source=` optionally supplies an existing FLP to copy. The source is never opened by FL; the new working copy is. `save()` writes that working copy, while `save(new_path)` creates a new snapshot. `render()` snapshots the session, closes its editor, and starts a separate owned export process. It refuses existing output paths and validates the resulting WAV. Closing a session without saving discards unsaved changes. A failed render preserves its snapshot under the session's `job_directory`.
 
 Each `launch()` owns a separate job, process, desktop, discovery directory and project. Use separate output paths and one session per worker to run concurrent builds. Calls into one session remain serialized. Discovery verifies the launched PID and instance identity before returning a `Studio`.

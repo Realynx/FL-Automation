@@ -130,6 +130,49 @@ public sealed class NoteIntegrityTests
     }
 
     [Fact]
+    public async Task EditOfStackedDuplicatesIsRefusedBeforeAnyWrite()
+    {
+        using var native = new NoteNative();
+        native.Seed(new NoteSpec(1, 60, 0, 96, 100), new NoteSpec(1, 60, 0, 192, 100), new NoteSpec(1, 64, 96, 96, 100));
+        var error = await Assert.ThrowsAsync<InvalidOperationException>(() => new FlInjectBridge().EditNotesAsync(1,
+            [new(1, 64, 96, NewVelocity: 50), new(1, 60, 0, NewVelocity: 90)]));
+        Assert.Contains("matches 2 stacked notes (lengths 96, 192)", error.Message);
+        Assert.Contains("lengthTick", error.Message);
+        Assert.DoesNotContain(native.Commands, IsMutation);
+        Assert.All(native.Records, record => Assert.Equal(100, record[21]));
+    }
+
+    [Fact]
+    public async Task LengthTickPicksOneStackedDuplicateAndAllowMultipleEditsAll()
+    {
+        using var native = new NoteNative();
+        native.Seed(new NoteSpec(1, 60, 0, 96, 100), new NoteSpec(1, 60, 0, 192, 100));
+        Assert.Equal(1, await new FlInjectBridge().EditNotesAsync(1, [new(1, 60, 0, NewVelocity: 90, LengthTick: 192)]));
+        Assert.Equal(100, native.Records.Single(r => BitConverter.ToInt32(r, 8) == 96)[21]);
+        Assert.Equal(90, native.Records.Single(r => BitConverter.ToInt32(r, 8) == 192)[21]);
+        Assert.Equal(0, await new FlInjectBridge().EditNotesAsync(1, [new(1, 60, 0, NewVelocity: 70, LengthTick: 48)]));
+        Assert.Equal(2, await new FlInjectBridge().EditNotesAsync(1, [new(1, 60, 0, NewVelocity: 70)], allowMultiple: true));
+        Assert.All(native.Records, record => Assert.Equal(70, record[21]));
+    }
+
+    [Fact]
+    public async Task DeleteRefusesAmbiguousTargetsAndHonorsLengthTickAndAllowMultiple()
+    {
+        using var native = new NoteNative();
+        native.Seed(new NoteSpec(1, 60, 0, 96, 100), new NoteSpec(1, 60, 0, 96, 100), new NoteSpec(1, 60, 0, 192, 100), new NoteSpec(1, 64, 96, 96, 100));
+        await Assert.ThrowsAsync<InvalidOperationException>(() => new FlInjectBridge().DeleteNotesAsync(1, [new(1, 60, 0)]));
+        Assert.DoesNotContain(native.Commands, IsMutation);
+        Assert.Equal(4, native.Records.Count);
+        Assert.Equal(1, await new FlInjectBridge().DeleteNotesAsync(1, [new(1, 60, 0, 192)]));
+        Assert.Equal(3, native.Records.Count);
+        // Identical duplicates (same length) can only be addressed together.
+        await Assert.ThrowsAsync<InvalidOperationException>(() => new FlInjectBridge().DeleteNotesAsync(1, [new(1, 60, 0, 96)]));
+        Assert.Equal(2, await new FlInjectBridge().DeleteNotesAsync(1, [new(1, 60, 0, 96)], allowMultiple: true));
+        var survivor = Assert.Single(native.Records);
+        Assert.Equal(64, BitConverter.ToUInt16(survivor, 0xC));
+    }
+
+    [Fact]
     public async Task CloneOfOrphanNotesRejectsBeforeSelectingOrCreatingPattern()
     {
         using var native = new NoteNative();

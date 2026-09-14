@@ -71,3 +71,5 @@ jobs:
           uv sync --directory python --python "${{ matrix.python-version }}"
       - name: Check API parity, lint, types, tests, and distributions
         run: uv run --directory python python tools/check.py
+      - name: Check optional Serum extension
+        run: uv run --project python python extensions/serum-support/tools/check.py

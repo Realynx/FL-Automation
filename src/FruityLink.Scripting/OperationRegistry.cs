@@ -60,8 +60,17 @@ internal sealed class BoundOperation
             OperationAvailability.Requirements(name), _result is null ? null : SchemaBuilder.ForType(_result.PropertyType));
     }
 
+    /// <summary>Wire names still accepted for parameters that were renamed for consistency (operation -> old, new),
+    /// so an older wheel keeps working against a newer host. The old name is only honoured when the new one is absent.</summary>
+    private static readonly Dictionary<string, (string Old, string New)> LegacyArgumentAliases = new(StringComparer.Ordinal)
+    {
+        ["select_channel"] = ("index", "channel"),
+        ["set_channel_solo"] = ("index", "channel"),
+    };
+
     internal object?[] Bind(JsonElement arguments)
     {
+        arguments = ApplyLegacyAliases(arguments);
         JsonValidation.Object(arguments, "arguments", Metadata.Parameters.Select(parameter => parameter.Name));
         JsonValidation.Values(arguments);
         return _parameters.Select(parameter => BindParameter(parameter, arguments)).ToArray();
@@ -78,6 +87,20 @@ internal sealed class BoundOperation
         }
         await task.ConfigureAwait(false);
         return _result?.GetValue(task);
+    }
+
+    private JsonElement ApplyLegacyAliases(JsonElement arguments)
+    {
+        if (!LegacyArgumentAliases.TryGetValue(Metadata.Name, out var alias) || arguments.ValueKind != JsonValueKind.Object
+            || !arguments.TryGetProperty(alias.Old, out _) || arguments.TryGetProperty(alias.New, out _))
+            return arguments;
+        var renamed = new Dictionary<string, JsonElement>(StringComparer.Ordinal);
+        foreach (var property in arguments.EnumerateObject())
+        {
+            string name = property.Name == alias.Old ? alias.New : property.Name;
+            if (!renamed.TryAdd(name, property.Value)) return arguments;   // duplicate keys: let the strict validation report them
+        }
+        return JsonSerializer.SerializeToElement(renamed, ScriptingJson.Options);
     }
 
     private object? BindParameter(ParameterInfo parameter, JsonElement arguments)

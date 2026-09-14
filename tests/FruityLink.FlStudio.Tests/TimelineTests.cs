@@ -142,6 +142,44 @@ public sealed class TimelineTests : IDisposable
         Assert.Null(status?.TimelineLayout);
     }
 
+    [Fact]
+    public async Task DeleteMarkerShiftsLaterRecordsShrinksTheArrayInPlaceAndRefreshesFl()
+    {
+        var native = new TimelineTransport();
+        var bridge = new FlInjectBridge();
+        await bridge.AddMarkerAsync(0, "Intro");
+        await bridge.AddMarkerAsync(768, "Chorus");
+        await bridge.AddMarkerAsync(1536, "Outro");
+
+        await bridge.DeleteMarkerAsync(1);
+        string markers = await bridge.ListMarkersAsync();
+
+        Assert.Contains("2 markers:", markers);
+        Assert.Contains("Intro @ tick 0 (bar 1)", markers);
+        Assert.Contains("Outro @ tick 1536 (bar 5)", markers);
+        Assert.DoesNotContain("Chorus", markers);
+        Assert.Contains("pokeabs 7fff8 " + Convert.ToHexString(BitConverter.GetBytes(2L)).ToLowerInvariant(), native.Commands);
+        Assert.Single(native.Commands, command => command.StartsWith("pokeabs 80034 ", StringComparison.Ordinal));
+        Assert.Contains("call da40c0 60000", native.Commands);
+    }
+
+    [Fact]
+    public async Task DeleteMarkerRefusesAMissingIndexWithoutWritingOrRefreshing()
+    {
+        var native = new TimelineTransport();
+        var bridge = new FlInjectBridge();
+        await bridge.AddMarkerAsync(0, "Intro");
+        int before = native.Commands.Count;
+
+        var error = await Assert.ThrowsAsync<InvalidOperationException>(() => bridge.DeleteMarkerAsync(1));
+        await Assert.ThrowsAsync<ArgumentOutOfRangeException>(() => bridge.DeleteMarkerAsync(-1));
+
+        Assert.Contains("does not exist", error.Message);
+        Assert.DoesNotContain(native.Commands.Skip(before), command => command.StartsWith("poke", StringComparison.Ordinal));
+        Assert.DoesNotContain(native.Commands.Skip(before), command => command.StartsWith("call", StringComparison.Ordinal));
+        Assert.Contains("Intro @ tick 0 (bar 1)", await bridge.ListMarkersAsync());
+    }
+
     private static Task Invoke(FlInjectBridge bridge, string operation) => operation switch
     {
         "marker" => bridge.AddMarkerAsync(0, "Intro"),
@@ -206,6 +244,7 @@ public sealed class TimelineTests : IDisposable
             "14aba80" => ActiveSlot,
             "14aab88" => 0x20008UL,
             "14a79f8" => 0UL,
+            "149e8b4" => 0xFFFFFFFFUL,
             _ => throw new InvalidOperationException("Unexpected global: " + address),
         }));
 
@@ -228,6 +267,7 @@ public sealed class TimelineTests : IDisposable
             byte[] name = Read(text, length * 2);
             ulong record = 0x80000UL + (ulong)MarkerNames.Count * 0x34;
             ulong ownedName = 0xa0004UL + (ulong)MarkerNames.Count * 1024;
+            Write(record, new byte[0x34]);
             Write(record, BitConverter.GetBytes((int)Hex(call[2])));
             Write(record + 8, BitConverter.GetBytes(ownedName));
             Write(ownedName - 4, BitConverter.GetBytes(length));

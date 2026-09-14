@@ -69,11 +69,13 @@ class Loudness:
         value = db(self.energy(begin, end), 10)
         return None if value is None else value - 0.691
 
-    def integrated(self) -> float | None:
+    def integrated(self, begin: int = 0, end: int | None = None) -> float | None:
+        """Gated integrated loudness over selected frames [begin, end); blocks start at begin."""
         block = round(0.4 * self.rate)
         hop = round(0.1 * self.rate)
+        stop = len(self.prefix) - 1 if end is None else end
         energies = [self.energy(start, start + block)
-                    for start in range(0, len(self.prefix) - block, hop)]
+                    for start in range(begin, stop + 1 - block, hop)]
         absolute = 10 ** ((-70 + 0.691) / 10)
         retained = [energy for energy in energies if energy > absolute]
         if not retained:

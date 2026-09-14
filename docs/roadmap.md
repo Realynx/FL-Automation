@@ -56,3 +56,30 @@ channel has been created in Glass Satellites.
 - [ ] Add a verified per-mixer audio capture/stem workflow. Existing untimed peak
   meters are insufficient for RMS, PSR or spectral analysis; file measurements
   must identify their actual source.
+
+## Optional synth preset selection and auditioning
+
+- [x] Add a separately installable `fruitylink-serum` Python wheel for read-only
+  preset inventory, local Serum 2 metadata queries, and bounded descriptions of
+  supplied audition WAV/PCM. Reuse the SDK's existing audio analysis.
+- [x] Load a specific preset into a verified Serum instance through a supported
+  host operation. `load_channel_plugin_state` / `load_mixer_effect_state` (wrapper
+  state-file loader, same instance) plus `fruitylink_serum.load_preset` /
+  `build_preset` / `to_vstpreset`. Live-verified 2026-09-13 on FL 26.1.3.5570: a
+  `.vstpreset` with the GUID-string class id loaded a captured chord state (A Level
+  75%, unison 7, Sub Saw) and a generated preset read back unison 3 / detune 0.35;
+  raw `.SerumPreset` and synthesised `.fst` files are ignored by the wrapper. See
+  `artifacts/serum-preset-loading/README.md`.
+- [ ] Render comparable isolated auditions with explicit note/chord, velocity,
+  gate length, tempo, tail length, and effects policy. Record those conditions
+  with the preset identity and audio measurements.
+- [ ] Detect embedded clip/arpeggiator playback and custom tuning before choosing
+  a preset for a supplied melody. Check project save/reopen persistence after
+  applying the preset, including its complete internal state.
+
+This gap became concrete during Ember Tides v005: preset descriptions provided
+useful future-bass candidates, but metadata did not establish the resulting sound.
+The extension describes supplied audio; it does not yet load or audition presets.
+Any Serum-specific native implementation and its dependencies should remain
+optional, outside the default SDK/MCP payload. See
+[optional Serum support](python/serum-support.md).

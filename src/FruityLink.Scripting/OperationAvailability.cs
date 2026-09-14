@@ -9,20 +9,23 @@ internal static class OperationAvailability
     {
         "get_mixer_track_muted", "set_mixer_track_muted", "get_mixer_track_name", "set_mixer_track_name",
         "list_mixer_tracks", "set_mixer_send", "list_mixer_effects", "add_mixer_effect", "remove_mixer_effect",
-        "clone_mixer_effect", "add_mixer_track", "query_mixer_tracks"
+        "clone_mixer_effect", "add_mixer_track", "query_mixer_tracks", "load_mixer_effect_state", "get_mixer_effect_state"
     };
+    // State reads snapshot the project through FL's serializer, so they share the save-time note validation.
+    private static readonly HashSet<string> StateSnapshot = new(StringComparer.Ordinal)
+        { "get_channel_plugin_state", "get_mixer_effect_state" };
     private static readonly HashSet<string> Chat = new(StringComparer.Ordinal)
         { "open_chat_tab", "close_chat_tab", "chat_poll", "chat_say" };
     private static readonly HashSet<string> ConditionalMixer = new(StringComparer.Ordinal)
         { "list_plugin_params", "set_plugin_param", "query_plugin_parameters" };
     private static readonly HashSet<string> Timeline = new(StringComparer.Ordinal)
-        { "add_marker", "list_markers", "set_loop_region" };
+        { "add_marker", "delete_marker", "list_markers", "set_loop_region" };
     private static readonly HashSet<string> ProjectSave = new(StringComparer.Ordinal)
         { "save_project", "save_project_as", "save_copy", "save_new_version" };
     private static readonly HashSet<string> Automation = new(StringComparer.Ordinal)
     {
         "create_automation_clip", "add_automation_clip", "set_automation_points", "add_automation_point",
-        "delete_automation_point", "list_automation_points", "query_automation_points"
+        "delete_automation_point", "set_automation_point", "list_automation_points", "query_automation_points"
     };
 
     internal static IReadOnlyList<string> Requirements(string operation)
@@ -32,7 +35,7 @@ internal static class OperationAvailability
         if (ConditionalMixer.Contains(operation)) return new[] { "mixer_layout_for_effect_slot" };
         if (Timeline.Contains(operation)) return new[] { "timeline_layout" };
         if (Automation.Contains(operation)) return new[] { "automation_clips" };
-        if (ProjectSave.Contains(operation)) return new[] { "project_note_validation" };
+        if (ProjectSave.Contains(operation) || StateSnapshot.Contains(operation)) return new[] { "project_note_validation" };
         return Array.Empty<string>();
     }
 
@@ -55,7 +58,7 @@ internal static class OperationAvailability
     }
 
     private static string? SaveUnavailable(string operation, FlSymbolStatus status)
-        => ProjectSave.Contains(operation) &&
+        => (ProjectSave.Contains(operation) || StateSnapshot.Contains(operation)) &&
             (status.Unresolved.Contains("NoteRecorderArrayBase") || status.Unresolved.Contains("ChannelList"))
             ? "Saving requires resolved note-recorder and channel-list symbols to check for invalid notes before invoking FL's serializer."
             : null;

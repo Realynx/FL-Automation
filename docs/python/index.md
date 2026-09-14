@@ -44,4 +44,5 @@ The same Python package works across supported native profiles. Actual operation
 - [Examples](examples.md): compose notes, route audio, browse parameters and create automation.
 - [Execution](execution.md): embedded scripts, external clients, cancellation and results.
 - [Audio analysis](../python-audio-analysis.md) and [spectral analysis](../python-spectral-analysis.md): measure explicit files and PCM ranges.
+- [Optional Serum support](serum-support.md): inspect presets and describe audition audio with a separate extension.
 - [Validation evidence](../python-validation.md): what has been checked and its limits.

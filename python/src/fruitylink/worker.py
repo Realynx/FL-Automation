@@ -62,10 +62,16 @@ def _safe_result(value: object) -> JsonValue:
 
 def execute(code: str, studio: Studio, *, filename: str = "<fruitylink-script>",
             after_execution: Callable[[], None] | None = None) -> dict[str, JsonValue]:
-    """Run with globals ``fl`` and ``result``. Return bounded output on success or failure."""
+    """Run with globals ``fl`` and ``result``. Return bounded output on success or failure.
+
+    On failure the response keeps everything the script produced before raising: captured
+    ``stdout``/``stderr`` and, when ``result`` was assigned and is still serializable, its
+    value under ``result`` with ``resultPartial`` set. Successful responses are unchanged.
+    """
     stdout, stderr = BoundedText(), BoundedText()
     result: dict[str, JsonValue] = {"ok": False, "result": None}
     scope: dict[str, object] = {"__name__": "__main__", "__file__": filename, "fl": studio, "result": None}
+    executed = False
     try:
         with contextlib.redirect_stdout(stdout), contextlib.redirect_stderr(stderr):
             try:
@@ -73,14 +79,48 @@ def execute(code: str, studio: Studio, *, filename: str = "<fruitylink-script>",
             finally:
                 if after_execution is not None:
                     after_execution()
+            executed = True
             result["result"] = _safe_result(scope.get("result"))
         result["ok"] = True
     except BaseException as exc:
         result["error"] = _bounded(f"{type(exc).__name__}: {exc}")
         result["traceback"] = _bounded(traceback.format_exc())
+        if not executed:
+            _recover_partial_result(result, scope.get("result"))
     result.update(stdout=stdout.getvalue(), stderr=stderr.getvalue(),
                   stdoutTruncated=stdout.truncated, stderrTruncated=stderr.truncated)
     return result
+
+
+def _recover_partial_result(result: dict[str, JsonValue], value: object) -> None:
+    """Attach whatever ``result`` held when the script raised, if it can still be serialized."""
+    if value is None:
+        return
+    try:
+        result["result"] = _safe_result(value)
+        result["resultPartial"] = True
+    except Exception as exc:  # noqa: BLE001 - the original failure is already reported.
+        result["resultPartialError"] = _bounded(f"{type(exc).__name__}: {exc}")
+
+
+def encode_response(result: dict[str, JsonValue], *, limit: int = RESPONSE_LIMIT, origin: str = "Response") -> bytes:
+    """Serialize a response within ``limit`` bytes, dropping ``result`` before any other field.
+
+    Captured output, the error and the traceback survive so a caller still learns what happened.
+    """
+    data = json.dumps(result, ensure_ascii=False, allow_nan=False, separators=(",", ":")).encode("utf-8")
+    if len(data) <= limit:
+        return data
+    reduced = dict(result, ok=False, result=None, resultPartial=False)
+    reduced["resultDropped"] = True
+    reduced["error"] = _bounded(f"{origin} exceeds {limit // (1024 * 1024)} MiB; the result value was dropped "
+                                f"({len(data)} bytes serialized). Write large artifacts to a file instead."
+                                + (f" Original error: {result['error']}" if "error" in result else ""))
+    data = json.dumps(reduced, ensure_ascii=False, allow_nan=False, separators=(",", ":")).encode("utf-8")
+    if len(data) <= limit:
+        return data
+    return json.dumps({"ok": False, "result": None, "error": f"{origin} exceeds {limit // (1024 * 1024)} MiB."},
+                      ensure_ascii=False, separators=(",", ":")).encode("utf-8")
 
 
 def run_request(value: JsonValue) -> dict[str, JsonValue]:
@@ -111,9 +151,7 @@ def _read_request(path: Path | None) -> JsonValue:
 
 
 def _write_response(path: Path, result: dict[str, JsonValue]) -> None:
-    data = json.dumps(result, ensure_ascii=False, allow_nan=False, separators=(",", ":")).encode("utf-8")
-    if len(data) > RESPONSE_LIMIT:
-        data = b'{"ok":false,"result":null,"error":"Worker response exceeds 1 MiB."}'
+    data = encode_response(result, origin="Worker response")
     temporary = path.with_name(path.name + f".{os.getpid()}.tmp")
     try:
         temporary.write_bytes(data)

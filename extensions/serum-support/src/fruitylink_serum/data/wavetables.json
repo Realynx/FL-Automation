@@ -1,0 +1,1192 @@
+{
+ "provenance": {
+  "generated": "2026-09-13",
+  "method": "Read factory wavetable WAVs (float32 mono, 2048-sample frames per the 'clm ' chunk), computed the first 32 harmonics of each frame with a direct DFT and labelled by even/odd energy, odd-harmonic decay slope and spectral nulls. Labels are derived; no audio is stored.",
+  "files_scanned": 1125,
+  "engine_reference": "Serum 2 (productVersion up to 2.1.4), FL Studio 26.1.3 wrapper displays"
+ },
+ "tables_root_hint": "Documents/Xfer/Serum 2 Presets/Tables; state relativePathToWT is relative to this folder (e.g. 'S2 Tables/Default Shapes.wav', 'Analog/Basic Shapes.wav'; a leading '/' also occurs)",
+ "position_rule": {
+  "key": "Oscillator{n}/WTOsc{n}/plainParams/kParamTablePos",
+  "range": "0..256 spanning the table",
+  "frame_from_value": "frame = round(value / 256 * num_frames), minimum 1",
+  "value_for_frame": "256 * frame / num_frames",
+  "evidence": "88.29 on the 166-frame Analog/Basic Mg.wav displayed as WT Pos 57 in FL (88.29/256*166 = 57.25 -> 57); library max observed 256.0",
+  "confidence": "inferred"
+ },
+ "sub_oscillator_shapes": {
+  "key": "Oscillator4/SubOsc4/plainParams/kParamShape",
+  "values": [
+   "kSine (default, absent)",
+   "kRoundRect",
+   "kTriangle",
+   "kSaw",
+   "kSquare",
+   "kPulse"
+  ],
+  "fl_normalized": {
+   "kSine": 0.0,
+   "kRoundRect": 0.2,
+   "kTriangle": 0.4,
+   "kSaw": 0.6,
+   "kSquare": 0.8,
+   "kPulse": 1.0
+  },
+  "confidence": "verified except kRoundRect"
+ },
+ "label_rules": {
+  "sine": "h1 dominant, other harmonics < 5 % of h1",
+  "triangle": "odd harmonics only, ~1/n^2 decay",
+  "square": "odd harmonics only, ~1/n decay",
+  "saw": "all harmonics, ~1/n decay, no nulls",
+  "pulse": "all harmonics with sinc nulls",
+  "other": "anything else (analog-modelled or complex frames)"
+ },
+ "tables": [
+  {
+   "relative_path": "S2 Tables/Default Shapes.wav",
+   "num_frames": 9,
+   "frame_length": 2048,
+   "frames_by_label": {
+    "saw": [
+     1
+    ],
+    "sine": [
+     2
+    ],
+    "triangle": [
+     3
+    ],
+    "square": [
+     4,
+     5
+    ],
+    "pulse": [
+     6,
+     7,
+     8
+    ],
+    "other": [
+     9
+    ]
+   },
+   "table_pos_for_frame": {
+    "1": 28.444,
+    "2": 56.889,
+    "3": 85.333,
+    "4": 113.778,
+    "5": 142.222,
+    "6": 170.667,
+    "7": 199.111,
+    "8": 227.556,
+    "9": 256.0
+   },
+   "frames": [
+    {
+     "frame": 1,
+     "label": "saw",
+     "even_over_odd": 0.7138,
+     "odd_decay_slope": -1.0,
+     "nulls": 0
+    },
+    {
+     "frame": 2,
+     "label": "sine",
+     "even_over_odd": 0.0,
+     "odd_decay_slope": -4.39,
+     "nulls": 1
+    },
+    {
+     "frame": 3,
+     "label": "triangle",
+     "even_over_odd": 0.0,
+     "odd_decay_slope": -2.0,
+     "nulls": 2
+    },
+    {
+     "frame": 4,
+     "label": "square",
+     "even_over_odd": 0.0,
+     "odd_decay_slope": -1.056,
+     "nulls": 8
+    },
+    {
+     "frame": 5,
+     "label": "square",
+     "even_over_odd": 0.0,
+     "odd_decay_slope": -1.0,
+     "nulls": 8
+    },
+    {
+     "frame": 6,
+     "label": "pulse",
+     "even_over_odd": 0.6037,
+     "odd_decay_slope": -1.0,
+     "nulls": 4
+    },
+    {
+     "frame": 7,
+     "label": "pulse",
+     "even_over_odd": 0.8224,
+     "odd_decay_slope": -0.937,
+     "nulls": 2
+    },
+    {
+     "frame": 8,
+     "label": "pulse",
+     "even_over_odd": 0.9076,
+     "odd_decay_slope": -0.753,
+     "nulls": 1
+    },
+    {
+     "frame": 9,
+     "label": "other",
+     "even_over_odd": 0.9462,
+     "odd_decay_slope": -0.127,
+     "nulls": 0
+    }
+   ],
+   "confidence": "derived-labels"
+  },
+  {
+   "relative_path": "Analog/Basic Mg.wav",
+   "num_frames": 166,
+   "frame_length": 2048,
+   "frames_by_label": {
+    "triangle": [
+     1,
+     2,
+     3,
+     4,
+     5,
+     6
+    ],
+    "pulse": [
+     7,
+     8,
+     9,
+     10,
+     11,
+     12,
+     13,
+     14,
+     15,
+     16,
+     17,
+     18,
+     19,
+     20,
+     21,
+     97,
+     98,
+     105,
+     106,
+     107,
+     108,
+     109,
+     110,
+     111,
+     112,
+     113,
+     114,
+     115,
+     116,
+     118,
+     119,
+     120,
+     121,
+     122,
+     123,
+     124,
+     125,
+     126,
+     127,
+     128,
+     129,
+     130,
+     131,
+     132,
+     133,
+     134,
+     135,
+     136,
+     137,
+     138,
+     139,
+     140,
+     141,
+     142,
+     143,
+     144,
+     145,
+     147,
+     148,
+     149,
+     150,
+     151,
+     154,
+     155,
+     158,
+     159,
+     160,
+     161,
+     162,
+     164,
+     165
+    ],
+    "saw": [
+     22,
+     23,
+     24,
+     25,
+     26,
+     27,
+     28,
+     29,
+     30,
+     31,
+     32,
+     33,
+     34,
+     35,
+     36,
+     37,
+     38,
+     39,
+     40,
+     41,
+     42,
+     43,
+     44,
+     45,
+     46,
+     47,
+     48,
+     49,
+     50,
+     51,
+     52,
+     53,
+     54,
+     55,
+     56,
+     57,
+     58,
+     59,
+     60,
+     61,
+     62,
+     63,
+     64,
+     65,
+     66,
+     67,
+     68,
+     69,
+     70,
+     71,
+     72,
+     73,
+     74,
+     75,
+     76,
+     77,
+     78,
+     79,
+     80,
+     81,
+     82,
+     83,
+     84,
+     85,
+     86,
+     87,
+     88,
+     89,
+     90,
+     91,
+     92,
+     93,
+     94,
+     95,
+     96,
+     99,
+     100,
+     101,
+     102,
+     103,
+     104,
+     146,
+     152,
+     153,
+     156,
+     157,
+     163,
+     166
+    ],
+    "square": [
+     117
+    ]
+   },
+   "table_pos_for_frame": "use 256*frame/num_frames",
+   "frames": [
+    {
+     "frame": 1,
+     "label": "triangle",
+     "even_over_odd": 0.0461,
+     "odd_decay_slope": -2.092,
+     "nulls": 1
+    },
+    {
+     "frame": 2,
+     "label": "triangle",
+     "even_over_odd": 0.0274,
+     "odd_decay_slope": -2.269,
+     "nulls": 2
+    },
+    {
+     "frame": 3,
+     "label": "triangle",
+     "even_over_odd": 0.0169,
+     "odd_decay_slope": -2.27,
+     "nulls": 1
+    },
+    {
+     "frame": 4,
+     "label": "triangle",
+     "even_over_odd": 0.0469,
+     "odd_decay_slope": -2.287,
+     "nulls": 2
+    },
+    {
+     "frame": 5,
+     "label": "triangle",
+     "even_over_odd": 0.0283,
+     "odd_decay_slope": -2.082,
+     "nulls": 1
+    },
+    {
+     "frame": 6,
+     "label": "triangle",
+     "even_over_odd": 0.0656,
+     "odd_decay_slope": -1.996,
+     "nulls": 2
+    },
+    {
+     "frame": 7,
+     "label": "pulse",
+     "even_over_odd": 0.0883,
+     "odd_decay_slope": -1.962,
+     "nulls": 1
+    },
+    {
+     "frame": 8,
+     "label": "pulse",
+     "even_over_odd": 0.0981,
+     "odd_decay_slope": -1.991,
+     "nulls": 1
+    },
+    {
+     "frame": 9,
+     "label": "pulse",
+     "even_over_odd": 0.1409,
+     "odd_decay_slope": -1.862,
+     "nulls": 1
+    },
+    {
+     "frame": 10,
+     "label": "pulse",
+     "even_over_odd": 0.1513,
+     "odd_decay_slope": -1.76,
+     "nulls": 1
+    },
+    {
+     "frame": 11,
+     "label": "pulse",
+     "even_over_odd": 0.1677,
+     "odd_decay_slope": -1.744,
+     "nulls": 1
+    },
+    {
+     "frame": 12,
+     "label": "pulse",
+     "even_over_odd": 0.2058,
+     "odd_decay_slope": -1.648,
+     "nulls": 1
+    },
+    {
+     "frame": 13,
+     "label": "pulse",
+     "even_over_odd": 0.2356,
+     "odd_decay_slope": -1.602,
+     "nulls": 1
+    },
+    {
+     "frame": 14,
+     "label": "pulse",
+     "even_over_odd": 0.237,
+     "odd_decay_slope": -1.57,
+     "nulls": 1
+    },
+    {
+     "frame": 15,
+     "label": "pulse",
+     "even_over_odd": 0.2713,
+     "odd_decay_slope": -1.533,
+     "nulls": 1
+    },
+    {
+     "frame": 16,
+     "label": "pulse",
+     "even_over_odd": 0.3027,
+     "odd_decay_slope": -1.48,
+     "nulls": 1
+    },
+    {
+     "frame": 17,
+     "label": "pulse",
+     "even_over_odd": 0.293,
+     "odd_decay_slope": -1.484,
+     "nulls": 1
+    },
+    {
+     "frame": 18,
+     "label": "pulse",
+     "even_over_odd": 0.3232,
+     "odd_decay_slope": -1.436,
+     "nulls": 1
+    },
+    {
+     "frame": 19,
+     "label": "pulse",
+     "even_over_odd": 0.3505,
+     "odd_decay_slope": -1.394,
+     "nulls": 1
+    },
+    {
+     "frame": 20,
+     "label": "pulse",
+     "even_over_odd": 0.3366,
+     "odd_decay_slope": -1.401,
+     "nulls": 1
+    },
+    {
+     "frame": 21,
+     "label": "pulse",
+     "even_over_odd": 0.3699,
+     "odd_decay_slope": -1.37,
+     "nulls": 1
+    },
+    {
+     "frame": 22,
+     "label": "saw",
+     "even_over_odd": 0.402,
+     "odd_decay_slope": -1.337,
+     "nulls": 0
+    },
+    {
+     "frame": 23,
+     "label": "saw",
+     "even_over_odd": 0.4156,
+     "odd_decay_slope": -1.322,
+     "nulls": 0
+    },
+    {
+     "frame": 24,
+     "label": "saw",
+     "even_over_odd": 0.4242,
+     "odd_decay_slope": -1.317,
+     "nulls": 0
+    },
+    {
+     "frame": 25,
+     "label": "saw",
+     "even_over_odd": 0.4499,
+     "odd_decay_slope": -1.288,
+     "nulls": 0
+    },
+    {
+     "frame": 26,
+     "label": "saw",
+     "even_over_odd": 0.455,
+     "odd_decay_slope": -1.277,
+     "nulls": 0
+    },
+    {
+     "frame": 27,
+     "label": "saw",
+     "even_over_odd": 0.4661,
+     "odd_decay_slope": -1.276,
+     "nulls": 0
+    },
+    {
+     "frame": 28,
+     "label": "saw",
+     "even_over_odd": 0.4908,
+     "odd_decay_slope": -1.247,
+     "nulls": 0
+    },
+    {
+     "frame": 29,
+     "label": "saw",
+     "even_over_odd": 0.4879,
+     "odd_decay_slope": -1.245,
+     "nulls": 0
+    },
+    {
+     "frame": 30,
+     "label": "saw",
+     "even_over_odd": 0.5032,
+     "odd_decay_slope": -1.239,
+     "nulls": 0
+    },
+    {
+     "frame": 31,
+     "label": "saw",
+     "even_over_odd": 0.5213,
+     "odd_decay_slope": -1.223,
+     "nulls": 0
+    },
+    {
+     "frame": 32,
+     "label": "saw",
+     "even_over_odd": 0.518,
+     "odd_decay_slope": -1.221,
+     "nulls": 0
+    },
+    {
+     "frame": 33,
+     "label": "saw",
+     "even_over_odd": 0.5246,
+     "odd_decay_slope": -1.216,
+     "nulls": 0
+    },
+    {
+     "frame": 34,
+     "label": "saw",
+     "even_over_odd": 0.5376,
+     "odd_decay_slope": -1.199,
+     "nulls": 0
+    },
+    {
+     "frame": 35,
+     "label": "saw",
+     "even_over_odd": 0.5548,
+     "odd_decay_slope": -1.181,
+     "nulls": 0
+    },
+    {
+     "frame": 36,
+     "label": "saw",
+     "even_over_odd": 0.5539,
+     "odd_decay_slope": -1.182,
+     "nulls": 0
+    },
+    {
+     "frame": 37,
+     "label": "saw",
+     "even_over_odd": 0.5718,
+     "odd_decay_slope": -1.169,
+     "nulls": 0
+    },
+    {
+     "frame": 38,
+     "label": "saw",
+     "even_over_odd": 0.5799,
+     "odd_decay_slope": -1.162,
+     "nulls": 0
+    },
+    {
+     "frame": 39,
+     "label": "saw",
+     "even_over_odd": 0.5783,
+     "odd_decay_slope": -1.162,
+     "nulls": 0
+    },
+    {
+     "frame": 40,
+     "label": "saw",
+     "even_over_odd": 0.5891,
+     "odd_decay_slope": -1.156,
+     "nulls": 0
+    },
+    {
+     "frame": 41,
+     "label": "saw",
+     "even_over_odd": 0.5987,
+     "odd_decay_slope": -1.145,
+     "nulls": 0
+    },
+    {
+     "frame": 42,
+     "label": "saw",
+     "even_over_odd": 0.5937,
+     "odd_decay_slope": -1.145,
+     "nulls": 0
+    },
+    {
+     "frame": 43,
+     "label": "saw",
+     "even_over_odd": 0.6043,
+     "odd_decay_slope": -1.139,
+     "nulls": 0
+    },
+    {
+     "frame": 44,
+     "label": "saw",
+     "even_over_odd": 0.6063,
+     "odd_decay_slope": -1.135,
+     "nulls": 0
+    },
+    {
+     "frame": 45,
+     "label": "saw",
+     "even_over_odd": 0.6066,
+     "odd_decay_slope": -1.135,
+     "nulls": 0
+    },
+    {
+     "frame": 46,
+     "label": "saw",
+     "even_over_odd": 0.6137,
+     "odd_decay_slope": -1.132,
+     "nulls": 0
+    },
+    {
+     "frame": 47,
+     "label": "saw",
+     "even_over_odd": 0.6248,
+     "odd_decay_slope": -1.121,
+     "nulls": 0
+    },
+    {
+     "frame": 48,
+     "label": "saw",
+     "even_over_odd": 0.6134,
+     "odd_decay_slope": -1.127,
+     "nulls": 0
+    },
+    {
+     "frame": 49,
+     "label": "saw",
+     "even_over_odd": 0.6228,
+     "odd_decay_slope": -1.121,
+     "nulls": 0
+    },
+    {
+     "frame": 50,
+     "label": "saw",
+     "even_over_odd": 0.6358,
+     "odd_decay_slope": -1.111,
+     "nulls": 0
+    },
+    {
+     "frame": 51,
+     "label": "saw",
+     "even_over_odd": 0.634,
+     "odd_decay_slope": -1.109,
+     "nulls": 0
+    },
+    {
+     "frame": 52,
+     "label": "saw",
+     "even_over_odd": 0.6358,
+     "odd_decay_slope": -1.11,
+     "nulls": 0
+    },
+    {
+     "frame": 53,
+     "label": "saw",
+     "even_over_odd": 0.648,
+     "odd_decay_slope": -1.101,
+     "nulls": 0
+    },
+    {
+     "frame": 54,
+     "label": "saw",
+     "even_over_odd": 0.6485,
+     "odd_decay_slope": -1.095,
+     "nulls": 0
+    },
+    {
+     "frame": 55,
+     "label": "saw",
+     "even_over_odd": 0.6412,
+     "odd_decay_slope": -1.099,
+     "nulls": 0
+    },
+    {
+     "frame": 56,
+     "label": "saw",
+     "even_over_odd": 0.6472,
+     "odd_decay_slope": -1.094,
+     "nulls": 0
+    },
+    {
+     "frame": 57,
+     "label": "saw",
+     "even_over_odd": 0.6575,
+     "odd_decay_slope": -1.076,
+     "nulls": 0
+    },
+    {
+     "frame": 58,
+     "label": "saw",
+     "even_over_odd": 0.6483,
+     "odd_decay_slope": -1.082,
+     "nulls": 0
+    },
+    {
+     "frame": 59,
+     "label": "saw",
+     "even_over_odd": 0.6564,
+     "odd_decay_slope": -1.074,
+     "nulls": 0
+    },
+    {
+     "frame": 60,
+     "label": "saw",
+     "even_over_odd": 0.6691,
+     "odd_decay_slope": -1.049,
+     "nulls": 0
+    },
+    {
+     "frame": 61,
+     "label": "saw",
+     "even_over_odd": 0.6627,
+     "odd_decay_slope": -1.053,
+     "nulls": 0
+    },
+    {
+     "frame": 62,
+     "label": "saw",
+     "even_over_odd": 0.6952,
+     "odd_decay_slope": -0.964,
+     "nulls": 0
+    },
+    {
+     "frame": 63,
+     "label": "saw",
+     "even_over_odd": 0.7066,
+     "odd_decay_slope": -0.888,
+     "nulls": 0
+    },
+    {
+     "frame": 64,
+     "label": "saw",
+     "even_over_odd": 0.7038,
+     "odd_decay_slope": -0.885,
+     "nulls": 0
+    }
+   ],
+   "confidence": "derived-labels"
+  },
+  {
+   "relative_path": "Analog/Basic Mini.wav",
+   "num_frames": 4,
+   "frame_length": 2048,
+   "frames_by_label": {
+    "saw": [
+     1
+    ],
+    "pulse": [
+     2
+    ],
+    "square": [
+     3
+    ],
+    "other": [
+     4
+    ]
+   },
+   "table_pos_for_frame": {
+    "1": 64.0,
+    "2": 128.0,
+    "3": 192.0,
+    "4": 256.0
+   },
+   "frames": [
+    {
+     "frame": 1,
+     "label": "saw",
+     "even_over_odd": 0.7034,
+     "odd_decay_slope": -1.023,
+     "nulls": 0
+    },
+    {
+     "frame": 2,
+     "label": "pulse",
+     "even_over_odd": 0.1333,
+     "odd_decay_slope": -2.147,
+     "nulls": 1
+    },
+    {
+     "frame": 3,
+     "label": "square",
+     "even_over_odd": 0.0529,
+     "odd_decay_slope": -1.013,
+     "nulls": 8
+    },
+    {
+     "frame": 4,
+     "label": "other",
+     "even_over_odd": 0.9241,
+     "odd_decay_slope": -0.549,
+     "nulls": 0
+    }
+   ],
+   "confidence": "derived-labels"
+  },
+  {
+   "relative_path": "Analog/Basic Shapes.wav",
+   "num_frames": 7,
+   "frame_length": 2048,
+   "frames_by_label": {
+    "sine": [
+     1
+    ],
+    "saw": [
+     2
+    ],
+    "triangle": [
+     3
+    ],
+    "square": [
+     4,
+     7
+    ],
+    "pulse": [
+     5,
+     6
+    ]
+   },
+   "table_pos_for_frame": {
+    "1": 36.571,
+    "2": 73.143,
+    "3": 109.714,
+    "4": 146.286,
+    "5": 182.857,
+    "6": 219.429,
+    "7": 256.0
+   },
+   "frames": [
+    {
+     "frame": 1,
+     "label": "sine",
+     "even_over_odd": 0.0,
+     "odd_decay_slope": -4.39,
+     "nulls": 1
+    },
+    {
+     "frame": 2,
+     "label": "saw",
+     "even_over_odd": 0.7138,
+     "odd_decay_slope": -1.0,
+     "nulls": 0
+    },
+    {
+     "frame": 3,
+     "label": "triangle",
+     "even_over_odd": 0.0,
+     "odd_decay_slope": -2.0,
+     "nulls": 2
+    },
+    {
+     "frame": 4,
+     "label": "square",
+     "even_over_odd": 0.0091,
+     "odd_decay_slope": -1.0,
+     "nulls": 8
+    },
+    {
+     "frame": 5,
+     "label": "pulse",
+     "even_over_odd": 0.6101,
+     "odd_decay_slope": -0.998,
+     "nulls": 4
+    },
+    {
+     "frame": 6,
+     "label": "pulse",
+     "even_over_odd": 0.8263,
+     "odd_decay_slope": -0.929,
+     "nulls": 2
+    },
+    {
+     "frame": 7,
+     "label": "square",
+     "even_over_odd": 0.0048,
+     "odd_decay_slope": -1.056,
+     "nulls": 8
+    }
+   ],
+   "confidence": "derived-labels"
+  },
+  {
+   "relative_path": "Analog/Basic_Cjw.wav",
+   "num_frames": 6,
+   "frame_length": 2048,
+   "frames_by_label": {
+    "triangle": [
+     1,
+     2
+    ],
+    "pulse": [
+     3
+    ],
+    "saw": [
+     4,
+     5,
+     6
+    ]
+   },
+   "table_pos_for_frame": {
+    "1": 42.667,
+    "2": 85.333,
+    "3": 128.0,
+    "4": 170.667,
+    "5": 213.333,
+    "6": 256.0
+   },
+   "frames": [
+    {
+     "frame": 1,
+     "label": "triangle",
+     "even_over_odd": 0.064,
+     "odd_decay_slope": -2.496,
+     "nulls": 1
+    },
+    {
+     "frame": 2,
+     "label": "triangle",
+     "even_over_odd": 0.0654,
+     "odd_decay_slope": -2.047,
+     "nulls": 2
+    },
+    {
+     "frame": 3,
+     "label": "pulse",
+     "even_over_odd": 0.2858,
+     "odd_decay_slope": -1.187,
+     "nulls": 1
+    },
+    {
+     "frame": 4,
+     "label": "saw",
+     "even_over_odd": 0.4008,
+     "odd_decay_slope": -1.274,
+     "nulls": 0
+    },
+    {
+     "frame": 5,
+     "label": "saw",
+     "even_over_odd": 0.755,
+     "odd_decay_slope": -0.81,
+     "nulls": 0
+    },
+    {
+     "frame": 6,
+     "label": "saw",
+     "even_over_odd": 0.7153,
+     "odd_decay_slope": -1.0,
+     "nulls": 0
+    }
+   ],
+   "confidence": "derived-labels"
+  },
+  {
+   "relative_path": "Analog/Basic_McB.wav",
+   "num_frames": 4,
+   "frame_length": 2048,
+   "frames_by_label": {
+    "saw": [
+     1
+    ],
+    "triangle": [
+     2,
+     4
+    ],
+    "pulse": [
+     3
+    ]
+   },
+   "table_pos_for_frame": {
+    "1": 64.0,
+    "2": 128.0,
+    "3": 192.0,
+    "4": 256.0
+   },
+   "frames": [
+    {
+     "frame": 1,
+     "label": "saw",
+     "even_over_odd": 0.7151,
+     "odd_decay_slope": -0.998,
+     "nulls": 0
+    },
+    {
+     "frame": 2,
+     "label": "triangle",
+     "even_over_odd": 0.0171,
+     "odd_decay_slope": -2.733,
+     "nulls": 2
+    },
+    {
+     "frame": 3,
+     "label": "pulse",
+     "even_over_odd": 0.8914,
+     "odd_decay_slope": -0.928,
+     "nulls": 1
+    },
+    {
+     "frame": 4,
+     "label": "triangle",
+     "even_over_odd": 0.0412,
+     "odd_decay_slope": -2.074,
+     "nulls": 2
+    }
+   ],
+   "confidence": "derived-labels"
+  },
+  {
+   "relative_path": "Analog/Basic_Mdc.wav",
+   "num_frames": 4,
+   "frame_length": 2048,
+   "frames_by_label": {
+    "saw": [
+     1
+    ],
+    "sine": [
+     2
+    ],
+    "pulse": [
+     3
+    ],
+    "triangle": [
+     4
+    ]
+   },
+   "table_pos_for_frame": {
+    "1": 64.0,
+    "2": 128.0,
+    "3": 192.0,
+    "4": 256.0
+   },
+   "frames": [
+    {
+     "frame": 1,
+     "label": "saw",
+     "even_over_odd": 0.7128,
+     "odd_decay_slope": -1.0,
+     "nulls": 0
+    },
+    {
+     "frame": 2,
+     "label": "sine",
+     "even_over_odd": 0.0015,
+     "odd_decay_slope": -3.086,
+     "nulls": 1
+    },
+    {
+     "frame": 3,
+     "label": "pulse",
+     "even_over_odd": 0.2291,
+     "odd_decay_slope": -1.045,
+     "nulls": 2
+    },
+    {
+     "frame": 4,
+     "label": "triangle",
+     "even_over_odd": 0.0035,
+     "odd_decay_slope": -1.999,
+     "nulls": 2
+    }
+   ],
+   "confidence": "derived-labels"
+  },
+  {
+   "relative_path": "Analog/Basic_Wrd.wav",
+   "num_frames": 7,
+   "frame_length": 2048,
+   "frames_by_label": {
+    "triangle": [
+     1,
+     2
+    ],
+    "pulse": [
+     3,
+     6,
+     7
+    ],
+    "saw": [
+     4,
+     5
+    ]
+   },
+   "table_pos_for_frame": {
+    "1": 36.571,
+    "2": 73.143,
+    "3": 109.714,
+    "4": 146.286,
+    "5": 182.857,
+    "6": 219.429,
+    "7": 256.0
+   },
+   "frames": [
+    {
+     "frame": 1,
+     "label": "triangle",
+     "even_over_odd": 0.0047,
+     "odd_decay_slope": -3.503,
+     "nulls": 2
+    },
+    {
+     "frame": 2,
+     "label": "triangle",
+     "even_over_odd": 0.0047,
+     "odd_decay_slope": -2.013,
+     "nulls": 2
+    },
+    {
+     "frame": 3,
+     "label": "pulse",
+     "even_over_odd": 0.1603,
+     "odd_decay_slope": -1.042,
+     "nulls": 3
+    },
+    {
+     "frame": 4,
+     "label": "saw",
+     "even_over_odd": 0.7143,
+     "odd_decay_slope": -1.0,
+     "nulls": 0
+    },
+    {
+     "frame": 5,
+     "label": "saw",
+     "even_over_odd": 0.7096,
+     "odd_decay_slope": -1.001,
+     "nulls": 0
+    },
+    {
+     "frame": 6,
+     "label": "pulse",
+     "even_over_odd": 0.0855,
+     "odd_decay_slope": -2.128,
+     "nulls": 2
+    },
+    {
+     "frame": 7,
+     "label": "pulse",
+     "even_over_odd": 0.4014,
+     "odd_decay_slope": -1.233,
+     "nulls": 1
+    }
+   ],
+   "confidence": "derived-labels"
+  }
+ ],
+ "confidence_vocabulary": {
+  "derived-labels": "frame labels come from harmonic analysis of the factory .wav, not from Serum's own names; the frame <-> kParamTablePos rule is 'inferred' (one live point)"
+ }
+}

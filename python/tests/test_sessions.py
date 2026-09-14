@@ -277,3 +277,46 @@ def test_render_timeout_closes_renderer_and_preserves_snapshot(
     assert renderer.closed
     assert snapshot.read_bytes() == flp_bytes(b"preserve")
     assert not snapshot.with_suffix(".wav").exists()
+
+
+def test_render_range_isolates_the_section_then_renders(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    project = tmp_path / "owned.flp"
+    project.write_bytes(flp_bytes())
+    studio = FakeStudio(project)
+    session = sessions.StudioSession(cast(SessionBroker, FakeBroker()), cast(Studio, studio), tmp_path / "FL64.exe",
+                                     tmp_path / "SessionHost.exe", project, tmp_path / "job", True)
+    events: list[tuple[str, Any]] = []
+    def fake_isolate(fl: Any, start: int, length: int, *, cut_clips: bool, tail_beats: float) -> None:
+        events.append(("isolate", (fl, start, length, cut_clips, tail_beats)))
+
+    def fake_render(self: Any, output: Any, *, timeout: float) -> Path:
+        events.append(("render", (output, timeout)))
+        return Path(output)
+
+    monkeypatch.setattr(sessions, "isolate_range", fake_isolate)
+    monkeypatch.setattr(sessions.StudioSession, "render", fake_render)
+    output = tmp_path / "section.wav"
+
+    assert session.render_range(output, start_tick=18432, length_tick=6144, cut_clips=True, timeout=30) == output
+
+    assert events == [("isolate", (studio, 18432, 6144, True, 0)), ("render", (output, 30))]
+    events.clear()
+    tailed = tmp_path / "tailed.wav"
+    assert session.render_range(tailed, start_tick=0, length_tick=384, tail_beats=8, timeout=30) == tailed
+    assert events == [("isolate", (studio, 0, 384, False, 8)), ("render", (tailed, 30))]
+
+
+def test_render_range_rejects_bad_output_before_editing_the_project(tmp_path: Path,
+                                                                     monkeypatch: pytest.MonkeyPatch) -> None:
+    project = tmp_path / "owned.flp"
+    project.write_bytes(flp_bytes())
+    session = sessions.StudioSession(cast(SessionBroker, FakeBroker()), cast(Studio, FakeStudio(project)),
+                                     tmp_path / "FL64.exe", tmp_path / "SessionHost.exe", project, tmp_path / "job", True)
+    monkeypatch.setattr(sessions, "isolate_range", lambda *args, **kwargs: pytest.fail("project was edited"))
+    existing = tmp_path / "taken.wav"
+    existing.write_bytes(b"keep")
+
+    with pytest.raises(ValueError, match="new .wav"):
+        session.render_range(existing, start_tick=0, length_tick=384)
+    with pytest.raises(ValueError, match="new .wav"):
+        session.render_range(tmp_path / "section.mp3", start_tick=0, length_tick=384)

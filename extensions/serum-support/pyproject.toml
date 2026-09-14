@@ -1,0 +1,50 @@
+[build-system]
+requires = ["hatchling>=1.27"]
+build-backend = "hatchling.build"
+
+[project]
+name = "fruitylink-serum"
+version = "0.1.0"
+description = "Optional Serum preset inventory and audition-audio descriptors for FruityLink"
+readme = "README.md"
+requires-python = ">=3.11"
+license = "MIT"
+dependencies = ["fruitylink-python>=0.2.0"]
+
+[dependency-groups]
+dev = ["pytest>=8", "ruff>=0.12", "mypy>=1.15", "build>=1.2"]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/fruitylink_serum"]
+
+[tool.hatch.build.targets.sdist]
+include = [
+  "/LICENSE",
+  "/README.md",
+  "/pyproject.toml",
+  "/src",
+  "/tests",
+  "/tools",
+]
+exclude = [
+  "/artifacts",
+  "/dist",
+  "/.venv",
+  "**/__pycache__",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src", "../../python/src"]
+
+[tool.ruff]
+target-version = "py311"
+line-length = 110
+
+[tool.ruff.lint]
+select = ["E4", "E7", "E9", "F", "I"]
+
+[tool.mypy]
+python_version = "3.11"
+strict = true
+files = ["src", "tests"]

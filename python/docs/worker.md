@@ -31,6 +31,12 @@ is ≤1 MiB; request is ≤4 MiB. Unsupported results produce `ok:false` with a 
 error. Both script exceptions and `SystemExit` produce responses. Process crashes,
 `os._exit`, and forced termination may leave no response; callers must detect that.
 
+A script that raises after assigning `result` still returns that value under
+`result` with `resultPartial:true` (or `resultPartialError` when it cannot be
+serialized), together with the output captured before the failure. A response over
+1 MiB drops the `result` value first (`resultDropped:true`, `ok:false`) and keeps
+the streams, error and traceback.
+
 The response file separates control data from print output. Raw OS writes and
 child-process output can bypass Python redirects; the launcher must separately
 drain, cap, or discard process stdout/stderr. The worker is **not a security sandbox**:

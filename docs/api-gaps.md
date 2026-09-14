@@ -214,9 +214,26 @@ clear mixer effects.
 
 **Missing:** pattern deletion/reorder/merge and full pattern cloning including
 automation/name/color; channel delete/reorder/clone; state-preserving FX reorder,
-cross-track copy and explicit preset load/save. `ClonePatternAsync` explicitly
+cross-track copy and explicit preset save. `ClonePatternAsync` explicitly
 copies notes only. `CloneMixerEffectAsync` loads another instance by name and
-therefore does not preserve its current settings.
+therefore does not preserve its current settings. Preset/state *loading* into an
+already hosted plugin now exists (`LoadChannelPluginStateAsync`,
+`LoadMixerEffectStateAsync`, wrapper dispatcher opcode 0x12) but awaits its live
+gate; see `artifacts/serum-preset-loading/README.md`.
+
+**Resolved since:** note edits/deletes address stacked duplicates honestly
+(`NoteRef`/`NoteEdit.LengthTick`, `allowMultiple`; ambiguous targets are refused before
+any write), effect/generator names resolve tolerantly against the plugin database with
+candidate listings on failure, and the state-load verification line compares the
+wrapper record (size, hash, differing bytes) instead of sampled parameter values.
+
+**Still open, plugin parameter display timing:** a parameter display string read in the
+same request right after a write or a state load can lag the write (the raw value is
+immediate; the plugin instance sees the change only after FL delivers it). No wrapper
+call is known that forces that delivery from the bridge, so the host does not force it;
+`Parameters.set_verified` compares normalized values and waits for the display instead.
+A host-side fix needs the wrapper's parameter-sync opcode or an idle-processing entry
+point recovered from FL's plugin host.
 
 **Impact:** variations can lose automation or sound design, mistakes cannot be
 cleanly removed, and project cleanup/organization requires the UI. Also,

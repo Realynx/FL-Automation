@@ -28,9 +28,13 @@ plugin is optional for this embedded path.
 The SDK loads the exact private `python314.dll` using a constrained Windows DLL
 search and initializes it with the public, opaque `PyInitConfig` API. Initialization
 uses isolated settings: no environment configuration, user site packages, signal
-handlers, or bytecode writes. Its three import paths are `python314.zip`, the private
-runtime directory, and the SDK wheel or source directory. It does not alter PATH
-or load FL Studio's own `Shared/Python/python312.dll`.
+handlers, or bytecode writes. Its import paths are `python314.zip`, the private
+runtime directory, the SDK wheel or source directory, and the deterministically
+ordered wheels installed one per directory beneath
+`FruityLink/python/extensions`. A missing extension directory is valid; multiple
+wheels in one extension directory are rejected as an ambiguous installation. It
+does not read `PYTHONPATH`, alter PATH, scan user directories, or load FL Studio's
+own `Shared/Python/python312.dll`.
 
 One dedicated background thread owns the interpreter. It releases the GIL while
 idle and while a direct managed SDK callback waits for FL. Scripts are serialized
@@ -61,6 +65,31 @@ Code is limited to 4 MiB, each captured output stream to 64 KiB, the result to
 512 KiB, and the complete response to 1 MiB. Bounds and exception formatting are
 shared with the optional external worker. Raw OS writes can bypass Python stream
 capture. Deadlines range from 1 to 300 seconds and start when a queued script runs.
+
+### Errors and large results
+
+A script that raises after doing work does not lose that work. The `ok:false`
+response carries `error` and `traceback` next to the `stdout`/`stderr` captured up
+to the failure, and when the script had already assigned `result` to a serializable
+value, that value is returned under `result` with `resultPartial:true`. If the
+partial value cannot be serialized, `result` stays `null` and `resultPartialError`
+explains why. Successful responses are unchanged, so `ok:true` callers need no
+migration; a caller that treated a non-null `result` as proof of success should
+check `ok` instead.
+
+```json
+{"ok": false, "result": {"tempo": 140.0}, "resultPartial": true,
+ "error": "KeyError: 'missing'", "traceback": "Traceback (most recent call last): ...",
+ "stdout": "read tempo\n", "stderr": "", "stdoutTruncated": false, "stderrTruncated": false}
+```
+
+When the complete response would exceed the 1 MiB bound, the `result` value is
+dropped first and the response is returned with `resultDropped:true`, `ok:false`, an
+`error` naming the serialized size, and the captured output and traceback intact.
+Only when output alone exceeds the bound does the response collapse to
+`{ok:false,result:null,error}`. Hosts that show responses to an AI agent (such as
+FL MCP) apply their own smaller display budget on top of these limits and save the
+full response to a file; see that host's documentation.
 
 Cancellation is cooperative at Python trace and SDK callback boundaries. Nested
 `exec`, Python helper functions, and imported Python loops reached from the script

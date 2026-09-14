@@ -122,6 +122,25 @@ public sealed partial class FlInjectBridge
     }
 
     /// <inheritdoc />
+    public async Task SetAutomationPointAsync(int channel, int index, double value, double tension, CancellationToken ct = default)
+    {
+        ArgumentOutOfRangeException.ThrowIfNegative(channel);
+        ArgumentOutOfRangeException.ThrowIfNegative(index);
+        if (!ValidAutomationPoint(0, value, tension)) throw new ArgumentOutOfRangeException(nameof(value), "Point values must be finite and within the documented ranges.");
+        var snapshot = await ReadAutomationAsync(channel, ct);
+        if (index >= snapshot.Points.Count)
+            throw new InvalidOperationException($"Automation point {index} does not exist ({snapshot.Points.Count} points).");
+        if (snapshot.Points.Any(p => p.Curve != 0))
+            throw new InvalidOperationException("This curve contains non-linear points; replace it explicitly with SetAutomationPointsAsync.");
+        // Endpoint-safe: the native delete refuses the first and last points, but a whole-curve
+        // replacement with the same times may change any value, including both endpoints.
+        var points = snapshot.Points
+            .Select(p => new FlAutomationPointSpec(p.TimeBeats, p.Index == index ? value : p.Value, p.Index == index ? tension : p.Tension, 0))
+            .ToList();
+        await SetAutomationPointsAsync(channel, points, ct);
+    }
+
+    /// <inheritdoc />
     public async Task SetAutomationPointsAsync(int channel, IReadOnlyList<FlAutomationPointSpec> points, CancellationToken ct = default)
     {
         ArgumentOutOfRangeException.ThrowIfNegative(channel);

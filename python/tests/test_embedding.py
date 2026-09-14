@@ -136,3 +136,22 @@ def test_periodic_poll_cancels_imported_helper_with_bounded_progress(monkeypatch
     assert sys.gettrace() is previous_trace and threading.gettrace() is previous_thread_trace
     recovered = json.loads(execute_json("result=42", "test", request, never_cancel))
     assert recovered["ok"] is True and recovered["result"] == 42
+
+
+def test_embedded_failure_returns_partial_result_with_output_and_traceback() -> None:
+    result = json.loads(execute_json(
+        "result={'tempo': fl.ops.get_tempo()}\nprint('ok so far')\nraise RuntimeError('after work')",
+        "test", request, never_cancel))
+    assert result["ok"] is False and "RuntimeError: after work" in result["error"]
+    assert "<fruitylink-embedded>" in result["traceback"]
+    assert result["stdout"] == "ok so far\n"
+    assert result["result"] == {"tempo": 120} and result["resultPartial"] is True
+
+
+def test_embedded_oversized_response_keeps_output_and_drops_result(monkeypatch: pytest.MonkeyPatch) -> None:
+    import fruitylink.worker as worker_module
+
+    monkeypatch.setattr(worker_module, "RESPONSE_LIMIT", 2048)
+    result = json.loads(execute_json("print('kept')\nresult='x'*4000", "test", request, never_cancel))
+    assert result["ok"] is False and result["result"] is None and result["resultDropped"] is True
+    assert result["stdout"] == "kept\n" and "Embedded response exceeds" in result["error"]

@@ -96,4 +96,39 @@ public sealed partial class FlInjectBridge
         ulong text = await WriteDelphiStringAsync(name, scratch, ct);
         await CallAsync("d523c0", new ulong[] { arrangement, (uint)Math.Max(0, tick), text, 0, 4, 4 }, ct);
     }
+
+    /// <summary>Delete a timeline marker by zero-based index in <see cref="ListMarkersAsync"/> order.
+    /// FL has no exposed timeline-marker delete routine, so this shifts the later records down inside FL's
+    /// own Delphi dynamic array and shrinks its length in place (the array stays allocated; FL zero-fills
+    /// on later growth). The removed name is left to FL's memory manager rather than freed. FL's own
+    /// song-length recompute and playlist repaint run afterwards. Live-unverified on FL 2026 at the time
+    /// of writing; validate with a disposable project before relying on it.</summary>
+    public async Task DeleteMarkerAsync(int index, CancellationToken ct = default)
+    {
+        ArgumentOutOfRangeException.ThrowIfNegative(index);
+        var layout = await TimelineLayoutAsync(ct);
+        ulong arrangement = await SongArrangementAsync(ct);
+        if (arrangement == 0) throw new InvalidOperationException("No arrangement.");
+        ulong manager = await APtrAsync(checked(arrangement + (ulong)layout.MarkerManagerOffset), ct);
+        if (manager == 0) throw new InvalidOperationException("Timeline marker manager is unavailable.");
+        ulong data = await APtrAsync(manager, ct);
+        if (data == 0) throw new InvalidOperationException($"Marker {index} does not exist (no markers).");
+        if (data < 8) throw new InvalidOperationException("Invalid marker array pointer.");
+        long count = BitConverter.ToInt64(await PeekAbsAsync(data - 8, 8, ct), 0);
+        if (count is < 0 or > 1_000_000) throw new InvalidOperationException("Invalid marker array count.");
+        if (index >= count) throw new InvalidOperationException($"Marker {index} does not exist ({count} marker(s)).");
+        int stride = layout.MarkerStride;
+        if (stride is < 4 or > 4096) throw new InvalidOperationException("Invalid marker record stride.");
+        long tailBytes = (count - 1 - index) * stride;
+        if (tailBytes > 1 << 20) throw new InvalidOperationException("Marker array too large to edit safely.");
+        LogOp("DeleteMarker", $"index={index} of {count}");
+        if (tailBytes > 0)
+        {
+            byte[] tail = await PeekAbsAsync(checked(data + (ulong)(index + 1) * (ulong)stride), (int)tailBytes, ct);
+            await PokeAbsAsync(checked(data + (ulong)index * (ulong)stride), tail, ct);
+        }
+        await PokeAbsAsync(data - 8, BitConverter.GetBytes(count - 1), ct);
+        await RecomputeSongLengthAsync(ct);
+        await RepaintPlaylistAsync(ct);
+    }
 }

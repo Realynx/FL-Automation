@@ -7,7 +7,40 @@ import pytest
 
 from fruitylink import Endpoint, Studio, worker
 from fruitylink.values import JsonValue
-from fruitylink.worker import RESULT_LIMIT, STREAM_LIMIT, BoundedText, execute
+from fruitylink.worker import RESULT_LIMIT, STREAM_LIMIT, BoundedText, encode_response, execute
+
+
+def test_failure_keeps_output_and_partial_result_assigned_before_raising(fl: Studio) -> None:
+    result = execute("result={'tempo': fl.timebase.ppq}\nprint('read tempo')\nresult['step']=2\nraise KeyError('boom')", fl)
+    assert result["ok"] is False
+    assert "KeyError" in str(result["error"]) and "<fruitylink-script>" in str(result["traceback"])
+    assert result["stdout"] == "read tempo\n"
+    assert result["result"] == {"tempo": 96, "step": 2} and result["resultPartial"] is True
+
+
+def test_failure_without_result_or_with_unserializable_result_reports_but_does_not_mask(fl: Studio) -> None:
+    result = execute("raise ValueError('early')", fl)
+    assert result["ok"] is False and result["result"] is None and "resultPartial" not in result
+    result = execute("result=object()\nraise ValueError('late')", fl)
+    assert result["ok"] is False and result["result"] is None and "ValueError: late" in str(result["error"])
+    assert "resultPartial" not in result and "TypeError" in str(result["resultPartialError"])
+    # A result that only fails at conversion after a clean run is still a plain failure.
+    result = execute("result=object()", fl)
+    assert result["ok"] is False and "resultPartial" not in result and "resultPartialError" not in result
+
+
+def test_oversized_response_drops_result_but_keeps_output_and_error() -> None:
+    response: dict[str, JsonValue] = {"ok": True, "result": "x" * 600, "stdout": "kept\n", "stderr": "",
+                                      "stdoutTruncated": False, "stderrTruncated": False}
+    small = encode_response(response, limit=1024)
+    assert json.loads(small) == response
+    reduced = json.loads(encode_response(response, limit=512))
+    assert reduced["ok"] is False and reduced["result"] is None and reduced["resultDropped"] is True
+    assert reduced["stdout"] == "kept\n" and "result value was dropped" in reduced["error"]
+    failed = json.loads(encode_response(dict(response, ok=False, error="ValueError: bad"), limit=512))
+    assert "Original error: ValueError: bad" in failed["error"]
+    hopeless = json.loads(encode_response(dict(response, stdout="y" * 600), limit=512))
+    assert hopeless == {"ok": False, "result": None, "error": "Response exceeds 0 MiB."}
 
 
 def test_worker_runs_code_with_fl_and_serializes_records(fl: Studio) -> None:

@@ -1,0 +1,2437 @@
+{
+ "provenance": {
+  "generated": "2026-09-14",
+  "method": "Decoded every .SerumPreset in the local library with fruitylink_serum.xfer and counted ModSlot source ids and destination (type, param) -> destModuleParamID pairs; parameter enums cross-checked against declaration strings in Serum2.vst3 (2.1.4). No amounts, curves or payloads are stored.",
+  "files_scanned": 912,
+  "engine_reference": "Serum 2 (productVersion up to 2.1.4)"
+ },
+ "layout": {
+  "section": "ModSlot0..ModSlot63 (64 rows); an empty row is {'plainParams': 'default'} or absent",
+  "source": "[main_source_id, aux_source_id]; aux 0 = no 'via' source",
+  "destModuleTypeString": "section family of the target (Oscillator, WTOsc, VoiceFilter, Env, LFO, Global, Macro, RoutingSlot, FX*)",
+  "destModuleID": "instance index within that family (Oscillator 0..4, VoiceFilter 0..1, Env 0..3, LFO 0..9, Global 0, FX unit index)",
+  "destModuleParamName": "the kParam* name of the target parameter",
+  "destModuleParamID": "index of that parameter in the module's parameter enum (see destinations)",
+  "plainParams": "kParamAmount -100..100 percent; optional kParamBipolar 1, kParamBypass 1, kParamCurveIn/Out, kParamOut",
+  "slot_keys_observed": [
+   "plainParams (58368)",
+   "source (16738)",
+   "destModuleID (16720)",
+   "destModuleParamID (16720)",
+   "destModuleParamName (16720)",
+   "destModuleTypeString (16720)",
+   "flex (554)"
+  ],
+  "plain_keys_observed": [
+   "kParamAmount (16681)",
+   "kParamBipolar (2044)",
+   "kParamMainCurveData (466)",
+   "kParamCurveIn (295)",
+   "kParamOut (202)",
+   "kParamAuxCurveData (104)",
+   "kParamAuxInverted (59)",
+   "kParamCurveOut (53)",
+   "kParamSmoothRise (44)",
+   "kParamSmoothFall (43)",
+   "kParamBypass (35)",
+   "kParamSmoothLink (16)",
+   "kParamAuxCurve (10)",
+   "kParamDelayBeatSync (7)",
+   "kParamDelayOffset (7)"
+  ]
+ },
+ "sources": [
+  {
+   "id": 0,
+   "name": "none",
+   "confidence": "inferred",
+   "evidence": "slots without a source key are empty; id 0 never appears with a destination",
+   "uses_as_main": 0,
+   "uses_as_aux": 0,
+   "top_destinations": []
+  },
+  {
+   "id": 1,
+   "name": "Env 1",
+   "confidence": "inferred",
+   "evidence": "most used envelope-group id; the usual 'via' source for LFO fades",
+   "uses_as_main": 1011,
+   "uses_as_aux": 266,
+   "top_destinations": [
+    "VoiceFilter:kParamFreq",
+    "Macro:kParamValue",
+    "Oscillator:kParamVolume",
+    "FXFilter:kParamFreq"
+   ]
+  },
+  {
+   "id": 2,
+   "name": "envelope group (unresolved)",
+   "confidence": "unknown",
+   "evidence": "rare id between Env 1 and the next envelope; may be Env 2 or an envelope variant",
+   "uses_as_main": 163,
+   "uses_as_aux": 3,
+   "top_destinations": [
+    "VoiceFilter:kParamFreq",
+    "Oscillator:kParamVolume",
+    "WTOsc:kParamTablePos",
+    "WTOsc:kParamWarp"
+   ]
+  },
+  {
+   "id": 3,
+   "name": "Env 2 (probable)",
+   "confidence": "inferred",
+   "evidence": "second most used envelope id; 'Env via Velocity' pairs use it most",
+   "uses_as_main": 720,
+   "uses_as_aux": 13,
+   "top_destinations": [
+    "VoiceFilter:kParamFreq",
+    "Oscillator:kParamVolume",
+    "WTOsc:kParamWarp",
+    "Oscillator:kParamCoarsePit"
+   ]
+  },
+  {
+   "id": 4,
+   "name": "Env 3 (probable)",
+   "confidence": "inferred",
+   "evidence": "usage decays 3 > 4 > 5",
+   "uses_as_main": 301,
+   "uses_as_aux": 5,
+   "top_destinations": [
+    "Oscillator:kParamVolume",
+    "VoiceFilter:kParamFreq",
+    "Oscillator:kParamCoarsePit",
+    "WTOsc:kParamWarp"
+   ]
+  },
+  {
+   "id": 5,
+   "name": "Env 4 (probable)",
+   "confidence": "inferred",
+   "evidence": "usage decays 3 > 4 > 5",
+   "uses_as_main": 114,
+   "uses_as_aux": 0,
+   "top_destinations": [
+    "Oscillator:kParamVolume",
+    "WTOsc:kParamWarp",
+    "VoiceFilter:kParamFreq",
+    "Global:kParamMasterTuning"
+   ]
+  },
+  {
+   "id": 6,
+   "name": "LFO 1",
+   "confidence": "inferred",
+   "evidence": "ids 6..15 show a monotone usage decay matching LFO 1..10",
+   "uses_as_main": 1231,
+   "uses_as_aux": 6,
+   "top_destinations": [
+    "Oscillator:kParamVolume",
+    "Oscillator:kParamFine",
+    "VoiceFilter:kParamFreq",
+    "WTOsc:kParamTablePos"
+   ]
+  },
+  {
+   "id": 7,
+   "name": "LFO 2",
+   "confidence": "inferred",
+   "evidence": "ids 6..15 show a monotone usage decay matching LFO 1..10",
+   "uses_as_main": 811,
+   "uses_as_aux": 11,
+   "top_destinations": [
+    "Oscillator:kParamVolume",
+    "Oscillator:kParamFine",
+    "VoiceFilter:kParamFreq",
+    "WTOsc:kParamTablePos"
+   ]
+  },
+  {
+   "id": 8,
+   "name": "LFO 3",
+   "confidence": "inferred",
+   "evidence": "ids 6..15 show a monotone usage decay matching LFO 1..10",
+   "uses_as_main": 575,
+   "uses_as_aux": 5,
+   "top_destinations": [
+    "Oscillator:kParamVolume",
+    "Oscillator:kParamFine",
+    "VoiceFilter:kParamFreq",
+    "WTOsc:kParamTablePos"
+   ]
+  },
+  {
+   "id": 9,
+   "name": "LFO 4",
+   "confidence": "inferred",
+   "evidence": "ids 6..15 show a monotone usage decay matching LFO 1..10",
+   "uses_as_main": 337,
+   "uses_as_aux": 4,
+   "top_destinations": [
+    "Oscillator:kParamVolume",
+    "VoiceFilter:kParamFreq",
+    "Oscillator:kParamFine",
+    "Global:kParamMasterTuning"
+   ]
+  },
+  {
+   "id": 10,
+   "name": "LFO 5",
+   "confidence": "inferred",
+   "evidence": "ids 6..15 show a monotone usage decay matching LFO 1..10",
+   "uses_as_main": 189,
+   "uses_as_aux": 2,
+   "top_destinations": [
+    "VoiceFilter:kParamFreq",
+    "Oscillator:kParamFine",
+    "Oscillator:kParamVolume",
+    "Global:kParamMasterTuning"
+   ]
+  },
+  {
+   "id": 11,
+   "name": "LFO 6",
+   "confidence": "inferred",
+   "evidence": "ids 6..15 show a monotone usage decay matching LFO 1..10",
+   "uses_as_main": 90,
+   "uses_as_aux": 4,
+   "top_destinations": [
+    "VoiceFilter:kParamFreq",
+    "Oscillator:kParamVolume",
+    "Oscillator:kParamFine",
+    "Oscillator:kParamPan"
+   ]
+  },
+  {
+   "id": 12,
+   "name": "LFO 7",
+   "confidence": "inferred",
+   "evidence": "ids 6..15 show a monotone usage decay matching LFO 1..10",
+   "uses_as_main": 71,
+   "uses_as_aux": 1,
+   "top_destinations": [
+    "Oscillator:kParamVolume",
+    "VoiceFilter:kParamFreq",
+    "FXFilter:kParamFreq",
+    "WTOsc:kParamWarp"
+   ]
+  },
+  {
+   "id": 13,
+   "name": "LFO 8",
+   "confidence": "inferred",
+   "evidence": "ids 6..15 show a monotone usage decay matching LFO 1..10",
+   "uses_as_main": 35,
+   "uses_as_aux": 1,
+   "top_destinations": [
+    "Oscillator:kParamVolume",
+    "VoiceFilter:kParamFreq",
+    "Oscillator:kParamCoarsePit",
+    "WTOsc:kParamTablePos"
+   ]
+  },
+  {
+   "id": 14,
+   "name": "LFO 9",
+   "confidence": "inferred",
+   "evidence": "ids 6..15 show a monotone usage decay matching LFO 1..10",
+   "uses_as_main": 36,
+   "uses_as_aux": 0,
+   "top_destinations": [
+    "Global:kParamMasterTuning",
+    "Oscillator:kParamVolume",
+    "FXDistortion:kParamDrive",
+    "WTOsc:kParamWarp"
+   ]
+  },
+  {
+   "id": 15,
+   "name": "LFO 10",
+   "confidence": "inferred",
+   "evidence": "ids 6..15 show a monotone usage decay matching LFO 1..10",
+   "uses_as_main": 19,
+   "uses_as_aux": 0,
+   "top_destinations": [
+    "Global:kParamMasterTuning",
+    "WTOsc:kParamWarp",
+    "WTOsc:kParamInitialPhase",
+    "Oscillator:kParamFine"
+   ]
+  },
+  {
+   "id": 16,
+   "name": "Velocity",
+   "confidence": "inferred",
+   "evidence": "61 of 92 modulations of Global kParamVoiceAmp use it; the common aux source for envelopes",
+   "uses_as_main": 743,
+   "uses_as_aux": 97,
+   "top_destinations": [
+    "VoiceFilter:kParamFreq",
+    "Oscillator:kParamVolume",
+    "Global:kParamVoiceAmp",
+    "Env:kParamDecay"
+   ]
+  },
+  {
+   "id": 17,
+   "name": "Note",
+   "confidence": "inferred",
+   "evidence": "dominant use is VoiceFilter kParamFreq (key tracking)",
+   "uses_as_main": 325,
+   "uses_as_aux": 1,
+   "top_destinations": [
+    "VoiceFilter:kParamFreq",
+    "Oscillator:kParamVolume",
+    "LFO:kParamRate",
+    "FXFilter:kParamFreq"
+   ]
+  },
+  {
+   "id": 18,
+   "name": "Mod Wheel",
+   "confidence": "inferred",
+   "evidence": "the classic aux source for LFO depth; UI enum order Velo, Note, Macro..., Wheel",
+   "uses_as_main": 162,
+   "uses_as_aux": 148,
+   "top_destinations": [
+    "VoiceFilter:kParamFreq",
+    "Env:kParamSustain",
+    "Oscillator:kParamVolume",
+    "LFO:kParamRate"
+   ]
+  },
+  {
+   "id": 20,
+   "name": "unknown",
+   "confidence": "unknown",
+   "evidence": "no name inferred",
+   "uses_as_main": 14,
+   "uses_as_aux": 0,
+   "top_destinations": [
+    "VoiceFilter:kParamFreq",
+    "FXFilter:kParamFreq",
+    "Oscillator:kParamFine",
+    "Oscillator:kParamVolume"
+   ]
+  },
+  {
+   "id": 21,
+   "name": "unknown",
+   "confidence": "unknown",
+   "evidence": "no name inferred",
+   "uses_as_main": 167,
+   "uses_as_aux": 2,
+   "top_destinations": [
+    "Oscillator:kParamFine",
+    "WTOsc:kParamTablePos",
+    "Oscillator:kParamPan",
+    "WTOsc:kParamWarp"
+   ]
+  },
+  {
+   "id": 22,
+   "name": "unknown",
+   "confidence": "unknown",
+   "evidence": "no name inferred",
+   "uses_as_main": 26,
+   "uses_as_aux": 1,
+   "top_destinations": [
+    "Oscillator:kParamPan",
+    "Oscillator:kParamFine",
+    "Macro:kParamValue",
+    "Env:kParamDecay"
+   ]
+  },
+  {
+   "id": 23,
+   "name": "unknown",
+   "confidence": "unknown",
+   "evidence": "no name inferred",
+   "uses_as_main": 59,
+   "uses_as_aux": 1,
+   "top_destinations": [
+    "Oscillator:kParamPan",
+    "Oscillator:kParamFine",
+    "LFO:kParamRate",
+    "WTOsc:kParamWarp"
+   ]
+  },
+  {
+   "id": 24,
+   "name": "unknown",
+   "confidence": "unknown",
+   "evidence": "no name inferred",
+   "uses_as_main": 2,
+   "uses_as_aux": 0,
+   "top_destinations": [
+    "Oscillator:kParamFine"
+   ]
+  },
+  {
+   "id": 25,
+   "name": "Macro 1",
+   "confidence": "inferred",
+   "evidence": "eight consecutive ids with ~1000+ uses each, matching factory macro assignment",
+   "uses_as_main": 1231,
+   "uses_as_aux": 137,
+   "top_destinations": [
+    "VoiceFilter:kParamFreq",
+    "Oscillator:kParamVolume",
+    "Env:kParamAttack",
+    "WTOsc:kParamWarp"
+   ]
+  },
+  {
+   "id": 26,
+   "name": "Macro 2",
+   "confidence": "inferred",
+   "evidence": "eight consecutive ids with ~1000+ uses each, matching factory macro assignment",
+   "uses_as_main": 1280,
+   "uses_as_aux": 128,
+   "top_destinations": [
+    "Oscillator:kParamVolume",
+    "Env:kParamDecay",
+    "WTOsc:kParamWarp",
+    "WTOsc:kParamTablePos"
+   ]
+  },
+  {
+   "id": 27,
+   "name": "Macro 3",
+   "confidence": "inferred",
+   "evidence": "eight consecutive ids with ~1000+ uses each, matching factory macro assignment",
+   "uses_as_main": 1161,
+   "uses_as_aux": 103,
+   "top_destinations": [
+    "Oscillator:kParamVolume",
+    "VoiceFilter:kParamFreq",
+    "WTOsc:kParamWarp",
+    "FXDelay:kParamWet"
+   ]
+  },
+  {
+   "id": 28,
+   "name": "Macro 4",
+   "confidence": "inferred",
+   "evidence": "eight consecutive ids with ~1000+ uses each, matching factory macro assignment",
+   "uses_as_main": 1209,
+   "uses_as_aux": 101,
+   "top_destinations": [
+    "Oscillator:kParamVolume",
+    "FXReverb:kParamWet",
+    "VoiceFilter:kParamFreq",
+    "WTOsc:kParamWarp"
+   ]
+  },
+  {
+   "id": 29,
+   "name": "Macro 5",
+   "confidence": "inferred",
+   "evidence": "eight consecutive ids with ~1000+ uses each, matching factory macro assignment",
+   "uses_as_main": 1225,
+   "uses_as_aux": 160,
+   "top_destinations": [
+    "Oscillator:kParamVolume",
+    "WTOsc:kParamWarp",
+    "FXDistortion:kParamWet",
+    "LFO:kParamRate"
+   ]
+  },
+  {
+   "id": 30,
+   "name": "Macro 6",
+   "confidence": "inferred",
+   "evidence": "eight consecutive ids with ~1000+ uses each, matching factory macro assignment",
+   "uses_as_main": 1090,
+   "uses_as_aux": 168,
+   "top_destinations": [
+    "Oscillator:kParamVolume",
+    "FXDistortion:kParamWet",
+    "WTOsc:kParamWarp",
+    "FXDelay:kParamWet"
+   ]
+  },
+  {
+   "id": 31,
+   "name": "Macro 7",
+   "confidence": "inferred",
+   "evidence": "eight consecutive ids with ~1000+ uses each, matching factory macro assignment",
+   "uses_as_main": 981,
+   "uses_as_aux": 85,
+   "top_destinations": [
+    "FXDelay:kParamWet",
+    "Oscillator:kParamVolume",
+    "FXChorus:kParamWet",
+    "FXReverb:kParamWet"
+   ]
+  },
+  {
+   "id": 32,
+   "name": "Macro 8",
+   "confidence": "inferred",
+   "evidence": "eight consecutive ids with ~1000+ uses each, matching factory macro assignment",
+   "uses_as_main": 1064,
+   "uses_as_aux": 59,
+   "top_destinations": [
+    "FXReverb:kParamWet",
+    "FXDelay:kParamWet",
+    "Oscillator:kParamVolume",
+    "FXUtils:kParamWidth"
+   ]
+  },
+  {
+   "id": 34,
+   "name": "unknown",
+   "confidence": "unknown",
+   "evidence": "no name inferred",
+   "uses_as_main": 6,
+   "uses_as_aux": 0,
+   "top_destinations": [
+    "Oscillator:kParamPan"
+   ]
+  },
+  {
+   "id": 35,
+   "name": "unknown",
+   "confidence": "unknown",
+   "evidence": "no name inferred",
+   "uses_as_main": 3,
+   "uses_as_aux": 0,
+   "top_destinations": [
+    "Oscillator:kParamVolume",
+    "VoiceFilter:kParamFreq"
+   ]
+  },
+  {
+   "id": 36,
+   "name": "unknown",
+   "confidence": "unknown",
+   "evidence": "no name inferred",
+   "uses_as_main": 1,
+   "uses_as_aux": 1,
+   "top_destinations": [
+    "VoiceFilter:kParamReso"
+   ]
+  },
+  {
+   "id": 37,
+   "name": "unknown",
+   "confidence": "unknown",
+   "evidence": "no name inferred",
+   "uses_as_main": 0,
+   "uses_as_aux": 5,
+   "top_destinations": []
+  },
+  {
+   "id": 38,
+   "name": "unknown",
+   "confidence": "unknown",
+   "evidence": "no name inferred",
+   "uses_as_main": 25,
+   "uses_as_aux": 2,
+   "top_destinations": [
+    "Global:kParamMasterTuning",
+    "Oscillator:kParamOctave",
+    "Oscillator:kParamPitch",
+    "Global:kParamTranspose"
+   ]
+  },
+  {
+   "id": 39,
+   "name": "unknown",
+   "confidence": "unknown",
+   "evidence": "no name inferred",
+   "uses_as_main": 55,
+   "uses_as_aux": 2,
+   "top_destinations": [
+    "Oscillator:kParamFine",
+    "VoiceFilter:kParamFreq",
+    "Oscillator:kParamPan",
+    "Oscillator:kParamVolume"
+   ]
+  },
+  {
+   "id": 40,
+   "name": "unknown",
+   "confidence": "unknown",
+   "evidence": "no name inferred",
+   "uses_as_main": 39,
+   "uses_as_aux": 0,
+   "top_destinations": [
+    "LFOPointModBus:kParamValue",
+    "WTOsc:kParamTablePos",
+    "WTOsc:kParamInitialPhase",
+    "Oscillator:kParamPan"
+   ]
+  },
+  {
+   "id": 41,
+   "name": "unknown",
+   "confidence": "unknown",
+   "evidence": "no name inferred",
+   "uses_as_main": 19,
+   "uses_as_aux": 1,
+   "top_destinations": [
+    "Oscillator:kParamFine",
+    "Oscillator:kParamPan",
+    "VoiceFilter:kParamFreq",
+    "VoiceFilter:kParamStereo"
+   ]
+  },
+  {
+   "id": 42,
+   "name": "unknown",
+   "confidence": "unknown",
+   "evidence": "no name inferred",
+   "uses_as_main": 19,
+   "uses_as_aux": 0,
+   "top_destinations": [
+    "LFOPointModBus:kParamValue",
+    "WTOsc:kParamWarp2",
+    "Oscillator:kParamFine",
+    "FXFilter:kParamVar"
+   ]
+  },
+  {
+   "id": 43,
+   "name": "unknown",
+   "confidence": "unknown",
+   "evidence": "no name inferred",
+   "uses_as_main": 2,
+   "uses_as_aux": 0,
+   "top_destinations": [
+    "FXFilter:kParamWet",
+    "Oscillator:kParamPan"
+   ]
+  },
+  {
+   "id": 44,
+   "name": "unknown",
+   "confidence": "unknown",
+   "evidence": "no name inferred",
+   "uses_as_main": 2,
+   "uses_as_aux": 0,
+   "top_destinations": [
+    "FXBode:kParamOutputMix",
+    "Oscillator:kParamPan"
+   ]
+  },
+  {
+   "id": 47,
+   "name": "unknown",
+   "confidence": "unknown",
+   "evidence": "no name inferred",
+   "uses_as_main": 3,
+   "uses_as_aux": 0,
+   "top_destinations": [
+    "FXFilter:kParamFreq",
+    "WTOsc:kParamWarp",
+    "SpectralOsc:kParamSpecFltWetDry"
+   ]
+  },
+  {
+   "id": 48,
+   "name": "unknown",
+   "confidence": "unknown",
+   "evidence": "no name inferred",
+   "uses_as_main": 2,
+   "uses_as_aux": 0,
+   "top_destinations": [
+    "VoiceFilter:kParamVar",
+    "FXPhaser:kParamDepth2"
+   ]
+  },
+  {
+   "id": 49,
+   "name": "unknown",
+   "confidence": "unknown",
+   "evidence": "no name inferred",
+   "uses_as_main": 20,
+   "uses_as_aux": 0,
+   "top_destinations": [
+    "VoiceFilter:kParamFreq",
+    "Oscillator:kParamVolume",
+    "Oscillator:kParamCoarsePit",
+    "Oscillator:kParamPan"
+   ]
+  },
+  {
+   "id": 50,
+   "name": "unknown",
+   "confidence": "unknown",
+   "evidence": "no name inferred",
+   "uses_as_main": 4,
+   "uses_as_aux": 0,
+   "top_destinations": [
+    "Oscillator:kParamVolume",
+    "VoiceFilter:kParamFreq"
+   ]
+  },
+  {
+   "id": 51,
+   "name": "unknown",
+   "confidence": "unknown",
+   "evidence": "no name inferred",
+   "uses_as_main": 2,
+   "uses_as_aux": 0,
+   "top_destinations": [
+    "Oscillator:kParamPan"
+   ]
+  },
+  {
+   "id": 52,
+   "name": "unknown",
+   "confidence": "unknown",
+   "evidence": "no name inferred",
+   "uses_as_main": 9,
+   "uses_as_aux": 0,
+   "top_destinations": [
+    "Oscillator:kParamPan",
+    "VoiceFilter:kParamFreq"
+   ]
+  },
+  {
+   "id": 53,
+   "name": "unknown",
+   "confidence": "unknown",
+   "evidence": "no name inferred",
+   "uses_as_main": 2,
+   "uses_as_aux": 1,
+   "top_destinations": [
+    "Oscillator:kParamFine",
+    "VoiceFilter:kParamFreq"
+   ]
+  },
+  {
+   "id": 56,
+   "name": "unknown",
+   "confidence": "unknown",
+   "evidence": "no name inferred",
+   "uses_as_main": 5,
+   "uses_as_aux": 0,
+   "top_destinations": [
+    "Oscillator:kParamVolume",
+    "WTOsc:kParamTablePos"
+   ]
+  },
+  {
+   "id": 58,
+   "name": "unknown",
+   "confidence": "unknown",
+   "evidence": "no name inferred",
+   "uses_as_main": 1,
+   "uses_as_aux": 0,
+   "top_destinations": [
+    "Oscillator:kParamPan"
+   ]
+  },
+  {
+   "id": 59,
+   "name": "unknown",
+   "confidence": "unknown",
+   "evidence": "no name inferred",
+   "uses_as_main": 77,
+   "uses_as_aux": 2,
+   "top_destinations": [
+    "Oscillator:kParamPan",
+    "Oscillator:kParamVolume",
+    "LFOPointModBus:kParamValue",
+    "Oscillator:kParamFine"
+   ]
+  }
+ ],
+ "destinations": [
+  {
+   "type": "Oscillator",
+   "param": "kParamVolume",
+   "param_id": 1,
+   "occurrences": 2235,
+   "confidence": "binary-enum",
+   "binary_enum_id": 1
+  },
+  {
+   "type": "VoiceFilter",
+   "param": "kParamFreq",
+   "param_id": 3,
+   "occurrences": 1892,
+   "confidence": "library-majority"
+  },
+  {
+   "type": "Oscillator",
+   "param": "kParamFine",
+   "param_id": 5,
+   "occurrences": 714,
+   "confidence": "binary-enum",
+   "binary_enum_id": 5
+  },
+  {
+   "type": "WTOsc",
+   "param": "kParamWarp",
+   "param_id": 0,
+   "occurrences": 714,
+   "confidence": "library-majority"
+  },
+  {
+   "type": "WTOsc",
+   "param": "kParamTablePos",
+   "param_id": 6,
+   "occurrences": 637,
+   "confidence": "library-majority",
+   "other_ids": {
+    "1": 15
+   }
+  },
+  {
+   "type": "FXReverb",
+   "param": "kParamWet",
+   "param_id": 1,
+   "occurrences": 504,
+   "confidence": "library-majority"
+  },
+  {
+   "type": "FXDelay",
+   "param": "kParamWet",
+   "param_id": 1,
+   "occurrences": 481,
+   "confidence": "library-majority"
+  },
+  {
+   "type": "FXFilter",
+   "param": "kParamFreq",
+   "param_id": 3,
+   "occurrences": 434,
+   "confidence": "library-majority"
+  },
+  {
+   "type": "Env",
+   "param": "kParamDecay",
+   "param_id": 2,
+   "occurrences": 398,
+   "confidence": "library-majority"
+  },
+  {
+   "type": "Env",
+   "param": "kParamAttack",
+   "param_id": 0,
+   "occurrences": 370,
+   "confidence": "library-majority"
+  },
+  {
+   "type": "LFO",
+   "param": "kParamRate",
+   "param_id": 0,
+   "occurrences": 345,
+   "confidence": "library-majority"
+  },
+  {
+   "type": "Oscillator",
+   "param": "kParamPan",
+   "param_id": 2,
+   "occurrences": 305,
+   "confidence": "binary-enum",
+   "binary_enum_id": 2
+  },
+  {
+   "type": "FXDistortion",
+   "param": "kParamWet",
+   "param_id": 1,
+   "occurrences": 292,
+   "confidence": "library-majority"
+  },
+  {
+   "type": "Macro",
+   "param": "kParamValue",
+   "param_id": 0,
+   "occurrences": 286,
+   "confidence": "library-majority"
+  },
+  {
+   "type": "VoiceFilter",
+   "param": "kParamReso",
+   "param_id": 4,
+   "occurrences": 275,
+   "confidence": "library-majority"
+  },
+  {
+   "type": "WTOsc",
+   "param": "kParamWarp2",
+   "param_id": 3,
+   "occurrences": 275,
+   "confidence": "library-majority",
+   "other_ids": {
+    "6": 7
+   }
+  },
+  {
+   "type": "Oscillator",
+   "param": "kParamCoarsePit",
+   "param_id": 6,
+   "occurrences": 253,
+   "confidence": "binary-enum",
+   "binary_enum_id": 6
+  },
+  {
+   "type": "Oscillator",
+   "param": "kParamDetune",
+   "param_id": 26,
+   "occurrences": 239,
+   "confidence": "binary-enum",
+   "binary_enum_id": 26,
+   "other_ids": {
+    "10": 4
+   }
+  },
+  {
+   "type": "FXDistortion",
+   "param": "kParamDrive",
+   "param_id": 2,
+   "occurrences": 225,
+   "confidence": "library-majority"
+  },
+  {
+   "type": "Global",
+   "param": "kParamMasterTuning",
+   "param_id": 1,
+   "occurrences": 221,
+   "confidence": "binary-enum",
+   "binary_enum_id": 1
+  },
+  {
+   "type": "FXEQ",
+   "param": "kParamGain2",
+   "param_id": 6,
+   "occurrences": 211,
+   "confidence": "library-majority"
+  },
+  {
+   "type": "Env",
+   "param": "kParamSustain",
+   "param_id": 3,
+   "occurrences": 207,
+   "confidence": "library-majority"
+  },
+  {
+   "type": "FXConv",
+   "param": "kParamWet",
+   "param_id": 1,
+   "occurrences": 198,
+   "confidence": "binary-enum",
+   "binary_enum_id": 1
+  },
+  {
+   "type": "FXChorus",
+   "param": "kParamWet",
+   "param_id": 1,
+   "occurrences": 197,
+   "confidence": "library-majority"
+  },
+  {
+   "type": "LFOPointModBus",
+   "param": "kParamValue",
+   "param_id": 0,
+   "occurrences": 190,
+   "confidence": "library-majority"
+  },
+  {
+   "type": "VoiceFilter",
+   "param": "kParamDrive",
+   "param_id": 5,
+   "occurrences": 173,
+   "confidence": "library-majority"
+  },
+  {
+   "type": "VoiceFilter",
+   "param": "kParamWet",
+   "param_id": 1,
+   "occurrences": 171,
+   "confidence": "library-majority"
+  },
+  {
+   "type": "FXFilter",
+   "param": "kParamWet",
+   "param_id": 1,
+   "occurrences": 165,
+   "confidence": "library-majority"
+  },
+  {
+   "type": "VoiceFilter",
+   "param": "kParamLevelOut",
+   "param_id": 8,
+   "occurrences": 162,
+   "confidence": "library-majority"
+  },
+  {
+   "type": "RoutingSlot",
+   "param": "kParamFXBus1Level",
+   "param_id": 1,
+   "occurrences": 151,
+   "confidence": "binary-enum",
+   "binary_enum_id": 1
+  },
+  {
+   "type": "FXEQ",
+   "param": "kParamGain1",
+   "param_id": 5,
+   "occurrences": 136,
+   "confidence": "library-majority"
+  },
+  {
+   "type": "Env",
+   "param": "kParamRelease",
+   "param_id": 4,
+   "occurrences": 132,
+   "confidence": "library-majority"
+  },
+  {
+   "type": "FXEQ",
+   "param": "kParamFreq1",
+   "param_id": 1,
+   "occurrences": 129,
+   "confidence": "library-majority"
+  },
+  {
+   "type": "Oscillator",
+   "param": "kParamOctave",
+   "param_id": 3,
+   "occurrences": 119,
+   "confidence": "binary-enum",
+   "binary_enum_id": 3
+  },
+  {
+   "type": "VoiceFilter",
+   "param": "kParamVar",
+   "param_id": 6,
+   "occurrences": 94,
+   "confidence": "library-majority"
+  },
+  {
+   "type": "FXBode",
+   "param": "kParamWet",
+   "param_id": 1,
+   "occurrences": 92,
+   "confidence": "library-majority"
+  },
+  {
+   "type": "FXHyperD",
+   "param": "kParamWet",
+   "param_id": 1,
+   "occurrences": 92,
+   "confidence": "library-majority"
+  },
+  {
+   "type": "FXPhaser",
+   "param": "kParamWet",
+   "param_id": 1,
+   "occurrences": 92,
+   "confidence": "library-majority"
+  },
+  {
+   "type": "Global",
+   "param": "kParamVoiceAmp",
+   "param_id": 2,
+   "occurrences": 92,
+   "confidence": "binary-enum",
+   "binary_enum_id": 2
+  },
+  {
+   "type": "RoutingSlot",
+   "param": "kParamFXBus2Level",
+   "param_id": 2,
+   "occurrences": 87,
+   "confidence": "binary-enum",
+   "binary_enum_id": 2
+  },
+  {
+   "type": "MultiSampleOsc",
+   "param": "kParamWarp",
+   "param_id": 0,
+   "occurrences": 80,
+   "confidence": "binary-enum",
+   "binary_enum_id": 0
+  },
+  {
+   "type": "FXHyperD",
+   "param": "kParamDimEWet",
+   "param_id": 8,
+   "occurrences": 78,
+   "confidence": "library-majority"
+  },
+  {
+   "type": "FXEQ",
+   "param": "kParamFreq2",
+   "param_id": 2,
+   "occurrences": 77,
+   "confidence": "library-majority"
+  },
+  {
+   "type": "FXComp",
+   "param": "kParamMakeup",
+   "param_id": 6,
+   "occurrences": 75,
+   "confidence": "library-majority"
+  },
+  {
+   "type": "FXUtils",
+   "param": "kParamWidth",
+   "param_id": 3,
+   "occurrences": 75,
+   "confidence": "library-majority"
+  },
+  {
+   "type": "FXComp",
+   "param": "kParamWet",
+   "param_id": 1,
+   "occurrences": 71,
+   "confidence": "library-majority"
+  },
+  {
+   "type": "NoiseOsc",
+   "param": "kParamColor",
+   "param_id": 0,
+   "occurrences": 63,
+   "confidence": "library-majority"
+  },
+  {
+   "type": "FXFilter",
+   "param": "kParamReso",
+   "param_id": 4,
+   "occurrences": 62,
+   "confidence": "library-majority"
+  },
+  {
+   "type": "RoutingSlot",
+   "param": "kParamFilterBalance",
+   "param_id": 0,
+   "occurrences": 62,
+   "confidence": "binary-enum",
+   "binary_enum_id": 0
+  },
+  {
+   "type": "FXFilter",
+   "param": "kParamDrive",
+   "param_id": 5,
+   "occurrences": 53,
+   "confidence": "library-majority"
+  },
+  {
+   "type": "FXFlanger",
+   "param": "kParamWet",
+   "param_id": 1,
+   "occurrences": 53,
+   "confidence": "library-majority"
+  },
+  {
+   "type": "Oscillator",
+   "param": "kParamPitch",
+   "param_id": 4,
+   "occurrences": 53,
+   "confidence": "binary-enum",
+   "binary_enum_id": 4
+  },
+  {
+   "type": "FXDistortion",
+   "param": "kParamFreq",
+   "param_id": 5,
+   "occurrences": 52,
+   "confidence": "library-majority"
+  },
+  {
+   "type": "MultiSampleOsc",
+   "param": "kParamWarp2",
+   "param_id": 3,
+   "occurrences": 50,
+   "confidence": "binary-enum",
+   "binary_enum_id": 3
+  },
+  {
+   "type": "Oscillator",
+   "param": "kParamScanRate",
+   "param_id": 13,
+   "occurrences": 47,
+   "confidence": "binary-enum",
+   "binary_enum_id": 13
+  },
+  {
+   "type": "FXFilter",
+   "param": "kParamVar",
+   "param_id": 6,
+   "occurrences": 46,
+   "confidence": "library-majority"
+  },
+  {
+   "type": "FXUtils",
+   "param": "kParamLevelOut",
+   "param_id": 2,
+   "occurrences": 45,
+   "confidence": "library-majority"
+  },
+  {
+   "type": "FXEQ",
+   "param": "kParamReso1",
+   "param_id": 3,
+   "occurrences": 41,
+   "confidence": "library-majority"
+  },
+  {
+   "type": "MultiSampleOsc",
+   "param": "kParamTimbreShift",
+   "param_id": 6,
+   "occurrences": 40,
+   "confidence": "binary-enum",
+   "binary_enum_id": 6
+  },
+  {
+   "type": "FXDistortion",
+   "param": "kParamLevelOut",
+   "param_id": 8,
+   "occurrences": 39,
+   "confidence": "library-majority"
+  },
+  {
+   "type": "FXBode",
+   "param": "kParamShift",
+   "param_id": 3,
+   "occurrences": 38,
+   "confidence": "library-majority"
+  },
+  {
+   "type": "FXFilter",
+   "param": "kParamLevelOut",
+   "param_id": 8,
+   "occurrences": 38,
+   "confidence": "library-majority"
+  },
+  {
+   "type": "LFO",
+   "param": "kParamSmooth",
+   "param_id": 1,
+   "occurrences": 38,
+   "confidence": "library-majority"
+  },
+  {
+   "type": "Oscillator",
+   "param": "kParamDetuneWid",
+   "param_id": 27,
+   "occurrences": 38,
+   "confidence": "binary-enum",
+   "binary_enum_id": 27,
+   "other_ids": {
+    "11": 1
+   }
+  },
+  {
+   "type": "FXUtils",
+   "param": "kParamHPF",
+   "param_id": 7,
+   "occurrences": 37,
+   "confidence": "library-majority"
+  },
+  {
+   "type": "FXReverb",
+   "param": "kParamSize",
+   "param_id": 2,
+   "occurrences": 35,
+   "confidence": "library-majority"
+  },
+  {
+   "type": "SpectralOsc",
+   "param": "kParamWarp",
+   "param_id": 0,
+   "occurrences": 35,
+   "confidence": "library-majority"
+  },
+  {
+   "type": "FXReverb",
+   "param": "kParamDelay",
+   "param_id": 3,
+   "occurrences": 34,
+   "confidence": "library-majority"
+  },
+  {
+   "type": "FXUtils",
+   "param": "kParamLPF",
+   "param_id": 8,
+   "occurrences": 34,
+   "confidence": "library-majority"
+  },
+  {
+   "type": "GranularOsc",
+   "param": "kParamDensity",
+   "param_id": 6,
+   "occurrences": 33,
+   "confidence": "library-majority"
+  },
+  {
+   "type": "Env",
+   "param": "kParamCurve2",
+   "param_id": 6,
+   "occurrences": 31,
+   "confidence": "library-majority"
+  },
+  {
+   "type": "FXConv",
+   "param": "kParamSize",
+   "param_id": 4,
+   "occurrences": 31,
+   "confidence": "binary-enum",
+   "binary_enum_id": 4
+  },
+  {
+   "type": "Oscillator",
+   "param": "kParamUnisonStereo",
+   "param_id": 28,
+   "occurrences": 31,
+   "confidence": "binary-enum",
+   "binary_enum_id": 28
+  },
+  {
+   "type": "SampleOsc",
+   "param": "kParamWarp",
+   "param_id": 0,
+   "occurrences": 30,
+   "confidence": "library-majority"
+  },
+  {
+   "type": "FXBode",
+   "param": "kParamRange",
+   "param_id": 4,
+   "occurrences": 29,
+   "confidence": "library-majority"
+  },
+  {
+   "type": "WTOsc",
+   "param": "kParamInitialPhase",
+   "param_id": 8,
+   "occurrences": 29,
+   "confidence": "library-majority",
+   "other_ids": {
+    "3": 1
+   }
+  },
+  {
+   "type": "GranularOsc",
+   "param": "kParamGrainLength",
+   "param_id": 7,
+   "occurrences": 28,
+   "confidence": "library-majority"
+  },
+  {
+   "type": "FXDelay",
+   "param": "kParamFeedback",
+   "param_id": 9,
+   "occurrences": 27,
+   "confidence": "library-majority"
+  },
+  {
+   "type": "FXDelay",
+   "param": "kParamFreq",
+   "param_id": 2,
+   "occurrences": 27,
+   "confidence": "library-majority"
+  },
+  {
+   "type": "FXBode",
+   "param": "kParamBlur",
+   "param_id": 12,
+   "occurrences": 25,
+   "confidence": "library-majority"
+  },
+  {
+   "type": "Global",
+   "param": "kParamPortamentoTime",
+   "param_id": 3,
+   "occurrences": 25,
+   "confidence": "binary-enum",
+   "binary_enum_id": 3
+  },
+  {
+   "type": "FXChorus",
+   "param": "kParamFilt",
+   "param_id": 8,
+   "occurrences": 24,
+   "confidence": "library-majority"
+  },
+  {
+   "type": "FXComp",
+   "param": "kParamThresh",
+   "param_id": 2,
+   "occurrences": 24,
+   "confidence": "library-majority"
+  },
+  {
+   "type": "SpectralOsc",
+   "param": "kParamWarp2",
+   "param_id": 3,
+   "occurrences": 23,
+   "confidence": "library-majority"
+  },
+  {
+   "type": "FXEQ",
+   "param": "kParamReso2",
+   "param_id": 4,
+   "occurrences": 21,
+   "confidence": "library-majority"
+  },
+  {
+   "type": "FXHyperD",
+   "param": "kParamDetune",
+   "param_id": 3,
+   "occurrences": 20,
+   "confidence": "library-majority"
+  },
+  {
+   "type": "FXUtils",
+   "param": "kParamBalance",
+   "param_id": 4,
+   "occurrences": 20,
+   "confidence": "library-majority"
+  },
+  {
+   "type": "VoiceFilter",
+   "param": "kParamStereo",
+   "param_id": 7,
+   "occurrences": 20,
+   "confidence": "library-majority"
+  },
+  {
+   "type": "LFO",
+   "param": "kParamPhase",
+   "param_id": 4,
+   "occurrences": 18,
+   "confidence": "library-majority"
+  },
+  {
+   "type": "Oscillator",
+   "param": "kParamPitchRatio",
+   "param_id": 7,
+   "occurrences": 18,
+   "confidence": "binary-enum",
+   "binary_enum_id": 7
+  },
+  {
+   "type": "SpectralOsc",
+   "param": "kParamSpecFltShift",
+   "param_id": 6,
+   "occurrences": 18,
+   "confidence": "library-majority"
+  },
+  {
+   "type": "Arp",
+   "param": "kParamGate",
+   "param_id": 6,
+   "occurrences": 17,
+   "confidence": "library-majority"
+  },
+  {
+   "type": "FXDelay",
+   "param": "kParamLevelOut",
+   "param_id": 12,
+   "occurrences": 17,
+   "confidence": "library-majority"
+  },
+  {
+   "type": "FXReverb",
+   "param": "kParamLevelOut",
+   "param_id": 10,
+   "occurrences": 17,
+   "confidence": "library-majority"
+  },
+  {
+   "type": "FXConv",
+   "param": "kParamTone",
+   "param_id": 8,
+   "occurrences": 16,
+   "confidence": "binary-enum",
+   "binary_enum_id": 8
+  },
+  {
+   "type": "FXDelay",
+   "param": "kParamBW",
+   "param_id": 3,
+   "occurrences": 16,
+   "confidence": "library-majority"
+  },
+  {
+   "type": "FXConv",
+   "param": "kParamLevelOut",
+   "param_id": 3,
+   "occurrences": 15,
+   "confidence": "binary-enum",
+   "binary_enum_id": 3
+  },
+  {
+   "type": "Arp",
+   "param": "kParamRate",
+   "param_id": 1,
+   "occurrences": 14,
+   "confidence": "library-majority"
+  },
+  {
+   "type": "FXPhaser",
+   "param": "kParamFreq",
+   "param_id": 6,
+   "occurrences": 14,
+   "confidence": "library-majority"
+  },
+  {
+   "type": "Oscillator",
+   "param": "kParamHzOffset",
+   "param_id": 8,
+   "occurrences": 14,
+   "confidence": "binary-enum",
+   "binary_enum_id": 8
+  },
+  {
+   "type": "Oscillator",
+   "param": "kParamStart",
+   "param_id": 10,
+   "occurrences": 14,
+   "confidence": "binary-enum",
+   "binary_enum_id": 10
+  },
+  {
+   "type": "SampleOsc",
+   "param": "kParamWarp2",
+   "param_id": 3,
+   "occurrences": 14,
+   "confidence": "library-majority"
+  },
+  {
+   "type": "FXDelay",
+   "param": "kParamOffsetR",
+   "param_id": 11,
+   "occurrences": 13,
+   "confidence": "library-majority"
+  },
+  {
+   "type": "FXFilter",
+   "param": "kParamStereo",
+   "param_id": 7,
+   "occurrences": 13,
+   "confidence": "library-majority"
+  },
+  {
+   "type": "FXComp",
+   "param": "kParamRatio",
+   "param_id": 3,
+   "occurrences": 12,
+   "confidence": "library-majority"
+  },
+  {
+   "type": "FXComp",
+   "param": "kParamRatioBelow",
+   "param_id": 17,
+   "occurrences": 12,
+   "confidence": "library-majority"
+  },
+  {
+   "type": "FXDelay",
+   "param": "kParamTimeL",
+   "param_id": 6,
+   "occurrences": 12,
+   "confidence": "library-majority"
+  },
+  {
+   "type": "FXReverb",
+   "param": "kParamFreq",
+   "param_id": 4,
+   "occurrences": 12,
+   "confidence": "library-majority"
+  },
+  {
+   "type": "FXConv",
+   "param": "kParamIpTrim",
+   "param_id": 7,
+   "occurrences": 11,
+   "confidence": "binary-enum",
+   "binary_enum_id": 7
+  },
+  {
+   "type": "FXDelay",
+   "param": "kParamOffsetL",
+   "param_id": 10,
+   "occurrences": 11,
+   "confidence": "library-majority"
+  },
+  {
+   "type": "FXDelay",
+   "param": "kParamTimeR",
+   "param_id": 7,
+   "occurrences": 11,
+   "confidence": "library-majority"
+  },
+  {
+   "type": "FXEQ",
+   "param": "kParamLevelOut",
+   "param_id": 9,
+   "occurrences": 11,
+   "confidence": "library-majority"
+  },
+  {
+   "type": "FXReverb",
+   "param": "kParamFreqB",
+   "param_id": 6,
+   "occurrences": 11,
+   "confidence": "library-majority"
+  },
+  {
+   "type": "SpectralOsc",
+   "param": "kParamSpecFltWetDry",
+   "param_id": 7,
+   "occurrences": 11,
+   "confidence": "library-majority"
+  },
+  {
+   "type": "FXComp",
+   "param": "kParamLevelOut",
+   "param_id": 11,
+   "occurrences": 9,
+   "confidence": "library-majority"
+  },
+  {
+   "type": "GranularOsc",
+   "param": "kParamWarp",
+   "param_id": 0,
+   "occurrences": 9,
+   "confidence": "library-majority"
+  },
+  {
+   "type": "NoiseOsc",
+   "param": "kParamInitialPhase",
+   "param_id": 2,
+   "occurrences": 9,
+   "confidence": "library-majority"
+  },
+  {
+   "type": "Oscillator",
+   "param": "kParamPosition",
+   "param_id": 16,
+   "occurrences": 9,
+   "confidence": "binary-enum",
+   "binary_enum_id": 16
+  },
+  {
+   "type": "WTOsc",
+   "param": "kParamRandomPhase",
+   "param_id": 9,
+   "occurrences": 9,
+   "confidence": "library-majority"
+  },
+  {
+   "type": "FXHyperD",
+   "param": "kParamRate",
+   "param_id": 2,
+   "occurrences": 8,
+   "confidence": "library-majority"
+  },
+  {
+   "type": "FXSplit",
+   "param": "kParamFreq",
+   "param_id": 1,
+   "occurrences": 8,
+   "confidence": "library-majority"
+  },
+  {
+   "type": "LFO",
+   "param": "kParamRise",
+   "param_id": 2,
+   "occurrences": 8,
+   "confidence": "library-majority"
+  },
+  {
+   "type": "FXChorus",
+   "param": "kParamRate",
+   "param_id": 3,
+   "occurrences": 7,
+   "confidence": "library-majority"
+  },
+  {
+   "type": "FXConv",
+   "param": "kParamPredelay",
+   "param_id": 9,
+   "occurrences": 7,
+   "confidence": "binary-enum",
+   "binary_enum_id": 9
+  },
+  {
+   "type": "FXHyperD",
+   "param": "kParamLevelOut",
+   "param_id": 6,
+   "occurrences": 7,
+   "confidence": "library-majority"
+  },
+  {
+   "type": "GranularOsc",
+   "param": "kParamRandomPan",
+   "param_id": 16,
+   "occurrences": 7,
+   "confidence": "library-majority"
+  },
+  {
+   "type": "GranularOsc",
+   "param": "kParamRandomPitch",
+   "param_id": 14,
+   "occurrences": 7,
+   "confidence": "library-majority"
+  },
+  {
+   "type": "VoicePanel",
+   "param": "kParamGlobalScalingEnvTime",
+   "param_id": 58,
+   "occurrences": 7,
+   "confidence": "library-majority"
+  },
+  {
+   "type": "FXBode",
+   "param": "kParamFeedback",
+   "param_id": 7,
+   "occurrences": 6,
+   "confidence": "library-majority"
+  },
+  {
+   "type": "FXChorus",
+   "param": "kParamDepth",
+   "param_id": 6,
+   "occurrences": 6,
+   "confidence": "library-majority"
+  },
+  {
+   "type": "FXChorus",
+   "param": "kParamFeedback",
+   "param_id": 7,
+   "occurrences": 6,
+   "confidence": "library-majority"
+  },
+  {
+   "type": "FXComp",
+   "param": "kParamGain1",
+   "param_id": 15,
+   "occurrences": 6,
+   "confidence": "library-majority"
+  },
+  {
+   "type": "FXComp",
+   "param": "kParamGain2",
+   "param_id": 16,
+   "occurrences": 6,
+   "confidence": "library-majority"
+  },
+  {
+   "type": "FXConv",
+   "param": "kParamDecay",
+   "param_id": 6,
+   "occurrences": 6,
+   "confidence": "binary-enum",
+   "binary_enum_id": 6
+  },
+  {
+   "type": "FXFilter",
+   "param": "kParamY",
+   "param_id": 10,
+   "occurrences": 6,
+   "confidence": "library-majority"
+  },
+  {
+   "type": "FXHyperD",
+   "param": "kParamDimESize",
+   "param_id": 7,
+   "occurrences": 6,
+   "confidence": "library-majority"
+  },
+  {
+   "type": "FXReverb",
+   "param": "kParamWidth",
+   "param_id": 7,
+   "occurrences": 6,
+   "confidence": "library-majority"
+  },
+  {
+   "type": "FXUtils",
+   "param": "kParamLFXover",
+   "param_id": 6,
+   "occurrences": 6,
+   "confidence": "library-majority"
+  },
+  {
+   "type": "GranularOsc",
+   "param": "kParamRandomDir",
+   "param_id": 13,
+   "occurrences": 6,
+   "confidence": "library-majority",
+   "other_ids": {
+    "10": 1
+   }
+  },
+  {
+   "type": "GranularOsc",
+   "param": "kParamWarp2",
+   "param_id": 3,
+   "occurrences": 6,
+   "confidence": "library-majority"
+  },
+  {
+   "type": "VoicePanel",
+   "param": "kParamGlobalScalingLfoTime",
+   "param_id": 59,
+   "occurrences": 6,
+   "confidence": "library-majority"
+  },
+  {
+   "type": "Env",
+   "param": "kParamHold",
+   "param_id": 1,
+   "occurrences": 5,
+   "confidence": "library-majority"
+  },
+  {
+   "type": "FXBode",
+   "param": "kParamDelayTime",
+   "param_id": 6,
+   "occurrences": 5,
+   "confidence": "library-majority"
+  },
+  {
+   "type": "FXChorus",
+   "param": "kParamLevelOut",
+   "param_id": 9,
+   "occurrences": 5,
+   "confidence": "library-majority"
+  },
+  {
+   "type": "FXComp",
+   "param": "kParamRelease",
+   "param_id": 5,
+   "occurrences": 5,
+   "confidence": "library-majority"
+  },
+  {
+   "type": "FXFilter",
+   "param": "kParamX",
+   "param_id": 9,
+   "occurrences": 5,
+   "confidence": "library-majority"
+  },
+  {
+   "type": "FXFlanger",
+   "param": "kParamDepth",
+   "param_id": 4,
+   "occurrences": 5,
+   "confidence": "library-majority"
+  },
+  {
+   "type": "FXPhaser",
+   "param": "kParamDepth",
+   "param_id": 4,
+   "occurrences": 5,
+   "confidence": "library-majority"
+  },
+  {
+   "type": "FXReverb",
+   "param": "kParamVintageScale",
+   "param_id": 11,
+   "occurrences": 5,
+   "confidence": "library-majority"
+  },
+  {
+   "type": "MidiClip",
+   "param": "kParamRate",
+   "param_id": 8,
+   "occurrences": 5,
+   "confidence": "library-majority"
+  },
+  {
+   "type": "NoiseOsc",
+   "param": "kParamFine",
+   "param_id": 1,
+   "occurrences": 5,
+   "confidence": "library-majority"
+  },
+  {
+   "type": "Arp",
+   "param": "kParamTransposeRange",
+   "param_id": 3,
+   "occurrences": 4,
+   "confidence": "library-majority"
+  },
+  {
+   "type": "FXBode",
+   "param": "kParamLevelOut",
+   "param_id": 5,
+   "occurrences": 4,
+   "confidence": "library-majority"
+  },
+  {
+   "type": "FXBode",
+   "param": "kParamOutputMix",
+   "param_id": 10,
+   "occurrences": 4,
+   "confidence": "library-majority"
+  },
+  {
+   "type": "FXBode",
+   "param": "kParamOutputWidth",
+   "param_id": 11,
+   "occurrences": 4,
+   "confidence": "library-majority"
+  },
+  {
+   "type": "FXComp",
+   "param": "kParamRatioBelow2",
+   "param_id": 23,
+   "occurrences": 4,
+   "confidence": "library-majority"
+  },
+  {
+   "type": "FXDistortion",
+   "param": "kParamBW",
+   "param_id": 6,
+   "occurrences": 4,
+   "confidence": "library-majority"
+  },
+  {
+   "type": "FXDistortion",
+   "param": "kParamLPHP",
+   "param_id": 3,
+   "occurrences": 4,
+   "confidence": "library-majority"
+  },
+  {
+   "type": "FXFlanger",
+   "param": "kParamFeedback",
+   "param_id": 5,
+   "occurrences": 4,
+   "confidence": "library-majority"
+  },
+  {
+   "type": "FXFlanger",
+   "param": "kParamRate",
+   "param_id": 3,
+   "occurrences": 4,
+   "confidence": "library-majority"
+  },
+  {
+   "type": "FXPhaser",
+   "param": "kParamFeedback",
+   "param_id": 7,
+   "occurrences": 4,
+   "confidence": "library-majority"
+  },
+  {
+   "type": "FXPhaser",
+   "param": "kParamRate",
+   "param_id": 3,
+   "occurrences": 4,
+   "confidence": "library-majority"
+  },
+  {
+   "type": "FXSplit3",
+   "param": "kParamFreq2",
+   "param_id": 2,
+   "occurrences": 4,
+   "confidence": "library-majority"
+  },
+  {
+   "type": "GranularOsc",
+   "param": "kParamRandomOffset",
+   "param_id": 12,
+   "occurrences": 4,
+   "confidence": "library-majority"
+  },
+  {
+   "type": "LFO",
+   "param": "kParamDelay",
+   "param_id": 3,
+   "occurrences": 4,
+   "confidence": "library-majority"
+  },
+  {
+   "type": "VoiceFilter",
+   "param": "kParamX",
+   "param_id": 9,
+   "occurrences": 4,
+   "confidence": "library-majority"
+  },
+  {
+   "type": "FXChorus",
+   "param": "kParamDelay",
+   "param_id": 4,
+   "occurrences": 3,
+   "confidence": "library-majority"
+  },
+  {
+   "type": "FXComp",
+   "param": "kParamXoverHi",
+   "param_id": 13,
+   "occurrences": 3,
+   "confidence": "library-majority"
+  },
+  {
+   "type": "FXSplit3",
+   "param": "kParamFreq",
+   "param_id": 1,
+   "occurrences": 3,
+   "confidence": "library-majority"
+  },
+  {
+   "type": "FXUtils",
+   "param": "kParamWet",
+   "param_id": 1,
+   "occurrences": 3,
+   "confidence": "library-majority"
+  },
+  {
+   "type": "Oscillator",
+   "param": "kParamLoopEnd",
+   "param_id": 18,
+   "occurrences": 3,
+   "confidence": "binary-enum",
+   "binary_enum_id": 18
+  },
+  {
+   "type": "Oscillator",
+   "param": "kParamUnisonWarp",
+   "param_id": 31,
+   "occurrences": 3,
+   "confidence": "binary-enum",
+   "binary_enum_id": 31
+  },
+  {
+   "type": "Oscillator",
+   "param": "kParamUnisonWarp2",
+   "param_id": 32,
+   "occurrences": 3,
+   "confidence": "binary-enum",
+   "binary_enum_id": 32
+  },
+  {
+   "type": "WTOsc",
+   "param": "kParamUnisonWTPos",
+   "param_id": 7,
+   "occurrences": 3,
+   "confidence": "library-majority"
+  },
+  {
+   "type": "Arp",
+   "param": "kParamChance",
+   "param_id": 7,
+   "occurrences": 2,
+   "confidence": "library-majority"
+  },
+  {
+   "type": "Arp",
+   "param": "kParamWrapPhantomNote",
+   "param_id": 14,
+   "occurrences": 2,
+   "confidence": "library-majority"
+  },
+  {
+   "type": "Env",
+   "param": "kParamCurve3",
+   "param_id": 7,
+   "occurrences": 2,
+   "confidence": "library-majority"
+  },
+  {
+   "type": "FXChorus",
+   "param": "kParamDelay2",
+   "param_id": 5,
+   "occurrences": 2,
+   "confidence": "library-majority"
+  },
+  {
+   "type": "FXComp",
+   "param": "kParamGain0",
+   "param_id": 14,
+   "occurrences": 2,
+   "confidence": "library-majority"
+  },
+  {
+   "type": "FXComp",
+   "param": "kParamRatio2",
+   "param_id": 20,
+   "occurrences": 2,
+   "confidence": "library-majority"
+  },
+  {
+   "type": "FXComp",
+   "param": "kParamThreshUD2",
+   "param_id": 10,
+   "occurrences": 2,
+   "confidence": "library-majority"
+  },
+  {
+   "type": "FXFlanger",
+   "param": "kParamLevelOut",
+   "param_id": 7,
+   "occurrences": 2,
+   "confidence": "library-majority"
+  },
+  {
+   "type": "FXReverb",
+   "param": "kParamFeedback",
+   "param_id": 5,
+   "occurrences": 2,
+   "confidence": "library-majority"
+  },
+  {
+   "type": "Global",
+   "param": "kParamTranspose",
+   "param_id": 16,
+   "occurrences": 2,
+   "confidence": "binary-enum",
+   "binary_enum_id": 16
+  },
+  {
+   "type": "GranularOsc",
+   "param": "kParamRandomGain",
+   "param_id": 17,
+   "occurrences": 2,
+   "confidence": "library-majority"
+  },
+  {
+   "type": "GranularOsc",
+   "param": "kParamRandomGrainLength",
+   "param_id": 15,
+   "occurrences": 2,
+   "confidence": "library-majority"
+  },
+  {
+   "type": "GranularOsc",
+   "param": "kParamRandomWarp",
+   "param_id": 20,
+   "occurrences": 2,
+   "confidence": "library-majority"
+  },
+  {
+   "type": "MultiSampleOsc",
+   "param": "kParamEnvDecay",
+   "param_id": 12,
+   "occurrences": 2,
+   "confidence": "binary-enum",
+   "binary_enum_id": 12
+  },
+  {
+   "type": "MultiSampleOsc",
+   "param": "kParamEnvSustain",
+   "param_id": 13,
+   "occurrences": 2,
+   "confidence": "binary-enum",
+   "binary_enum_id": 13
+  },
+  {
+   "type": "NoiseOsc",
+   "param": "kParamRandomPhase",
+   "param_id": 3,
+   "occurrences": 2,
+   "confidence": "library-majority"
+  },
+  {
+   "type": "Oscillator",
+   "param": "kParamScanBPMRate",
+   "param_id": 14,
+   "occurrences": 2,
+   "confidence": "binary-enum",
+   "binary_enum_id": 14
+  },
+  {
+   "type": "SpectralOsc",
+   "param": "kParamFreqHi",
+   "param_id": 9,
+   "occurrences": 2,
+   "confidence": "library-majority"
+  },
+  {
+   "type": "SpectralOsc",
+   "param": "kParamFreqLo",
+   "param_id": 8,
+   "occurrences": 2,
+   "confidence": "library-majority"
+  },
+  {
+   "type": "Arp",
+   "param": "kParamVeloTarget",
+   "param_id": 10,
+   "occurrences": 1,
+   "confidence": "library-majority"
+  },
+  {
+   "type": "Env",
+   "param": "kParamCurve1",
+   "param_id": 5,
+   "occurrences": 1,
+   "confidence": "library-majority"
+  },
+  {
+   "type": "FXComp",
+   "param": "kParamAttack",
+   "param_id": 4,
+   "occurrences": 1,
+   "confidence": "library-majority"
+  },
+  {
+   "type": "FXComp",
+   "param": "kParamRatioBelow1",
+   "param_id": 22,
+   "occurrences": 1,
+   "confidence": "library-majority"
+  },
+  {
+   "type": "FXDelay",
+   "param": "kParamLink",
+   "param_id": 5,
+   "occurrences": 1,
+   "confidence": "library-majority"
+  },
+  {
+   "type": "FXDistortion",
+   "param": "kParamNumStages",
+   "param_id": 9,
+   "occurrences": 1,
+   "confidence": "library-majority"
+  },
+  {
+   "type": "FXFlanger",
+   "param": "kParamWidth",
+   "param_id": 6,
+   "occurrences": 1,
+   "confidence": "library-majority"
+  },
+  {
+   "type": "FXPhaser",
+   "param": "kParamDepth2",
+   "param_id": 5,
+   "occurrences": 1,
+   "confidence": "library-majority"
+  },
+  {
+   "type": "FXPhaser",
+   "param": "kParamLevelOut",
+   "param_id": 9,
+   "occurrences": 1,
+   "confidence": "library-majority"
+  },
+  {
+   "type": "Global",
+   "param": "kParamSwing",
+   "param_id": 14,
+   "occurrences": 1,
+   "confidence": "binary-enum",
+   "binary_enum_id": 14
+  },
+  {
+   "type": "GranularOsc",
+   "param": "kParamDensityMode",
+   "param_id": 23,
+   "occurrences": 1,
+   "confidence": "library-majority"
+  },
+  {
+   "type": "GranularOsc",
+   "param": "kParamWindowParam",
+   "param_id": 9,
+   "occurrences": 1,
+   "confidence": "library-majority"
+  },
+  {
+   "type": "ModSlot",
+   "param": "kParamSmoothFall",
+   "param_id": 12,
+   "occurrences": 1,
+   "confidence": "library-majority"
+  },
+  {
+   "type": "MultiSampleOsc",
+   "param": "kParamEnvRelease",
+   "param_id": 14,
+   "occurrences": 1,
+   "confidence": "binary-enum",
+   "binary_enum_id": 14
+  },
+  {
+   "type": "Oscillator",
+   "param": "kParamLoopStart",
+   "param_id": 17,
+   "occurrences": 1,
+   "confidence": "binary-enum",
+   "binary_enum_id": 17
+  },
+  {
+   "type": "RetriggerState",
+   "param": "kParamEnv2",
+   "param_id": 7,
+   "occurrences": 1,
+   "confidence": "library-majority"
+  },
+  {
+   "type": "RetriggerState",
+   "param": "kParamEnv4",
+   "param_id": 9,
+   "occurrences": 1,
+   "confidence": "library-majority"
+  },
+  {
+   "type": "RetriggerState",
+   "param": "kParamLFO1",
+   "param_id": 10,
+   "occurrences": 1,
+   "confidence": "library-majority"
+  },
+  {
+   "type": "RetriggerState",
+   "param": "kParamLFO3",
+   "param_id": 12,
+   "occurrences": 1,
+   "confidence": "library-majority"
+  },
+  {
+   "type": "RetriggerState",
+   "param": "kParamNoise",
+   "param_id": 5,
+   "occurrences": 1,
+   "confidence": "library-majority"
+  },
+  {
+   "type": "RetriggerState",
+   "param": "kParamOscB",
+   "param_id": 2,
+   "occurrences": 1,
+   "confidence": "library-majority"
+  },
+  {
+   "type": "RetriggerState",
+   "param": "kParamOscC",
+   "param_id": 3,
+   "occurrences": 1,
+   "confidence": "library-majority"
+  },
+  {
+   "type": "VoiceFilter",
+   "param": "kParamY",
+   "param_id": 10,
+   "occurrences": 1,
+   "confidence": "library-majority"
+  },
+  {
+   "type": "WTOsc",
+   "param": "kParamWarpVar",
+   "param_id": 1,
+   "occurrences": 1,
+   "confidence": "library-majority"
+  },
+  {
+   "type": "WTOsc",
+   "param": "kParamWarpVar2",
+   "param_id": 4,
+   "occurrences": 1,
+   "confidence": "library-majority"
+  }
+ ],
+ "binary_enums": {
+  "Global": [
+   "kParamMasterVolume",
+   "kParamMasterTuning",
+   "kParamVoiceAmp",
+   "kParamPortamentoTime",
+   "kParamPortamentoCurve",
+   "kParamBendRangeUp",
+   "kParamBendRangeDn",
+   "kParamPitchBendAuto",
+   "kParamModWheel",
+   "kParamProgram",
+   "kParamMonoToggle",
+   "kParamLegato",
+   "kParamPortaAlways",
+   "kParamPortaScaled",
+   "kParamSwing",
+   "kParamSwingDiv",
+   "kParamTranspose",
+   "kParamBypass",
+   "kParamDirectVol",
+   "kParamFXBus1Vol",
+   "kParamFXBus2Vol"
+  ],
+  "Oscillator": [
+   "kParamEnable",
+   "kParamVolume",
+   "kParamPan",
+   "kParamOctave",
+   "kParamPitch",
+   "kParamFine",
+   "kParamCoarsePit",
+   "kParamPitchRatio",
+   "kParamHzOffset",
+   "kParamPitchTrack",
+   "kParamStart",
+   "kParamEnd",
+   "kParamReverse",
+   "kParamScanRate",
+   "kParamScanBPMRate",
+   "kParamScanKeyTrack",
+   "kParamPosition",
+   "kParamLoopStart",
+   "kParamLoopEnd",
+   "kParamLoopCrossfade",
+   "kParamLoopMode",
+   "kParamLoopStartLink",
+   "kParamSlicingSingleSlice",
+   "kParamSlicingPlayToEnd",
+   "kParamUnison",
+   "kParamUnisonStack",
+   "kParamDetune",
+   "kParamDetuneWid",
+   "kParamUnisonStereo",
+   "kParamUnisonSpan",
+   "kParamRandomStart",
+   "kParamUnisonWarp",
+   "kParamUnisonWarp2"
+  ],
+  "RoutingSlot": [
+   "kParamFilterBalance",
+   "kParamFXBus1Level",
+   "kParamFXBus2Level"
+  ],
+  "MultiSampleOsc": [
+   "kParamWarp",
+   "kParamWarpVar",
+   "kParamWarpMenu",
+   "kParamWarp2",
+   "kParamWarpVar2",
+   "kParamWarpMenu2",
+   "kParamTimbreShift",
+   "kParamRandomPhase",
+   "kParamEnvOverride",
+   "kParamEnvDelay",
+   "kParamEnvAttack",
+   "kParamEnvHold",
+   "kParamEnvDecay",
+   "kParamEnvSustain",
+   "kParamEnvRelease",
+   "kParamVelTrackOverride",
+   "kParamVelTrack"
+  ],
+  "FXConv": [
+   "kParamEnable",
+   "kParamWet",
+   "kParamMinPhase",
+   "kParamLevelOut",
+   "kParamSize",
+   "kParamAttack",
+   "kParamDecay",
+   "kParamIpTrim",
+   "kParamTone",
+   "kParamPredelay",
+   "kParamPredelayBeatSync",
+   "kParamDamping"
+  ],
+  "ModSlot": [
+   "kParamAmount",
+   "kParamOut"
+  ]
+ },
+ "notes": [
+  "Source ids are numeric in files; the names here are inferred (see each row's confidence) and must be confirmed live: load a patch with one slot and check Serum's matrix, or render two velocities.",
+  "Ids 26/27/28 for Oscillator kParamDetune/kParamDetuneWid/kParamUnisonStereo match the 2.1.4 enum; the rare 10/11 ids come from older presets."
+ ]
+}

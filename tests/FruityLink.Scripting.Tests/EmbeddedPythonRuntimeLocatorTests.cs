@@ -74,6 +74,45 @@ public sealed class EmbeddedPythonRuntimeLocatorTests
         Assert.Throws<ArgumentException>(() => EmbeddedPythonRuntimeLocator.ResolveCore("relative", null, _ => null, _ => false));
     }
 
+    [Fact]
+    public void MissingInstalledExtensionDirectoryAddsNothing()
+    {
+        var packages = EmbeddedPythonRuntimeLocator.DiscoverExtensionPackages(Host, _ => false,
+            _ => throw new InvalidOperationException("must not enumerate"), _ => throw new InvalidOperationException("must not enumerate"));
+
+        Assert.Empty(packages);
+    }
+
+    [Fact]
+    public void InstalledExtensionWheelsAreDeterministicAndBecomeImportPaths()
+    {
+        string root = Path.Combine(Host, "python", "extensions");
+        string alpha = Path.Combine(root, "alpha");
+        string serum = Path.Combine(root, "serum-support");
+        string alphaWheel = Path.Combine(alpha, "alpha_tools-1.0.0-py3-none-any.whl");
+        string serumWheel = Path.Combine(serum, "fruitylink_serum-0.1.0-py3-none-any.whl");
+        var packages = EmbeddedPythonRuntimeLocator.DiscoverExtensionPackages(Host, path => path == root,
+            _ => [serum, alpha], directory => directory == serum ? [serumWheel] : [alphaWheel]);
+
+        Assert.Equal([alphaWheel, serumWheel], packages);
+        var options = Common with { ExtensionPackagePaths = packages };
+        Assert.Equal(["stdlib.zip", Common.RuntimeDirectory, Common.PythonPackagePath, alphaWheel, serumWheel],
+            EmbeddedPythonConfiguration.BuildModuleSearchPaths(options, "stdlib.zip"));
+    }
+
+    [Fact]
+    public void MultipleWheelVersionsForOneExtensionAreRejected()
+    {
+        string root = Path.Combine(Host, "python", "extensions");
+        string serum = Path.Combine(root, "serum-support");
+
+        var error = Assert.Throws<InvalidOperationException>(() => EmbeddedPythonRuntimeLocator.DiscoverExtensionPackages(
+            Host, path => path == root, _ => [serum], _ =>
+            [Path.Combine(serum, "fruitylink_serum-0.1.0-py3-none-any.whl"), Path.Combine(serum, "fruitylink_serum-0.2.0-py3-none-any.whl")]));
+
+        Assert.Contains("multiple wheels", error.Message);
+    }
+
     private static EmbeddedPythonOptions Resolve(EmbeddedPythonOptions? active, Func<string, bool> exists,
         Dictionary<string, string?>? environment = null) => EmbeddedPythonRuntimeLocator.ResolveCore(Host, active,
         key => environment?.GetValueOrDefault(key), exists);

@@ -30,8 +30,9 @@ def test_record_arguments_keep_camel_case_wire_names(fl: Studio, transport: Reco
         "pattern": 2, "notes": [{"channel": 1, "key": 60, "startTick": 96, "lengthTick": 48, "velocity": 100}]}})]
     assert to_json(NoteEdit(1, 60, 96, new_velocity=80)) == {
         "channel": 1, "key": 60, "startTick": 96, "newKey": None, "newStartTick": None,
-        "newLength": None, "newVelocity": 80, "muted": None}
-    assert to_json(NoteRef(1, 60, 96)) == {"channel": 1, "key": 60, "startTick": 96}
+        "newLength": None, "newVelocity": 80, "muted": None, "lengthTick": None}
+    assert to_json(NoteRef(1, 60, 96)) == {"channel": 1, "key": 60, "startTick": 96, "lengthTick": None}
+    assert to_json(NoteRef(1, 60, 96, 48)) == {"channel": 1, "key": 60, "startTick": 96, "lengthTick": 48}
     assert to_json(PatternClipSpec(1, 2, 96, 384)) == {"pattern": 1, "track": 2, "startTick": 96, "lengthTick": 384}
 
 

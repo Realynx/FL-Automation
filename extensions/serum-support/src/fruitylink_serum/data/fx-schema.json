@@ -1,0 +1,1842 @@
+{
+ "provenance": {
+  "generated": "2026-09-13",
+  "method": "Derived statistics from decoding the locally installed Serum 2 library (.SerumPreset/.SerumFX/.SerumFXRack) and this project's FL-saved processor states with fruitylink_serum.xfer; no preset payloads are stored.",
+  "files_scanned": 1125,
+  "engine_reference": "Serum 2 (productVersion up to 2.1.4), FL Studio 26.1.3 wrapper displays"
+ },
+ "layout": {
+  "racks": "state['FXRack0'..'FXRack2'] = {'FX': [unit, ...], 'displayName': str, 'plainParams': ..., 'proxyParams': {...}}; FXRack0 is the main chain, FXRack1/2 the buses fed by Global kParamFXBus1Vol/kParamFXBus2Vol",
+  "unit": "each unit is a map {'type': <int>, '<FXName>': {'plainParams': {...}, ...}, 'kUIParamMixOrGain': 0.0, optional 'flex': [..], optional 'selectedPreset': 'Factory/<name>.SerumFX', 'presetEdited': bool}",
+  "type_key": "unit['type'] selects the effect; the single 'FX*' key must match type_map",
+  "order": "list order is the processing order",
+  "enable": "plainParams.kParamEnable absent = enabled; 0.0 = bypassed",
+  "mix": "plainParams.kParamWet 0..100 percent (most units); kParamLevelOut linear gain",
+  "chain_lengths_observed": {
+   "len=0": 1508,
+   "len=6": 168,
+   "len=4": 167,
+   "len=5": 164,
+   "len=3": 157,
+   "len=2": 152,
+   "len=1": 121,
+   "len=7": 113,
+   "len=8": 80,
+   "len=9": 41,
+   "len=10": 30,
+   "len=11": 11,
+   "len=12": 10,
+   "len=15": 6,
+   "len=13": 5,
+   "len=14": 3,
+   "len=22": 2,
+   "len=19": 2,
+   "len=18": 1,
+   "len=23": 1
+  }
+ },
+ "type_map": {
+  "0": {
+   "section": "FXDistortion",
+   "label": "Distortion"
+  },
+  "1": {
+   "section": "FXFlanger",
+   "label": "Flanger"
+  },
+  "2": {
+   "section": "FXPhaser",
+   "label": "Phaser"
+  },
+  "3": {
+   "section": "FXChorus",
+   "label": "Chorus"
+  },
+  "4": {
+   "section": "FXDelay",
+   "label": "Delay"
+  },
+  "5": {
+   "section": "FXComp",
+   "label": "Compressor"
+  },
+  "6": {
+   "section": "FXReverb",
+   "label": "Reverb"
+  },
+  "7": {
+   "section": "FXEQ",
+   "label": "Equalizer"
+  },
+  "8": {
+   "section": "FXFilter",
+   "label": "Filter"
+  },
+  "9": {
+   "section": "FXHyperD",
+   "label": "Hyper / Dimension"
+  },
+  "10": {
+   "section": "FXBode",
+   "label": "Bode (frequency shifter)"
+  },
+  "11": {
+   "section": "FXConv",
+   "label": "Convolve (convolution reverb)"
+  },
+  "12": {
+   "section": "FXUtils",
+   "label": "Utility"
+  },
+  "13": {
+   "section": "FXSplit",
+   "label": "Splitter (L/H)"
+  },
+  "14": {
+   "section": "FXSplit3",
+   "label": "Splitter (3 band)"
+  },
+  "15": {
+   "section": "FXSplitMS",
+   "label": "Splitter (M/S)"
+  }
+ },
+ "effects": {
+  "FXDistortion": {
+   "type": 0,
+   "label": "Distortion",
+   "occurrences": 696,
+   "parameters": [
+    {
+     "key": "kParamBW",
+     "type": "float",
+     "min": 0.075,
+     "max": 7.575,
+     "occurrences": 261,
+     "confidence": "observed-only"
+    },
+    {
+     "key": "kParamDrive",
+     "type": "float",
+     "min": 0.0,
+     "max": 100.0,
+     "occurrences": 650,
+     "confidence": "observed-only"
+    },
+    {
+     "key": "kParamEnable",
+     "type": "float",
+     "min": 0.0,
+     "max": 0.0,
+     "occurrences": 2,
+     "scale": "flag",
+     "confidence": "inferred",
+     "note": "absent = enabled; 0 = bypassed"
+    },
+    {
+     "key": "kParamFreq",
+     "type": "float",
+     "min": 0.0,
+     "max": 1.0,
+     "occurrences": 284,
+     "confidence": "observed-only"
+    },
+    {
+     "key": "kParamLPHP",
+     "type": "float",
+     "min": 0.12959367595613003,
+     "max": 100.0,
+     "occurrences": 132,
+     "confidence": "observed-only"
+    },
+    {
+     "key": "kParamLevelOut",
+     "type": "float",
+     "min": 0.0,
+     "max": 1.0,
+     "occurrences": 110,
+     "scale": "linear_gain",
+     "confidence": "inferred"
+    },
+    {
+     "key": "kParamMode",
+     "type": "enum",
+     "min": null,
+     "max": null,
+     "occurrences": 499,
+     "values": [
+      "kOverdrive",
+      "kDownsample",
+      "kSoftClip",
+      "kTapeSat",
+      "kDiode1",
+      "kSoftSat",
+      "kDiode2",
+      "kAsym",
+      "kHardClip",
+      "kSineShaper",
+      "kStompBox",
+      "kSinFold",
+      "kZeroSquare",
+      "kRectify",
+      "kXShaper",
+      "kLinFold",
+      "kXShaperAsym"
+     ],
+     "confidence": "observed-only"
+    },
+    {
+     "key": "kParamNumStages",
+     "type": "float",
+     "min": 2.0,
+     "max": 16.0,
+     "occurrences": 59,
+     "confidence": "observed-only"
+    },
+    {
+     "key": "kParamPrePost",
+     "type": "float",
+     "min": 1.0,
+     "max": 2.0,
+     "occurrences": 229,
+     "confidence": "observed-only"
+    },
+    {
+     "key": "kParamWet",
+     "type": "float",
+     "min": 0.0,
+     "max": 99.56140518188477,
+     "occurrences": 404,
+     "scale": "percent",
+     "confidence": "inferred",
+     "note": "unit mix 0..100"
+    }
+   ],
+   "other_fields": {}
+  },
+  "FXFlanger": {
+   "type": 1,
+   "label": "Flanger",
+   "occurrences": 89,
+   "parameters": [
+    {
+     "key": "kParamBeatSync",
+     "type": "float",
+     "min": 1.0,
+     "max": 1.0,
+     "occurrences": 11,
+     "scale": "flag",
+     "confidence": "inferred"
+    },
+    {
+     "key": "kParamDepth",
+     "type": "float",
+     "min": 0.0,
+     "max": 99.96541142463684,
+     "occurrences": 37,
+     "confidence": "observed-only"
+    },
+    {
+     "key": "kParamEnable",
+     "type": "float",
+     "min": 0.0,
+     "max": 0.0,
+     "occurrences": 2,
+     "scale": "flag",
+     "confidence": "inferred",
+     "note": "absent = enabled; 0 = bypassed"
+    },
+    {
+     "key": "kParamFeedback",
+     "type": "float",
+     "min": 19.736841320991516,
+     "max": 90.91830253601074,
+     "occurrences": 39,
+     "confidence": "observed-only"
+    },
+    {
+     "key": "kParamLevelOut",
+     "type": "float",
+     "min": 0.3976608216762543,
+     "max": 0.7294819355010986,
+     "occurrences": 5,
+     "scale": "linear_gain",
+     "confidence": "inferred"
+    },
+    {
+     "key": "kParamRate",
+     "type": "float",
+     "min": 0.0,
+     "max": 20.0,
+     "occurrences": 48,
+     "confidence": "observed-only"
+    },
+    {
+     "key": "kParamWet",
+     "type": "float",
+     "min": 0.0,
+     "max": 90.35087823867798,
+     "occurrences": 77,
+     "scale": "percent",
+     "confidence": "inferred",
+     "note": "unit mix 0..100"
+    },
+    {
+     "key": "kParamWidth",
+     "type": "float",
+     "min": 0.0,
+     "max": 360.0,
+     "occurrences": 19,
+     "confidence": "observed-only"
+    }
+   ],
+   "other_fields": {}
+  },
+  "FXPhaser": {
+   "type": 2,
+   "label": "Phaser",
+   "occurrences": 144,
+   "parameters": [
+    {
+     "key": "kParamBeatSync",
+     "type": "float",
+     "min": 1.0,
+     "max": 1.0,
+     "occurrences": 41,
+     "scale": "flag",
+     "confidence": "inferred"
+    },
+    {
+     "key": "kParamDepth",
+     "type": "float",
+     "min": 0.0,
+     "max": 100.0,
+     "occurrences": 85,
+     "confidence": "observed-only"
+    },
+    {
+     "key": "kParamDepth2",
+     "type": "float",
+     "min": 0.0,
+     "max": 1.0,
+     "occurrences": 60,
+     "confidence": "observed-only"
+    },
+    {
+     "key": "kParamEnable",
+     "type": "float",
+     "min": 0.0,
+     "max": 0.0,
+     "occurrences": 5,
+     "scale": "flag",
+     "confidence": "inferred",
+     "note": "absent = enabled; 0 = bypassed"
+    },
+    {
+     "key": "kParamFeedback",
+     "type": "float",
+     "min": 0.0,
+     "max": 100.0,
+     "occurrences": 99,
+     "confidence": "observed-only"
+    },
+    {
+     "key": "kParamFreq",
+     "type": "float",
+     "min": 20.0,
+     "max": 18000.0,
+     "occurrences": 97,
+     "confidence": "observed-only"
+    },
+    {
+     "key": "kParamLevelOut",
+     "type": "float",
+     "min": 0.31578946113586426,
+     "max": 0.7623224854469299,
+     "occurrences": 12,
+     "scale": "linear_gain",
+     "confidence": "inferred"
+    },
+    {
+     "key": "kParamNumPoles",
+     "type": "float",
+     "min": 1.0,
+     "max": 18.0,
+     "occurrences": 59,
+     "confidence": "observed-only"
+    },
+    {
+     "key": "kParamRate",
+     "type": "float",
+     "min": 0.0,
+     "max": 20.0,
+     "occurrences": 102,
+     "confidence": "observed-only"
+    },
+    {
+     "key": "kParamWet",
+     "type": "float",
+     "min": 0.0,
+     "max": 82.61488080024719,
+     "occurrences": 127,
+     "scale": "percent",
+     "confidence": "inferred",
+     "note": "unit mix 0..100"
+    },
+    {
+     "key": "kParamWidth",
+     "type": "float",
+     "min": 0.0,
+     "max": 334.7368311882019,
+     "occurrences": 25,
+     "confidence": "observed-only"
+    }
+   ],
+   "other_fields": {
+    "lfophasor": {
+     "types": {
+      "float": 1
+     },
+     "occurrences": 1,
+     "values": [
+      "0.4303"
+     ]
+    }
+   }
+  },
+  "FXChorus": {
+   "type": 3,
+   "label": "Chorus",
+   "occurrences": 315,
+   "parameters": [
+    {
+     "key": "kParamBeatSync",
+     "type": "float",
+     "min": 1.0,
+     "max": 1.0,
+     "occurrences": 7,
+     "scale": "flag",
+     "confidence": "inferred"
+    },
+    {
+     "key": "kParamDelay",
+     "type": "float",
+     "min": 0.0,
+     "max": 18.000000888934053,
+     "occurrences": 118,
+     "confidence": "observed-only"
+    },
+    {
+     "key": "kParamDelay2",
+     "type": "float",
+     "min": 0.04941691534257303,
+     "max": 19.17534566587875,
+     "occurrences": 93,
+     "confidence": "observed-only"
+    },
+    {
+     "key": "kParamDepth",
+     "type": "float",
+     "min": 0.0,
+     "max": 25.245323150890364,
+     "occurrences": 147,
+     "confidence": "observed-only"
+    },
+    {
+     "key": "kParamEnable",
+     "type": "float",
+     "min": 0.0,
+     "max": 0.0,
+     "occurrences": 4,
+     "scale": "flag",
+     "confidence": "inferred",
+     "note": "absent = enabled; 0 = bypassed"
+    },
+    {
+     "key": "kParamFeedback",
+     "type": "float",
+     "min": 0.0,
+     "max": 60.66211253404617,
+     "occurrences": 188,
+     "confidence": "observed-only"
+    },
+    {
+     "key": "kParamFilt",
+     "type": "float",
+     "min": 50.0,
+     "max": 20000.0,
+     "occurrences": 233,
+     "confidence": "observed-only"
+    },
+    {
+     "key": "kParamFiltMode",
+     "type": "float",
+     "min": 1.0,
+     "max": 1.0,
+     "occurrences": 26,
+     "confidence": "observed-only"
+    },
+    {
+     "key": "kParamLevelOut",
+     "type": "float",
+     "min": 0.37014803290367126,
+     "max": 1.0,
+     "occurrences": 33,
+     "scale": "linear_gain",
+     "confidence": "inferred"
+    },
+    {
+     "key": "kParamRate",
+     "type": "float",
+     "min": 0.0,
+     "max": 6.542255079971873,
+     "occurrences": 153,
+     "confidence": "observed-only"
+    },
+    {
+     "key": "kParamWet",
+     "type": "float",
+     "min": 0.0,
+     "max": 100.0,
+     "occurrences": 294,
+     "scale": "percent",
+     "confidence": "inferred",
+     "note": "unit mix 0..100"
+    }
+   ],
+   "other_fields": {
+    "lfophasor": {
+     "types": {
+      "float": 4
+     },
+     "occurrences": 4,
+     "values": [
+      "0.1054",
+      "0.388",
+      "0.6912",
+      "0.3098"
+     ]
+    }
+   }
+  },
+  "FXDelay": {
+   "type": 4,
+   "label": "Delay",
+   "occurrences": 670,
+   "parameters": [
+    {
+     "key": "kParamBW",
+     "type": "float",
+     "min": 0.75,
+     "max": 8.25,
+     "occurrences": 572,
+     "confidence": "observed-only"
+    },
+    {
+     "key": "kParamBeatSync",
+     "type": "float",
+     "min": 0.0,
+     "max": 0.0,
+     "occurrences": 42,
+     "scale": "flag",
+     "confidence": "inferred"
+    },
+    {
+     "key": "kParamEnable",
+     "type": "float",
+     "min": 0.0,
+     "max": 0.0,
+     "occurrences": 5,
+     "scale": "flag",
+     "confidence": "inferred",
+     "note": "absent = enabled; 0 = bypassed"
+    },
+    {
+     "key": "kParamFeedback",
+     "type": "float",
+     "min": 0.0,
+     "max": 99.7502088546753,
+     "occurrences": 472,
+     "confidence": "observed-only"
+    },
+    {
+     "key": "kParamFreq",
+     "type": "float",
+     "min": 40.0,
+     "max": 18000.0,
+     "occurrences": 548,
+     "confidence": "observed-only"
+    },
+    {
+     "key": "kParamHQ",
+     "type": "float",
+     "min": 0.0,
+     "max": 0.0,
+     "occurrences": 1,
+     "confidence": "observed-only"
+    },
+    {
+     "key": "kParamLevelOut",
+     "type": "float",
+     "min": 0.0,
+     "max": 0.8526178598403931,
+     "occurrences": 46,
+     "scale": "linear_gain",
+     "confidence": "inferred"
+    },
+    {
+     "key": "kParamLink",
+     "type": "float",
+     "min": 1.0,
+     "max": 1.0,
+     "occurrences": 84,
+     "confidence": "observed-only"
+    },
+    {
+     "key": "kParamMode",
+     "type": "float",
+     "min": 1.0,
+     "max": 2.0,
+     "occurrences": 372,
+     "confidence": "observed-only"
+    },
+    {
+     "key": "kParamOffsetL",
+     "type": "float",
+     "min": 0.5,
+     "max": 1.5,
+     "occurrences": 186,
+     "confidence": "observed-only"
+    },
+    {
+     "key": "kParamOffsetR",
+     "type": "float",
+     "min": 0.5,
+     "max": 1.5,
+     "occurrences": 203,
+     "confidence": "observed-only"
+    },
+    {
+     "key": "kParamTimeL",
+     "type": "float",
+     "min": 0.001,
+     "max": 0.4380000139977628,
+     "occurrences": 440,
+     "confidence": "observed-only"
+    },
+    {
+     "key": "kParamTimeR",
+     "type": "float",
+     "min": 0.001,
+     "max": 0.43999995052743013,
+     "occurrences": 450,
+     "confidence": "observed-only"
+    },
+    {
+     "key": "kParamWet",
+     "type": "float",
+     "min": 0.0,
+     "max": 100.0,
+     "occurrences": 639,
+     "scale": "percent",
+     "confidence": "inferred",
+     "note": "unit mix 0..100"
+    }
+   ],
+   "other_fields": {}
+  },
+  "FXComp": {
+   "type": 5,
+   "label": "Compressor",
+   "occurrences": 876,
+   "parameters": [
+    {
+     "key": "kParamAttack",
+     "type": "float",
+     "min": 0.10000000149011612,
+     "max": 1000.0,
+     "occurrences": 565,
+     "confidence": "observed-only"
+    },
+    {
+     "key": "kParamCompensatedWetDry",
+     "type": "float",
+     "min": 0.0,
+     "max": 0.0,
+     "occurrences": 74,
+     "confidence": "observed-only"
+    },
+    {
+     "key": "kParamDeadband0",
+     "type": "float",
+     "min": 7.000000074505806,
+     "max": 7.000000074505806,
+     "occurrences": 13,
+     "confidence": "observed-only"
+    },
+    {
+     "key": "kParamDeadband1",
+     "type": "float",
+     "min": 11.600000113248825,
+     "max": 11.600000113248825,
+     "occurrences": 13,
+     "confidence": "observed-only"
+    },
+    {
+     "key": "kParamDeadband2",
+     "type": "float",
+     "min": 5.3000000193715096,
+     "max": 5.3000000193715096,
+     "occurrences": 13,
+     "confidence": "observed-only"
+    },
+    {
+     "key": "kParamEnable",
+     "type": "float",
+     "min": 0.0,
+     "max": 0.0,
+     "occurrences": 6,
+     "scale": "flag",
+     "confidence": "inferred",
+     "note": "absent = enabled; 0 = bypassed"
+    },
+    {
+     "key": "kParamGain0",
+     "type": "float",
+     "min": -24.0,
+     "max": 16.5,
+     "occurrences": 184,
+     "confidence": "observed-only"
+    },
+    {
+     "key": "kParamGain1",
+     "type": "float",
+     "min": -16.211538791656494,
+     "max": 16.249998092651367,
+     "occurrences": 104,
+     "confidence": "observed-only"
+    },
+    {
+     "key": "kParamGain2",
+     "type": "float",
+     "min": -16.21428608894348,
+     "max": 24.0,
+     "occurrences": 205,
+     "confidence": "observed-only"
+    },
+    {
+     "key": "kParamLevelOut",
+     "type": "float",
+     "min": 0.0,
+     "max": 1.0,
+     "occurrences": 135,
+     "scale": "linear_gain",
+     "confidence": "inferred"
+    },
+    {
+     "key": "kParamMakeup",
+     "type": "float",
+     "min": 1.0005771011451219,
+     "max": 31.0,
+     "occurrences": 530,
+     "confidence": "observed-only"
+    },
+    {
+     "key": "kParamMultiband",
+     "type": "float",
+     "min": 1.0,
+     "max": 1.0,
+     "occurrences": 338,
+     "confidence": "observed-only"
+    },
+    {
+     "key": "kParamRatio",
+     "type": "float",
+     "min": 1.0,
+     "max": 1000000.0,
+     "occurrences": 497,
+     "confidence": "observed-only"
+    },
+    {
+     "key": "kParamRatio0",
+     "type": "float",
+     "min": 0.0,
+     "max": 0.9939393997192383,
+     "occurrences": 17,
+     "confidence": "observed-only"
+    },
+    {
+     "key": "kParamRatio1",
+     "type": "float",
+     "min": 0.3333333432674408,
+     "max": 0.9804491996765137,
+     "occurrences": 22,
+     "confidence": "observed-only"
+    },
+    {
+     "key": "kParamRatio2",
+     "type": "float",
+     "min": 0.18666666746139526,
+     "max": 0.9858750104904175,
+     "occurrences": 30,
+     "confidence": "observed-only"
+    },
+    {
+     "key": "kParamRatioBelow",
+     "type": "float",
+     "min": 0.0255504809319973,
+     "max": 1.0,
+     "occurrences": 198,
+     "confidence": "observed-only"
+    },
+    {
+     "key": "kParamRatioBelow0",
+     "type": "float",
+     "min": 0.0,
+     "max": 0.9399999976158142,
+     "occurrences": 50,
+     "confidence": "observed-only"
+    },
+    {
+     "key": "kParamRatioBelow1",
+     "type": "float",
+     "min": 0.0,
+     "max": 0.9745051860809326,
+     "occurrences": 42,
+     "confidence": "observed-only"
+    },
+    {
+     "key": "kParamRatioBelow2",
+     "type": "float",
+     "min": 0.0,
+     "max": 0.9700000286102295,
+     "occurrences": 56,
+     "confidence": "observed-only"
+    },
+    {
+     "key": "kParamRelease",
+     "type": "float",
+     "min": 0.10000000149011612,
+     "max": 1000.0,
+     "occurrences": 589,
+     "confidence": "observed-only"
+    },
+    {
+     "key": "kParamThresh",
+     "type": "float",
+     "min": 0.0,
+     "max": 1.0,
+     "occurrences": 659,
+     "confidence": "observed-only"
+    },
+    {
+     "key": "kParamThreshUD0",
+     "type": "float",
+     "min": 0.0,
+     "max": 181.333327293396,
+     "occurrences": 84,
+     "confidence": "observed-only"
+    },
+    {
+     "key": "kParamThreshUD1",
+     "type": "float",
+     "min": 0.0,
+     "max": 200.0,
+     "occurrences": 86,
+     "confidence": "observed-only"
+    },
+    {
+     "key": "kParamThreshUD2",
+     "type": "float",
+     "min": 0.0,
+     "max": 200.0,
+     "occurrences": 108,
+     "confidence": "observed-only"
+    },
+    {
+     "key": "kParamWet",
+     "type": "float",
+     "min": 0.0,
+     "max": 99.20000433921814,
+     "occurrences": 119,
+     "scale": "percent",
+     "confidence": "inferred",
+     "note": "unit mix 0..100"
+    },
+    {
+     "key": "kParamXoverHi",
+     "type": "float",
+     "min": 300.0,
+     "max": 13072.373222103339,
+     "occurrences": 99,
+     "confidence": "observed-only"
+    },
+    {
+     "key": "kParamXoverLow",
+     "type": "float",
+     "min": 53.60849053123577,
+     "max": 5000.0,
+     "occurrences": 119,
+     "confidence": "observed-only"
+    }
+   ],
+   "other_fields": {}
+  },
+  "FXReverb": {
+   "type": 6,
+   "label": "Reverb",
+   "occurrences": 716,
+   "parameters": [
+    {
+     "key": "kParamDelay",
+     "type": "float",
+     "min": 0.0,
+     "max": 250.0,
+     "occurrences": 490,
+     "confidence": "observed-only"
+    },
+    {
+     "key": "kParamFeedback",
+     "type": "float",
+     "min": 0.0,
+     "max": 100.0,
+     "occurrences": 245,
+     "confidence": "observed-only"
+    },
+    {
+     "key": "kParamFreq",
+     "type": "float",
+     "min": 4.476125165820122,
+     "max": 100.0,
+     "occurrences": 385,
+     "confidence": "observed-only"
+    },
+    {
+     "key": "kParamFreqB",
+     "type": "float",
+     "min": 0.0,
+     "max": 100.0,
+     "occurrences": 441,
+     "confidence": "observed-only"
+    },
+    {
+     "key": "kParamFreqC",
+     "type": "float",
+     "min": 0.0,
+     "max": 100.0,
+     "occurrences": 131,
+     "confidence": "observed-only"
+    },
+    {
+     "key": "kParamLevelOut",
+     "type": "float",
+     "min": 0.0,
+     "max": 1.0,
+     "occurrences": 113,
+     "scale": "linear_gain",
+     "confidence": "inferred"
+    },
+    {
+     "key": "kParamMode",
+     "type": "float",
+     "min": 0.0,
+     "max": 100.0,
+     "occurrences": 132,
+     "confidence": "observed-only"
+    },
+    {
+     "key": "kParamPreDelay",
+     "type": "float",
+     "min": 5.343299215100872e-13,
+     "max": 2.5,
+     "occurrences": 172,
+     "confidence": "observed-only"
+    },
+    {
+     "key": "kParamPreDelayBeatSync",
+     "type": "float",
+     "min": 1.0,
+     "max": 1.0,
+     "occurrences": 60,
+     "confidence": "observed-only"
+    },
+    {
+     "key": "kParamSize",
+     "type": "float",
+     "min": 0.0,
+     "max": 100.0,
+     "occurrences": 587,
+     "confidence": "observed-only"
+    },
+    {
+     "key": "kParamType",
+     "type": "enum",
+     "min": null,
+     "max": null,
+     "occurrences": 538,
+     "values": [
+      "kHall",
+      "kVintage",
+      "kAbyss",
+      "kSpace"
+     ],
+     "confidence": "observed-only"
+    },
+    {
+     "key": "kParamVintageScale",
+     "type": "float",
+     "min": 0.0,
+     "max": 100.0,
+     "occurrences": 108,
+     "confidence": "observed-only"
+    },
+    {
+     "key": "kParamVintageScaleB",
+     "type": "float",
+     "min": 0.0,
+     "max": 100.0,
+     "occurrences": 82,
+     "confidence": "observed-only"
+    },
+    {
+     "key": "kParamWet",
+     "type": "float",
+     "min": 0.0,
+     "max": 100.0,
+     "occurrences": 667,
+     "scale": "percent",
+     "confidence": "inferred",
+     "note": "unit mix 0..100"
+    },
+    {
+     "key": "kParamWidth",
+     "type": "float",
+     "min": 0.0,
+     "max": 100.0,
+     "occurrences": 386,
+     "confidence": "observed-only"
+    }
+   ],
+   "other_fields": {}
+  },
+  "FXEQ": {
+   "type": 7,
+   "label": "Equalizer",
+   "occurrences": 1009,
+   "parameters": [
+    {
+     "key": "kParamEnable",
+     "type": "float",
+     "min": 0.0,
+     "max": 0.0,
+     "occurrences": 4,
+     "scale": "flag",
+     "confidence": "inferred",
+     "note": "absent = enabled; 0 = bypassed"
+    },
+    {
+     "key": "kParamFreq1",
+     "type": "float",
+     "min": 21.53320125,
+     "max": 19999.999999999996,
+     "occurrences": 777,
+     "confidence": "observed-only"
+    },
+    {
+     "key": "kParamFreq2",
+     "type": "float",
+     "min": 21.53320125,
+     "max": 20000.0,
+     "occurrences": 744,
+     "confidence": "observed-only"
+    },
+    {
+     "key": "kParamGain1",
+     "type": "float",
+     "min": -24.0,
+     "max": 24.0,
+     "occurrences": 540,
+     "confidence": "observed-only"
+    },
+    {
+     "key": "kParamGain2",
+     "type": "float",
+     "min": -24.0,
+     "max": 24.0,
+     "occurrences": 669,
+     "confidence": "observed-only"
+    },
+    {
+     "key": "kParamLevelOut",
+     "type": "float",
+     "min": 0.0,
+     "max": 1.0,
+     "occurrences": 101,
+     "scale": "linear_gain",
+     "confidence": "inferred"
+    },
+    {
+     "key": "kParamReso1",
+     "type": "float",
+     "min": 0.0,
+     "max": 100.0,
+     "occurrences": 752,
+     "confidence": "observed-only"
+    },
+    {
+     "key": "kParamReso2",
+     "type": "float",
+     "min": 0.0,
+     "max": 94.30646896362305,
+     "occurrences": 720,
+     "confidence": "observed-only"
+    },
+    {
+     "key": "kParamType1",
+     "type": "float",
+     "min": 1.0,
+     "max": 2.0,
+     "occurrences": 687,
+     "confidence": "observed-only"
+    },
+    {
+     "key": "kParamType2",
+     "type": "float",
+     "min": 1.0,
+     "max": 2.0,
+     "occurrences": 459,
+     "confidence": "observed-only"
+    }
+   ],
+   "other_fields": {}
+  },
+  "FXFilter": {
+   "type": 8,
+   "label": "Filter",
+   "occurrences": 539,
+   "parameters": [
+    {
+     "key": "kParamDrive",
+     "type": "float",
+     "min": 0.3976975567638874,
+     "max": 100.0,
+     "occurrences": 207,
+     "confidence": "observed-only"
+    },
+    {
+     "key": "kParamEnable",
+     "type": "float",
+     "min": 0.0,
+     "max": 0.0,
+     "occurrences": 4,
+     "scale": "flag",
+     "confidence": "inferred",
+     "note": "absent = enabled; 0 = bypassed"
+    },
+    {
+     "key": "kParamFreq",
+     "type": "float",
+     "min": 0.0,
+     "max": 1.0,
+     "occurrences": 503,
+     "confidence": "observed-only"
+    },
+    {
+     "key": "kParamLevelOut",
+     "type": "float",
+     "min": 0.0,
+     "max": 1.0,
+     "occurrences": 47,
+     "scale": "linear_gain",
+     "confidence": "inferred"
+    },
+    {
+     "key": "kParamPad",
+     "type": "float",
+     "min": 1.0,
+     "max": 1.0,
+     "occurrences": 4,
+     "confidence": "observed-only"
+    },
+    {
+     "key": "kParamReso",
+     "type": "float",
+     "min": 0.7605719845741987,
+     "max": 99.12006855010986,
+     "occurrences": 255,
+     "confidence": "observed-only"
+    },
+    {
+     "key": "kParamStereo",
+     "type": "float",
+     "min": 19.736842811107635,
+     "max": 92.39766001701355,
+     "occurrences": 34,
+     "confidence": "observed-only"
+    },
+    {
+     "key": "kParamType",
+     "type": "enum",
+     "min": null,
+     "max": null,
+     "occurrences": 436,
+     "values": [
+      "MgL12",
+      "Diffuser",
+      "MgL18",
+      "H12",
+      "MgL24",
+      "Reverb1",
+      "H24",
+      "CombP",
+      "DirtyMg",
+      "L12",
+      "Combs",
+      "PZ_SVF",
+      "LadderMg",
+      "H18",
+      "Allpasses",
+      "Phase24P",
+      "FlangeN",
+      "RM",
+      "BandReject",
+      "PP12",
+      "DJMixer",
+      "LadderAcid",
+      "P12",
+      "Comb2"
+     ],
+     "confidence": "observed-only"
+    },
+    {
+     "key": "kParamVar",
+     "type": "float",
+     "min": 2.413993887603283,
+     "max": 100.0,
+     "occurrences": 215,
+     "confidence": "observed-only"
+    },
+    {
+     "key": "kParamWet",
+     "type": "float",
+     "min": 0.0,
+     "max": 99.80126023292542,
+     "occurrences": 190,
+     "scale": "percent",
+     "confidence": "inferred",
+     "note": "unit mix 0..100"
+    },
+    {
+     "key": "kParamX",
+     "type": "float",
+     "min": 0.0066006602719426155,
+     "max": 1.0,
+     "occurrences": 5,
+     "confidence": "observed-only"
+    },
+    {
+     "key": "kParamY",
+     "type": "float",
+     "min": 0.03030303120613098,
+     "max": 0.13636364042758942,
+     "occurrences": 3,
+     "confidence": "observed-only"
+    }
+   ],
+   "other_fields": {}
+  },
+  "FXHyperD": {
+   "type": 9,
+   "label": "Hyper / Dimension",
+   "occurrences": 308,
+   "parameters": [
+    {
+     "key": "kParamDetune",
+     "type": "float",
+     "min": 0.0,
+     "max": 100.0,
+     "occurrences": 174,
+     "confidence": "observed-only"
+    },
+    {
+     "key": "kParamDimELevelOut",
+     "type": "float",
+     "min": 0.29618969559669495,
+     "max": 0.4868420958518982,
+     "occurrences": 3,
+     "confidence": "observed-only"
+    },
+    {
+     "key": "kParamDimESize",
+     "type": "float",
+     "min": 0.0,
+     "max": 100.0,
+     "occurrences": 188,
+     "confidence": "observed-only"
+    },
+    {
+     "key": "kParamDimEWet",
+     "type": "float",
+     "min": 0.43859630823135376,
+     "max": 100.0,
+     "occurrences": 118,
+     "confidence": "observed-only"
+    },
+    {
+     "key": "kParamEnable",
+     "type": "float",
+     "min": 0.0,
+     "max": 0.0,
+     "occurrences": 3,
+     "scale": "flag",
+     "confidence": "inferred",
+     "note": "absent = enabled; 0 = bypassed"
+    },
+    {
+     "key": "kParamLevelOut",
+     "type": "float",
+     "min": 0.16228070855140686,
+     "max": 0.8830409049987793,
+     "occurrences": 30,
+     "scale": "linear_gain",
+     "confidence": "inferred"
+    },
+    {
+     "key": "kParamRate",
+     "type": "float",
+     "min": 0.0,
+     "max": 100.0,
+     "occurrences": 203,
+     "confidence": "observed-only"
+    },
+    {
+     "key": "kParamRetrig",
+     "type": "float",
+     "min": 1.0,
+     "max": 1.0,
+     "occurrences": 19,
+     "confidence": "observed-only"
+    },
+    {
+     "key": "kParamUnison",
+     "type": "float",
+     "min": 0.0,
+     "max": 7.0,
+     "occurrences": 170,
+     "confidence": "observed-only"
+    },
+    {
+     "key": "kParamWet",
+     "type": "float",
+     "min": 0.0,
+     "max": 100.0,
+     "occurrences": 275,
+     "scale": "percent",
+     "confidence": "inferred",
+     "note": "unit mix 0..100"
+    }
+   ],
+   "other_fields": {}
+  },
+  "FXBode": {
+   "type": 10,
+   "label": "Bode (frequency shifter)",
+   "occurrences": 173,
+   "parameters": [
+    {
+     "key": "kParamBeatSync",
+     "type": "float",
+     "min": 1.0,
+     "max": 1.0,
+     "occurrences": 32,
+     "scale": "flag",
+     "confidence": "inferred"
+    },
+    {
+     "key": "kParamBlur",
+     "type": "float",
+     "min": 1.1718226596713066,
+     "max": 100.0,
+     "occurrences": 83,
+     "confidence": "observed-only"
+    },
+    {
+     "key": "kParamDelayBalance",
+     "type": "float",
+     "min": -92.55071356892586,
+     "max": 100.0,
+     "occurrences": 31,
+     "confidence": "observed-only"
+    },
+    {
+     "key": "kParamDelayTime",
+     "type": "float",
+     "min": 0.0005259658373419717,
+     "max": 1.7535988968822402,
+     "occurrences": 49,
+     "confidence": "observed-only"
+    },
+    {
+     "key": "kParamEnable",
+     "type": "float",
+     "min": 0.0,
+     "max": 0.0,
+     "occurrences": 1,
+     "scale": "flag",
+     "confidence": "inferred",
+     "note": "absent = enabled; 0 = bypassed"
+    },
+    {
+     "key": "kParamFeedback",
+     "type": "float",
+     "min": 8.33333358168602,
+     "max": 100.0,
+     "occurrences": 54,
+     "confidence": "observed-only"
+    },
+    {
+     "key": "kParamLevelOut",
+     "type": "float",
+     "min": 0.0,
+     "max": 0.743199348449707,
+     "occurrences": 28,
+     "scale": "linear_gain",
+     "confidence": "inferred"
+    },
+    {
+     "key": "kParamMonoInput",
+     "type": "float",
+     "min": 1.0,
+     "max": 1.0,
+     "occurrences": 12,
+     "confidence": "observed-only"
+    },
+    {
+     "key": "kParamOutputMix",
+     "type": "float",
+     "min": -100.0,
+     "max": 100.0,
+     "occurrences": 33,
+     "confidence": "observed-only"
+    },
+    {
+     "key": "kParamOutputWidth",
+     "type": "float",
+     "min": 0.0,
+     "max": 99.41520690917969,
+     "occurrences": 45,
+     "confidence": "observed-only"
+    },
+    {
+     "key": "kParamRange",
+     "type": "float",
+     "min": 0.1,
+     "max": 3043.1762971037997,
+     "occurrences": 95,
+     "confidence": "observed-only"
+    },
+    {
+     "key": "kParamRetrig",
+     "type": "float",
+     "min": 1.0,
+     "max": 1.0,
+     "occurrences": 9,
+     "confidence": "observed-only"
+    },
+    {
+     "key": "kParamShift",
+     "type": "float",
+     "min": -100.0,
+     "max": 73.38266372680664,
+     "occurrences": 110,
+     "confidence": "observed-only"
+    },
+    {
+     "key": "kParamSwapAB",
+     "type": "float",
+     "min": 1.0,
+     "max": 1.0,
+     "occurrences": 3,
+     "confidence": "observed-only"
+    },
+    {
+     "key": "kParamWet",
+     "type": "float",
+     "min": 0.0,
+     "max": 72.92253971099854,
+     "occurrences": 112,
+     "scale": "percent",
+     "confidence": "inferred",
+     "note": "unit mix 0..100"
+    }
+   ],
+   "other_fields": {}
+  },
+  "FXConv": {
+   "type": 11,
+   "label": "Convolve (convolution reverb)",
+   "occurrences": 348,
+   "parameters": [
+    {
+     "key": "kParamAttack",
+     "type": "float",
+     "min": 2.8751432033024185e-07,
+     "max": 0.2319293435177316,
+     "occurrences": 22,
+     "confidence": "observed-only"
+    },
+    {
+     "key": "kParamDamping",
+     "type": "float",
+     "min": 10.101425647735596,
+     "max": 100.0,
+     "occurrences": 49,
+     "confidence": "observed-only"
+    },
+    {
+     "key": "kParamDecay",
+     "type": "float",
+     "min": 2.2399004592443816e-05,
+     "max": 40.0,
+     "occurrences": 117,
+     "confidence": "observed-only"
+    },
+    {
+     "key": "kParamEnable",
+     "type": "float",
+     "min": 0.0,
+     "max": 0.0,
+     "occurrences": 4,
+     "scale": "flag",
+     "confidence": "inferred",
+     "note": "absent = enabled; 0 = bypassed"
+    },
+    {
+     "key": "kParamIpTrim",
+     "type": "float",
+     "min": -34.0,
+     "max": 6.0,
+     "occurrences": 176,
+     "confidence": "observed-only"
+    },
+    {
+     "key": "kParamLevelOut",
+     "type": "float",
+     "min": 0.02383432909846306,
+     "max": 0.8138518929481506,
+     "occurrences": 81,
+     "scale": "linear_gain",
+     "confidence": "inferred"
+    },
+    {
+     "key": "kParamMinPhase",
+     "type": "float",
+     "min": 1.0,
+     "max": 1.0,
+     "occurrences": 23,
+     "confidence": "observed-only"
+    },
+    {
+     "key": "kParamPredelay",
+     "type": "float",
+     "min": 8.309903350667513e-09,
+     "max": 0.3547270376311502,
+     "occurrences": 54,
+     "confidence": "observed-only"
+    },
+    {
+     "key": "kParamPredelayBeatSync",
+     "type": "float",
+     "min": 1.0,
+     "max": 1.0,
+     "occurrences": 5,
+     "confidence": "observed-only"
+    },
+    {
+     "key": "kParamSize",
+     "type": "float",
+     "min": 10.0,
+     "max": 1000.0,
+     "occurrences": 157,
+     "confidence": "observed-only"
+    },
+    {
+     "key": "kParamTone",
+     "type": "float",
+     "min": -100.0,
+     "max": 89.47368860244751,
+     "occurrences": 157,
+     "confidence": "observed-only"
+    },
+    {
+     "key": "kParamWet",
+     "type": "float",
+     "min": 0.0,
+     "max": 100.0,
+     "occurrences": 325,
+     "scale": "percent",
+     "confidence": "inferred",
+     "note": "unit mix 0..100"
+    }
+   ],
+   "other_fields": {
+    "numChannels": {
+     "types": {
+      "int": 2
+     },
+     "occurrences": 2,
+     "values": [
+      "2"
+     ]
+    },
+    "numFrames": {
+     "types": {
+      "int": 2
+     },
+     "occurrences": 2,
+     "values": [
+      "75164",
+      "273316"
+     ]
+    },
+    "relativePathToIR": {
+     "types": {
+      "str": 2
+     },
+     "occurrences": 2,
+     "values": [
+      "Factory/Short/L90 Plate - Drum - Short Plate.flac",
+      "Factory/Long/Digital Hall 1.flac"
+     ]
+    },
+    "sampleRate": {
+     "types": {
+      "int": 2
+     },
+     "occurrences": 2,
+     "values": [
+      "44100"
+     ]
+    }
+   }
+  },
+  "FXUtils": {
+   "type": 12,
+   "label": "Utility",
+   "occurrences": 343,
+   "parameters": [
+    {
+     "key": "kParamBalance",
+     "type": "float",
+     "min": -100.0,
+     "max": 100.0,
+     "occurrences": 18,
+     "confidence": "observed-only"
+    },
+    {
+     "key": "kParamEnable",
+     "type": "float",
+     "min": 0.0,
+     "max": 0.0,
+     "occurrences": 1,
+     "scale": "flag",
+     "confidence": "inferred",
+     "note": "absent = enabled; 0 = bypassed"
+    },
+    {
+     "key": "kParamHPF",
+     "type": "float",
+     "min": 1.1546475680703183,
+     "max": 400.0,
+     "occurrences": 69,
+     "confidence": "observed-only"
+    },
+    {
+     "key": "kParamLFMono",
+     "type": "float",
+     "min": 1.0,
+     "max": 1.0,
+     "occurrences": 119,
+     "confidence": "observed-only"
+    },
+    {
+     "key": "kParamLFXover",
+     "type": "float",
+     "min": 20.25,
+     "max": 400.0,
+     "occurrences": 119,
+     "confidence": "observed-only"
+    },
+    {
+     "key": "kParamLPF",
+     "type": "float",
+     "min": 50.0,
+     "max": 19924.255979922462,
+     "occurrences": 33,
+     "confidence": "observed-only"
+    },
+    {
+     "key": "kParamLevelOut",
+     "type": "float",
+     "min": 0.0,
+     "max": 1.0,
+     "occurrences": 87,
+     "scale": "linear_gain",
+     "confidence": "inferred"
+    },
+    {
+     "key": "kParamPolarityL",
+     "type": "float",
+     "min": 1.0,
+     "max": 1.0,
+     "occurrences": 3,
+     "confidence": "observed-only"
+    },
+    {
+     "key": "kParamPolarityR",
+     "type": "float",
+     "min": 1.0,
+     "max": 1.0,
+     "occurrences": 4,
+     "confidence": "observed-only"
+    },
+    {
+     "key": "kParamWet",
+     "type": "float",
+     "min": 0.0,
+     "max": 82.45614171028137,
+     "occurrences": 8,
+     "scale": "percent",
+     "confidence": "inferred",
+     "note": "unit mix 0..100"
+    },
+    {
+     "key": "kParamWidth",
+     "type": "float",
+     "min": 0.0,
+     "max": 800.0,
+     "occurrences": 122,
+     "confidence": "observed-only"
+    }
+   ],
+   "other_fields": {}
+  },
+  "FXSplit": {
+   "type": 13,
+   "label": "Splitter (L/H)",
+   "occurrences": 62,
+   "parameters": [
+    {
+     "key": "kParamFreq",
+     "type": "float",
+     "min": 30.784049901939603,
+     "max": 5780.913354731543,
+     "occurrences": 45,
+     "confidence": "observed-only"
+    },
+    {
+     "key": "kParamModuleCount1",
+     "type": "float",
+     "min": 1.0,
+     "max": 3.0,
+     "occurrences": 29,
+     "confidence": "observed-only"
+    },
+    {
+     "key": "kParamModuleCount2",
+     "type": "float",
+     "min": 1.0,
+     "max": 7.0,
+     "occurrences": 51,
+     "confidence": "observed-only"
+    }
+   ],
+   "other_fields": {}
+  },
+  "FXSplit3": {
+   "type": 14,
+   "label": "Splitter (3 band)",
+   "occurrences": 29,
+   "parameters": [
+    {
+     "key": "kParamFreq",
+     "type": "float",
+     "min": 79.99999733101906,
+     "max": 1202.0494873636967,
+     "occurrences": 19,
+     "confidence": "observed-only"
+    },
+    {
+     "key": "kParamFreq2",
+     "type": "float",
+     "min": 309.4924073112388,
+     "max": 12973.945825299737,
+     "occurrences": 20,
+     "confidence": "observed-only"
+    },
+    {
+     "key": "kParamModuleCount1",
+     "type": "float",
+     "min": 1.0,
+     "max": 3.0,
+     "occurrences": 15,
+     "confidence": "observed-only"
+    },
+    {
+     "key": "kParamModuleCount2",
+     "type": "float",
+     "min": 1.0,
+     "max": 4.0,
+     "occurrences": 25,
+     "confidence": "observed-only"
+    },
+    {
+     "key": "kParamModuleCount3",
+     "type": "float",
+     "min": 1.0,
+     "max": 5.0,
+     "occurrences": 20,
+     "confidence": "observed-only"
+    }
+   ],
+   "other_fields": {}
+  },
+  "FXSplitMS": {
+   "type": 15,
+   "label": "Splitter (M/S)",
+   "occurrences": 18,
+   "parameters": [
+    {
+     "key": "kParamModuleCount1",
+     "type": "float",
+     "min": 1.0,
+     "max": 2.0,
+     "occurrences": 7,
+     "confidence": "observed-only"
+    },
+    {
+     "key": "kParamModuleCount2",
+     "type": "float",
+     "min": 1.0,
+     "max": 3.0,
+     "occurrences": 16,
+     "confidence": "observed-only"
+    }
+   ],
+   "other_fields": {}
+  }
+ },
+ "notes": [
+  "Value ranges are observed extremes across the library, not documented limits.",
+  "FXReverb.kParamType enum: kHall, kVintage, kAbyss, kSpace; kParamSize/kParamWidth/kParamWet percent; kParamPreDelay seconds; kParamDelay ms-like (0..250).",
+  "FXDistortion.kParamMode enum lists the drive algorithms (kOverdrive, kSoftClip, kTapeSat, kDiode1, kDownsample, ...).",
+  "FXFilter.kParamType uses the same enum vocabulary as VoiceFilter (filters.json).",
+  "FXDelay.kParamTimeL/R are seconds when kParamBeatSync = 0; kParamMode 1 = normal, 2 = ping-pong (inferred from the two observed values).",
+  "9 factory .SerumFX files use a container variant whose metadata is not UTF-8 JSON and were skipped."
+ ],
+ "confidence_vocabulary": {
+  "verified": "a live FL readback matched the rule",
+  "inferred": "unit reasoned from the key name and observed range",
+  "observed-only": "range recorded; unit and default unknown"
+ }
+}

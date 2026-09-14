@@ -1,5 +1,6 @@
 """Zero-based channel rack objects. References are indices, not persistent IDs."""
 
+import base64
 from collections.abc import Iterator
 
 from ._collection import checked_index
@@ -10,7 +11,10 @@ from .plugins import Parameters
 
 
 class Channel(IndexedObject):
-    name = NativeProperty("get_channel_name", "set_channel_name", "index", "name", str)
+    """One channel-rack channel. ``pan`` is the native 0..12800 scale with 6400 = center
+    (mixer track pan uses a different, signed scale). ``volume`` is raw 0..12800."""
+
+    name = NativeProperty("get_channel_name", "set_channel_name", "channel", "name", str)
     volume = NativeProperty("get_channel_volume", "set_channel_volume", "channel", "value", int)
     pan = NativeProperty("get_channel_pan", "set_channel_pan", "channel", "value", int)
     pitch = NativeProperty("get_channel_pitch", "set_channel_pitch", "channel", "cents", int)
@@ -22,16 +26,28 @@ class Channel(IndexedObject):
         return Parameters(self._ops, self.index)
 
     def select(self) -> None:
-        self._ops.select_channel(index=self.index)
+        self._ops.select_channel(channel=self.index)
 
     def toggle_solo(self) -> None:
-        self._ops.set_channel_solo(index=self.index)
+        self._ops.set_channel_solo(channel=self.index)
 
     def plugin_text(self) -> str:
         return self._ops.get_channel_plugin(channel=self.index)
 
     def replace_sample(self, path: str) -> None:
         self._ops.replace_channel_sample(channel=self.index, sample_path=path)
+
+    def load_state(self, path: str, *, use_channel_loader: bool = False) -> str:
+        """Load a plugin preset/state file (.fst, or the hosted plugin's native format such as .vstpreset)
+        into the generator already on this channel. Returns the host's verification line; verify the sound
+        through parameter displays or an isolated render, not the return value alone."""
+        return self._ops.load_channel_plugin_state(channel=self.index, path=path, use_channel_loader=use_channel_loader)
+
+    def get_state(self) -> bytes:
+        """Current wrapper state of the hosted generator: the raw FL plugin-data record (for a VST3 such as
+        Serum 2 it embeds the XferJson component blocks). Read through a temporary project copy written by FL's
+        serializer, so the live project is unchanged. Pair with load_state() to learn parameter mappings."""
+        return base64.b64decode(self._ops.get_channel_plugin_state(channel=self.index))
 
 
 class Channels:

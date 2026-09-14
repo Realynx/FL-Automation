@@ -28,8 +28,11 @@ internal static class EmbeddedPythonConfiguration
             Check(api, config, api.ConfigSetString(config, option, options.RuntimeDirectory));
         foreach (string option in new[] { "executable", "base_executable", "program_name" })
             Check(api, config, api.ConfigSetString(config, option, Path.Combine(options.RuntimeDirectory, "python.exe")));
-        SetList(api, config, "module_search_paths", [stdlib, options.RuntimeDirectory, options.PythonPackagePath]);
+        SetList(api, config, "module_search_paths", BuildModuleSearchPaths(options, stdlib));
     }
+
+    internal static string[] BuildModuleSearchPaths(EmbeddedPythonOptions options, string stdlib) =>
+        [stdlib, options.RuntimeDirectory, options.PythonPackagePath, .. options.ExtensionPackagePaths];
 
     private static void SetList(EmbeddedPythonApi api, nint config, string name, string[] values)
     {

@@ -11,10 +11,11 @@ from collections.abc import Callable
 from types import FrameType
 from typing import Any
 
+from . import worker
 from .errors import ProtocolError, RemoteError
 from .studio import Studio
 from .values import JsonValue, json_object, to_json
-from .worker import RESPONSE_LIMIT, execute
+from .worker import execute
 
 RequestCallback = Callable[[str, str, str], str]
 CancelCallback = Callable[[str], bool]
@@ -122,10 +123,8 @@ def execute_json(code: str, scope: str, request: RequestCallback, cancelled: Can
         transport.close()
         sys.settrace(prior_trace)
         threading.settrace(prior_thread_trace)
-    payload = json.dumps(result, ensure_ascii=False, allow_nan=False, separators=(",", ":"))
-    if len(payload.encode("utf-8")) > RESPONSE_LIMIT:
-        return '{"ok":false,"result":null,"error":"Embedded response exceeds 1 MiB."}'
-    return payload
+    # Oversized responses drop the result value but keep captured output and the traceback.
+    return worker.encode_response(result, limit=worker.RESPONSE_LIMIT, origin="Embedded response").decode("utf-8")
 
 
 def _inside_script(frame: FrameType | None) -> bool:

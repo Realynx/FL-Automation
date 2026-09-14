@@ -3,13 +3,21 @@ using System.Text.Json;
 
 namespace FruityLink.Scripting;
 
-/// <summary>Absolute locations of the private CPython 3.14 runtime and the SDK wheel or source directory.</summary>
-public sealed record EmbeddedPythonOptions(string RuntimeDirectory, string PythonPackagePath);
+/// <summary>Absolute locations of the private CPython 3.14 runtime, SDK package, and trusted installed extensions.</summary>
+public sealed record EmbeddedPythonOptions(string RuntimeDirectory, string PythonPackagePath)
+{
+    /// <summary>Wheel paths discovered beneath the framework's private Python extension directory.</summary>
+    public IReadOnlyList<string> ExtensionPackagePaths { get; init; } = [];
+}
 
 /// <summary>Executes trusted Python inside the host process. Cancellation is cooperative and drains active work.</summary>
 public interface IEmbeddedPythonRuntime : IAsyncDisposable
 {
-    /// <summary>Runs with the typed SDK object <c>fl</c> and returns bounded output and the script's <c>result</c>.</summary>
+    /// <summary>
+    /// Runs with the typed SDK object <c>fl</c> and returns bounded output and the script's <c>result</c>.
+    /// A script exception yields <c>ok:false</c> with <c>error</c>, <c>traceback</c>, the stdout/stderr captured
+    /// before the failure and, when <c>result</c> was already assigned, its value with <c>resultPartial:true</c>.
+    /// </summary>
     Task<JsonElement> ExecuteAsync(string code, int timeoutSeconds, CancellationToken ct = default);
 }
 
@@ -35,7 +43,12 @@ public sealed class EmbeddedPythonRuntime : IEmbeddedPythonRuntime
         ArgumentNullException.ThrowIfNull(requestHandler);
         if (!Path.IsPathFullyQualified(options.RuntimeDirectory) || !Path.IsPathFullyQualified(options.PythonPackagePath))
             throw new ArgumentException("Embedded Python runtime and package locations must be absolute paths.", nameof(options));
-        _options = new(Path.GetFullPath(options.RuntimeDirectory), Path.GetFullPath(options.PythonPackagePath));
+        _options = new(Path.GetFullPath(options.RuntimeDirectory), Path.GetFullPath(options.PythonPackagePath))
+        {
+            ExtensionPackagePaths = options.ExtensionPackagePaths.Select(path =>
+                Path.IsPathFullyQualified(path) ? Path.GetFullPath(path) :
+                throw new ArgumentException("Embedded Python extension locations must be absolute paths.", nameof(options))).ToArray(),
+        };
         _handler = requestHandler;
     }
 

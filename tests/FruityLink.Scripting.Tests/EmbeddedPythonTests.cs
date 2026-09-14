@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.IO.Compression;
 using Xunit;
 
 namespace FruityLink.Scripting.Tests;
@@ -23,13 +24,26 @@ public sealed class EmbeddedPythonTests
         start.ArgumentList.Add(runtime!);
         start.ArgumentList.Add(package);
         start.ArgumentList.Add(mode);
+        string? extensionWheel = null;
+        if (mode == "execution")
+        {
+            extensionWheel = Path.Combine(Path.GetTempPath(), $"fruitylink-extension-{Guid.NewGuid():N}.whl");
+            using (var archive = ZipFile.Open(extensionWheel, ZipArchiveMode.Create))
+            using (var writer = new StreamWriter(archive.CreateEntry("fixture_extension.py").Open()))
+                writer.Write("VALUE = 'extension import passed'\n");
+            start.ArgumentList.Add(extensionWheel);
+        }
         start.Environment["PYTHONPATH"] = @"C:\nonexistent-ambient-python";
         start.Environment["PYTHONHOME"] = @"C:\nonexistent-ambient-home";
         using var process = Process.Start(start) ?? throw new InvalidOperationException("Embedded interpreter test host did not start.");
         Task<string> output = process.StandardOutput.ReadToEndAsync();
         Task<string> errors = process.StandardError.ReadToEndAsync();
         try { await process.WaitForExitAsync().WaitAsync(TimeSpan.FromSeconds(60)); }
-        finally { if (!process.HasExited) process.Kill(entireProcessTree: true); }
+        finally
+        {
+            if (!process.HasExited) process.Kill(entireProcessTree: true);
+            if (extensionWheel is not null) File.Delete(extensionWheel);
+        }
         Assert.True(process.ExitCode == 0, $"Embedded interpreter integration ({mode}) failed.\n{await output}\n{await errors}");
         Assert.Contains("Embedded Python integration passed.", await output);
         Assert.Equal("", await errors);

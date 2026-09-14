@@ -36,7 +36,7 @@ public sealed partial class FlInjectBridge : FruityLink.Core.Abstractions.INativ
     public const uint FlagGet = 0x02; // bit1 = GET (returns current value in RAX)
 
     // Global command ids (0x4000xxxx) — the complete master/global group, all live-verified.
-    public const uint CmdMasterVolume = 0x40000000; // 0..12800 (~7624 = 0 dB-ish default)
+    public const uint CmdMasterVolume = 0x40000000; // raw native integer 0..12800; no dB conversion defined
     public const uint CmdShuffle      = 0x40000001; // 0..128 swing
     public const uint CmdMasterPitch  = 0x40000002; // cents, -1200..+1200
     public const uint CmdSetTempo     = 0x40000005; // value = BPM * 1000 (10000..0x7F710)

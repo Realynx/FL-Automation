@@ -1,5 +1,6 @@
 """Mixer tracks and effect slots. Layout compatibility is decided by the native profile."""
 
+import base64
 from collections.abc import Iterator
 
 from ._collection import checked_index
@@ -30,6 +31,16 @@ class EffectSlot:
         """Copy plugin type to a slot on this track; parameter state is not copied."""
         self._ops.clone_mixer_effect(track=self.track, from_slot=self.index, to_slot=checked_index(slot, maximum=9))
 
+    def load_state(self, path: str) -> str:
+        """Load a plugin preset/state file into the effect already loaded in this slot. Returns the host's
+        verification line; the slot must already hold the matching plugin."""
+        return self._ops.load_mixer_effect_state(track=self.track, slot=self.index, path=path)
+
+    def get_state(self) -> bytes:
+        """Current wrapper state of the effect in this slot (raw FL plugin-data record), read through a
+        temporary project copy; the live project is unchanged."""
+        return base64.b64decode(self._ops.get_mixer_effect_state(track=self.track, slot=self.index))
+
 
 class Effects:
     def __init__(self, ops: Operations, track: int) -> None:
@@ -47,6 +58,10 @@ class Effects:
 
 
 class MixerTrack(IndexedObject):
+    """One mixer track. ``pan`` is a SIGNED native integer -6400..6400 with 0 = center and
+    negative = left; this differs from channel pan (0..12800, 6400 = center). ``volume`` is
+    the raw native 0..12800 scale with no defined dB conversion."""
+
     name = NativeProperty("get_mixer_track_name", "set_mixer_track_name", "track", "name", str)
     volume = NativeProperty("get_mixer_volume", "set_mixer_volume", "track", "value", int)
     pan = NativeProperty("get_mixer_pan", "set_mixer_pan", "track", "value", int)

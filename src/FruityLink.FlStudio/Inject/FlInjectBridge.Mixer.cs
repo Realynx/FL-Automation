@@ -173,7 +173,7 @@ public sealed partial class FlInjectBridge
             int pan = await GetMixerPanAsync(t, ct);
             string state = await MixerTrackStateFlagsAsync(trackStruct, layout, ct);
             named.Add($"{t}: {(string.IsNullOrEmpty(custom) ? "Master" : custom)} vol={vol}"
-                + (pan != 6400 ? $" pan={pan}" : "") + state);
+                + (pan != 0 ? $" pan={pan}" : "") + state);
         }
 
         int lastInsert = count - 2;
@@ -253,7 +253,7 @@ public sealed partial class FlInjectBridge
         long vol = await GetMixerVolumeAsync(track, ct);
         int pan = await GetMixerPanAsync(track, ct);
         string state = t != 0 ? await MixerTrackStateFlagsAsync(t, layout, ct) : "";
-        sb.Append($"Mixer track {track} '{name}': vol={vol}{(pan != 6400 ? $" pan={pan}" : "")}{state}\n");
+        sb.Append($"Mixer track {track} '{name}': vol={vol}{(pan != 0 ? $" pan={pan}" : "")}{state}\n");
 
         var fx = new StringBuilder();
         for (int s = 0; s < 10; s++)
@@ -274,8 +274,7 @@ public sealed partial class FlInjectBridge
     public async Task AddMixerEffectAsync(int track, int slot, string pluginName, CancellationToken ct = default)
     {
         var layout = await MixerLayoutAsync(ct);
-        string? path = ResolveFstPath(pluginName, effects: true)
-            ?? throw new InvalidOperationException($"Effect plugin '{pluginName}' not found (try native_list_available_plugins).");
+        string path = ResolveFstPath(pluginName, effects: true);
         ulong so = await MixerSlotObjAsync(track, slot, layout, ct);
         if (so == 0) throw new InvalidOperationException($"Mixer slot {track}/{slot} not found.");
         await LoadIntoMixerSlotAsync(so, 0xFFFFFFFDu, path, layout, ct);  // mode -3 = insert

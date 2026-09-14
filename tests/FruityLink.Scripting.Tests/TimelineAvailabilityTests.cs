@@ -7,6 +7,7 @@ public sealed class TimelineAvailabilityTests
 {
     [Theory]
     [InlineData("add_marker", "{\"tick\":0,\"name\":\"Intro\"}", "AddMarkerAsync")]
+    [InlineData("delete_marker", "{\"index\":0}", "DeleteMarkerAsync")]
     [InlineData("list_markers", "{}", "ListMarkersAsync")]
     [InlineData("set_loop_region", "{\"startTick\":0,\"endTick\":-1}", "SetLoopRegionAsync")]
     public async Task CapabilityAndDispatchRequireVerifiedTimeline(string operation, string arguments, string method)

@@ -26,8 +26,9 @@ FL uses native integer scales. The important ones:
 
 | Quantity | Range | Notes |
 | --- | --- | --- |
-| Volume (master / mixer / channel) | `0..12800` | `10000` = 100%. Master ≈ `7624` ≈ 0 dB; channel default `10000` (≈78% law). |
-| Pan (mixer / channel) | `0..12800` | `6400` = center. |
+| Volume (master / mixer / channel) | `0..12800` | Raw native integer. The API defines no dB conversion; query the current value before changing it. Untouched mixer tracks and Master have been observed at `12800`, while channel defaults have been observed at `10000`. |
+| Channel pan | `0..12800` | `6400` = center. |
+| Mixer track pan | `-6400..6400` | **Signed**: `0` = center, negative = left, `6400` = hard right. Untouched tracks read `0`. A value written on the channel scale (for example `6800`) pans fully right; this caused the Ember Tides v005 right-sided lead. |
 | Master pitch | `-1200..+1200` cents | |
 | Channel / note pitch | cents | `0` = center. |
 | Shuffle / swing | `0..128` | |
@@ -55,7 +56,9 @@ Grouped roughly as the interface is. Names below are the actual method names; re
 `Get/SetChannelPitchAsync`, `Get/SetChannelMutedAsync`, `SetChannelSoloAsync`,
 `Get/SetChannelFxRouteAsync` (route a channel to a mixer track), plus generator hosting:
 `AddChannelAsync(pluginName)`, `GetChannelPluginAsync`, and sample channels
-(`AddSampleChannelAsync`, `ReplaceChannelSampleAsync`, `ListSamplesAsync`).
+(`AddSampleChannelAsync`, `ReplaceChannelSampleAsync`, `ListSamplesAsync`). Every channel operation
+names its zero-based channel argument `channel` (wire name `channel`); `select_channel` and
+`set_channel_solo` still accept the older `index` wire name when `channel` is absent.
 
 **Patterns.** `GetCurrentPatternAsync`, `SelectPatternAsync`, `CreatePatternAsync` (selects the first
 empty pattern), `ClearPatternAsync`, `Get/SetPatternNameAsync`, `ListPatternsAsync`,
@@ -64,9 +67,12 @@ empty pattern), `ClearPatternAsync`, `Get/SetPatternNameAsync`, `ListPatternsAsy
 **Piano-roll notes.** Author with `AddNoteAsync` or the batched `AddNotesAsync(pattern, notes)` (one
 refresh for the whole set — use it for chords/melodies/multi-channel grids). Read with `GetNotesAsync`
 (paged via `offset`). Edit surgically without clearing the pattern: `EditNotesAsync` and
-`DeleteNotesAsync`. Notes are identified by the `(Channel, Key, StartTick)` triple (`NoteRef`), which is
-stable — two notes can't share all three on one channel — so you target a note without a fragile array
-index. Batch authoring uses `NoteSpec`; edits use `NoteEdit` (nullable "new" fields; null = leave
+`DeleteNotesAsync`. Notes are identified by the `(Channel, Key, StartTick)` triple (`NoteRef`), so you
+target a note without a fragile array index. FL does allow stacked duplicates that share the triple:
+both records carry an optional `LengthTick` (the note's current length) to pick one of them, and a
+target that still matches several notes is refused before anything is written unless the operation's
+`allowMultiple` flag is set, which addresses all of them (identical duplicates can only be addressed
+together). Batch authoring uses `NoteSpec`; edits use `NoteEdit` (nullable "new" fields; null = leave
 unchanged).
 
 **Mixer.** `Get/SetMixerVolumeAsync`, `Get/SetMixerPanAsync`, `Get/SetMixerTrackMutedAsync`
@@ -74,7 +80,11 @@ unchanged).
 (name→index resolution), `AddMixerTrackAsync` (append or insert an ordinary track),
 sends/EQ (`SetMixerSendAsync`, `SetMixerEqGainAsync`), and FX slots:
 `ListMixerEffectsAsync`, `AddMixerEffectAsync`, `RemoveMixerEffectAsync`, `CloneMixerEffectAsync`,
-`SetMixerFxParamAsync`.
+`SetMixerFxParamAsync`. Plugin names passed to `AddMixerEffectAsync` and `AddChannelAsync` are
+resolved tolerantly against the plugin database file names (`ListAvailablePluginsAsync`): exact
+name first, then case/punctuation-insensitive, then a unique containment such as a vendor prefix
+("FabFilter Pro-R 2" loads "Pro-R 2"). A name that matches several plugins ("Pro") is refused with
+every candidate listed; a miss lists the closest installed names.
 
 **Transport.** `TransportPlayAsync`, `TransportStopAsync`, `TransportToggleRecordAsync`,
 `SetLoopRegionAsync` (set/clear the loop/time-selection span), `SeekAsync` (move the playhead to a
@@ -101,10 +111,34 @@ whichever is convenient — prefer the bulk form for many edits.
 `SaveCopyAsync` (modal-free copy, safe on untitled projects), `SaveNewVersionAsync`, `GetProjectInfoAsync`,
 `ListRecentProjectsAsync`.
 
+**Plugin state.** `LoadChannelPluginStateAsync(channel, path, useChannelLoader=false)` and
+`LoadMixerEffectStateAsync(track, slot, path)` load a preset/state file into the plugin already in
+the slot through the wrapper's state-file dispatcher (live-verified with a Serum 2 `.vstpreset`;
+proprietary formats such as `.SerumPreset` are ignored by the wrapper). `GetChannelPluginStateAsync(channel)`
+and `GetMixerEffectStateAsync(track, slot)` return the plugin's current wrapper state (base64 of the FLP
+plugin-data record) by writing a temporary project copy through the same direct writer as
+`SaveCopyAsync` and extracting that record; the live project's path, title and dirty flag are
+unchanged, and save-time note validation applies. Python: `channel.load_state()`, `channel.get_state()`,
+`effect_slot.load_state()`, `effect_slot.get_state()`. The load operations return a verification line
+that compares that wrapper record before and after the load (sizes, short SHA-256 of each side, and
+the number of differing bytes); it says "unavailable ... nothing was compared" when a snapshot could
+not be taken, and never claims "no change" from sampled parameter values (those missed live
+parameters on Serum 2). A handful of differing bytes can be serializer noise; a large fraction is a
+loaded state. Parameter displays read in the same request can still lag the load (see below).
+
 **Plugin parameters.** `ListPluginParamsAsync(channelOrTrack, slot, filter)` and
 `SetPluginParamAsync(channelOrTrack, slot, paramIndex, value)` — `slot < 0` targets a channel generator,
 otherwise a mixer track + FX slot; values are normalized `0..1`. `ListAvailablePluginsAsync(effects)`
 lists installed generators (`effects=false`) or effects (`effects=true`).
+
+Readback timing: a write goes through FL's command bus, and the raw value (`rawValue`, the wrapper's
+own `getParamValue`) reflects it at once. The display string (`displayValue`) is produced by the plugin
+instance, which only sees the change once FL has delivered it (audio-thread/idle sync); read in the
+same request right after a write or a preset load it can still show the previous value, while the next
+request is always correct (live: Serum 2 and Pro-L 2, FL 26.1.3). The bridge knows no wrapper call that
+forces that delivery, so the host does not attempt one. Treat the raw value as the oracle and, when a
+display string matters within one request, re-read after a short delay (`Parameters.set_verified`
+does both).
 
 These methods and `QueryPluginParametersAsync` require a hosted-plugin parameter interface,
 as provided by generators such as 3xOsc and hosted VST plugins. The built-in Sampler does not

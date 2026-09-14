@@ -11,6 +11,7 @@ from types import TracebackType
 
 from ._session_broker import SessionBroker
 from .analysis.audio import load_wav
+from .audition import isolate_range
 from .endpoint import discover
 from .errors import ConnectionError, FruityLinkError
 from .studio import Studio, verify_identity
@@ -163,9 +164,7 @@ class StudioSession:
         """
         _seconds(timeout)
         self._require_open()
-        output = Path(output).resolve()
-        if output.suffix.lower() != ".wav" or output.exists():
-            raise ValueError("Render output must be a new .wav path.")
+        output = _render_output(output)
         render_directory = self.job_directory / ("render-" + uuid.uuid4().hex)
         render_directory.mkdir()
         snapshot = self.save(render_directory / (output.stem + ".flp"))
@@ -181,6 +180,23 @@ class StudioSession:
             shutil.copyfileobj(source, destination)
         return output
 
+    def render_range(self, output: str | Path, *, start_tick: int, length_tick: int, cut_clips: bool = False,
+                     tail_beats: float = 0, timeout: float = 180) -> Path:
+        """Trim the live project to one tick range with ``isolate_range``, then ``render`` it.
+
+        FL's exporter has no range option, so the section is isolated in the editor first: clips
+        outside ``[start_tick, start_tick + length_tick)`` are deleted, the rest shift to tick 0
+        and markers are removed, so the WAV ends at the last clip unless ``tail_beats`` > 0 keeps
+        an End marker that many beats past the range for reverb and release tails. The working
+        copy on disk is untouched unless ``save()`` is called afterwards; the render snapshot
+        holds the trimmed project. See ``fruitylink.audition``.
+        """
+        _seconds(timeout)
+        self._require_open()
+        _render_output(output)
+        isolate_range(self.studio, start_tick, length_tick, cut_clips=cut_clips, tail_beats=tail_beats)
+        return self.render(output, timeout=timeout)
+
     def close(self) -> None:
         if not self._closed:
             self._closed = True
@@ -195,6 +211,13 @@ class StudioSession:
     def __exit__(self, exc_type: type[BaseException] | None, exc: BaseException | None,
                  traceback: TracebackType | None) -> None:
         self.close()
+
+
+def _render_output(output: str | Path) -> Path:
+    resolved = Path(output).resolve()
+    if resolved.suffix.lower() != ".wav" or resolved.exists():
+        raise ValueError("Render output must be a new .wav path.")
+    return resolved
 
 
 def _render(session: StudioSession, snapshot: Path, directory: Path, timeout: float) -> Path:

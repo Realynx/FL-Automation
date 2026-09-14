@@ -78,3 +78,50 @@ def test_malformed_creation_reply_is_not_retried(fl: Studio, transport: Recordin
     with pytest.raises(ProtocolError):
         fl.automation.create(AutomationTarget.mixer_volume(2), 1, 0, 384)
     assert len(transport.calls) == 1
+
+
+def test_set_point_edits_one_point_in_place_including_endpoints(fl: Studio, transport: RecordingTransport) -> None:
+    fl.automation[19].set_point(0, 0.9)
+    fl.automation[19].set_point(18, 1, tension=-0.5)
+    assert transport.calls == [
+        ("invoke", {"operation": "set_automation_point", "arguments": {
+            "channel": 19, "index": 0, "value": 0.9, "tension": 0.0}}),
+        ("invoke", {"operation": "set_automation_point", "arguments": {
+            "channel": 19, "index": 18, "value": 1.0, "tension": -0.5}}),
+    ]
+
+
+@pytest.mark.parametrize("index,value,tension", [(-1, 0.5, 0), (True, 0.5, 0), (0, 1.5, 0), (0, -0.1, 0),
+                                                 (0, True, 0), (0, "0.5", 0), (0, 0.5, 2), (0, 0.5, None)])
+def test_set_point_rejects_invalid_values_before_any_request(fl: Studio, transport: RecordingTransport,
+                                                          index: Any, value: Any, tension: Any) -> None:
+    with pytest.raises((ValueError, IndexError)):
+        fl.automation[19].set_point(index, value, tension)
+    assert transport.calls == []
+
+
+@pytest.mark.parametrize("event_id, expected", [
+    (0x180cd, AutomationTarget.plugin_parameter(1, 205)),          # live: channel 1 "Filter 1 Freq"
+    (0x480cd, AutomationTarget.plugin_parameter(4, 205)),
+    (0x1080cd, AutomationTarget.plugin_parameter(16, 205)),
+    (0x1880cd, AutomationTarget.plugin_parameter(24, 205)),
+    (0x48007, AutomationTarget.plugin_parameter(4, 7)),            # live: channel 4 "Pitch Bend"
+    (0x18000, AutomationTarget.plugin_parameter(1, 0)),            # live: channel 1 fade = parameter 0
+    (0x30000, AutomationTarget.channel_volume(3)),                 # live: the scratch pump
+    (0x160000, AutomationTarget.channel_volume(22)),
+    (0x30001, AutomationTarget.channel_pan(3)),
+    (0x30004, AutomationTarget.channel_pitch(3)),
+    (0x70401fc0, AutomationTarget.mixer_volume(1)),                # live: "Chords - pump" on insert 1
+    (0x70001fc1, AutomationTarget.mixer_pan(0)),
+    (0x70428003, AutomationTarget.plugin_parameter(1, 3, slot=2)),  # insert 1, effect slot 2, parameter 3
+    (0x30007, None),                                               # channel mute: not a supported target
+    (0x70001f00, None),                                            # mixer control the SDK does not name
+])
+def test_event_ids_decode_to_typed_targets(event_id: int, expected: AutomationTarget | None) -> None:
+    assert AutomationTarget.from_event_id(event_id) == expected
+
+
+@pytest.mark.parametrize("event_id", [-1, 2**32, True, 1.5, "0x180cd"])
+def test_event_id_decoding_rejects_non_uint32(event_id: Any) -> None:
+    with pytest.raises(ValueError):
+        AutomationTarget.from_event_id(event_id)

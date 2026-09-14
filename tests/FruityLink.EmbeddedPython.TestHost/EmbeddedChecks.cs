@@ -20,7 +20,7 @@ internal static class EmbeddedChecks
             finally { await dispatcher.DrainAsync(); }
         };
         await using var runtime = new EmbeddedPythonRuntime(options, handler);
-        await CheckIdentityAndSdkAsync(runtime, recorder);
+        await CheckIdentityAndSdkAsync(runtime, recorder, options.ExtensionPackagePaths.Count);
         await CheckErrorsAndLimitsAsync(runtime);
         await CheckCancellationAsync(runtime);
         await CheckThreadDrainAsync(runtime);
@@ -28,7 +28,7 @@ internal static class EmbeddedChecks
         await CheckNativeDrainAsync(options);
     }
 
-    private static async Task CheckIdentityAndSdkAsync(EmbeddedPythonRuntime runtime, RecordingControl recorder)
+    private static async Task CheckIdentityAndSdkAsync(EmbeddedPythonRuntime runtime, RecordingControl recorder, int extensionCount)
     {
         var result = await runtime.ExecuteAsync("""
             import os, sys, ctypes, asyncio
@@ -42,11 +42,16 @@ internal static class EmbeddedChecks
         Require(value.GetProperty("pid").GetInt32() == Environment.ProcessId, "Python must execute in the host PID.");
         Require(value.GetProperty("isolated").GetInt32() == 1 && value.GetProperty("env").GetInt32() == 1 &&
             value.GetProperty("site").GetInt32() == 1, "Python must ignore ambient environment/site packages.");
-        Require(value.GetProperty("path").GetArrayLength() == 3, "Python should have exactly three isolated import paths.");
+        Require(value.GetProperty("path").GetArrayLength() == 3 + extensionCount, "Python should expose only configured isolated import paths.");
         int expectedOperations = typeof(INativeFlControl).GetMethods().Length + typeof(IFlStructuredQuery).GetMethods().Length;
         Require(value.GetProperty("count").GetInt32() == expectedOperations, "Expected complete typed SDK catalogue.");
         Require(value.GetProperty("tempo").GetDouble() == 120, "SDK callback returned incorrect tempo.");
         Require(result.GetProperty("stdout").GetString() == "音楽 ♫ café\n", "Unicode output was corrupted.");
+        if (extensionCount != 0)
+        {
+            result = await runtime.ExecuteAsync("import fixture_extension\nresult=fixture_extension.VALUE", 10);
+            Require(result.GetProperty("result").GetString() == "extension import passed", "Configured extension wheel was not importable.");
+        }
         result = await runtime.ExecuteAsync("""
             from fruitylink import NoteSpec
             fl.ops.set_tempo(bpm=123)
@@ -63,6 +68,9 @@ internal static class EmbeddedChecks
         var error = await runtime.ExecuteAsync("print('before')\nraise ValueError('bad 音')", 10);
         Require(!error.GetProperty("ok").GetBoolean() && error.GetProperty("error").GetString()!.Contains("bad 音"), "Python error was lost.");
         Require(error.GetProperty("stdout").GetString() == "before\n", "Output before failure was lost.");
+        var partial = await runtime.ExecuteAsync("result={'tempo': fl.ops.get_tempo()}\nraise ValueError('late')", 10);
+        Require(!partial.GetProperty("ok").GetBoolean() && partial.GetProperty("resultPartial").GetBoolean() &&
+            partial.GetProperty("result").GetProperty("tempo").GetDouble() == 120, "Partial result before failure was lost.");
         var output = await runtime.ExecuteAsync("print('♫'*100000)\nresult=1", 10);
         Require(output.GetProperty("stdoutTruncated").GetBoolean(), "Unbounded Python stdout.");
         var invalid = await runtime.ExecuteAsync("result=object()", 10);

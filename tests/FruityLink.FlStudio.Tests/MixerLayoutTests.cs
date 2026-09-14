@@ -185,6 +185,38 @@ public sealed class MixerLayoutTests : IDisposable
     private static bool IsMutation(string command)
         => command.StartsWith("poke", StringComparison.Ordinal) || command.StartsWith("call ", StringComparison.Ordinal);
 
+    [Theory]
+    [InlineData(-9000, "ffffffffffffe700")]
+    [InlineData(-6400, "ffffffffffffe700")]
+    [InlineData(-1000, "fffffffffffffc18")]
+    [InlineData(0, "0")]
+    [InlineData(6400, "1900")]
+    [InlineData(6800, "1900")]
+    public async Task MixerPanIsSignedWithZeroCentreAndClampsToTheNativeLimit(int requested, string wireValue)
+    {
+        var transport = new MixerTransport(Layout());
+        uint cmdId = FlInjectBridge.MixerTrackParamId(3, FlInjectBridge.MixerPanOffset);
+
+        await new FlInjectBridge().SetMixerPanAsync(3, requested);
+
+        Assert.Contains($"call f53fe0 {cmdId:x} {wireValue} 11", transport.Commands);
+        Assert.DoesNotContain(transport.Commands, command => command.StartsWith("poke", StringComparison.Ordinal));
+    }
+
+    [Theory]
+    [InlineData("0x0", 0)]
+    [InlineData("0xffffe700", -6400)]
+    [InlineData("0xffffffffffffe700", -6400)]
+    [InlineData("0x1900", 6400)]
+    public async Task MixerPanReadbackRoundTripsLeftValuesAsSignedIntegers(string ret, int expected)
+    {
+        var transport = new MixerTransport(Layout());
+        uint cmdId = FlInjectBridge.MixerTrackParamId(3, FlInjectBridge.MixerPanOffset);
+        transport.Replies[$"call f53fe0 {cmdId:x} 0 2"] = "{\"ok\":1,\"ret\":\"" + ret + "\"}";
+
+        Assert.Equal(expected, await new FlInjectBridge().GetMixerPanAsync(3));
+    }
+
     private static FlMixerLayout Layout(int stride = 0x1478)
         => new(stride, 0x0C, 0x08, 0x18, 0x1A, 0x394, 0x134C, 8, 0, 4, 8, 0x64, 0x58, 0xF0);
 

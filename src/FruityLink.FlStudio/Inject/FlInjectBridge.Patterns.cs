@@ -316,6 +316,41 @@ public sealed partial class FlInjectBridge
     private static int NoteCh(byte[] n)  => BitConverter.ToUInt16(n, 6);
     private static int NoteKey(byte[] n) => BitConverter.ToUInt16(n, 0xC);
     private static int NotePos(byte[] n) => BitConverter.ToInt32(n, 0);
+    private static int NoteLen(byte[] n) => BitConverter.ToInt32(n, 8);
+
+    /// <summary>Resolves every target to the indices of the notes it addresses in <paramref name="notes"/>:
+    /// the (channel, key, startTick) triple, narrowed by lengthTick when the target supplies one. FL allows
+    /// stacked duplicates that share the triple (and even the length), so a target that matches several notes
+    /// is refused — before anything is written — unless <paramref name="allowMultiple"/> is set, in which case
+    /// all of them are addressed. A target that matches nothing yields an empty list (the caller's count
+    /// reports it). Matching runs against the ORIGINAL snapshot, so one edit's move can't shadow another's.</summary>
+    internal static List<int>[] MatchNoteTargets(IReadOnlyList<byte[]> notes,
+        IReadOnlyList<(int Channel, int Key, int StartTick, int? LengthTick)> targets, bool allowMultiple)
+    {
+        var result = new List<int>[targets.Count];
+        for (int t = 0; t < targets.Count; t++)
+        {
+            var (channel, key, start, length) = targets[t];
+            var hits = new List<int>();
+            for (int i = 0; i < notes.Count; i++)
+            {
+                byte[] n = notes[i];
+                if (NoteCh(n) != channel || NoteKey(n) != key || NotePos(n) != start) continue;
+                if (length is int want && NoteLen(n) != want) continue;
+                hits.Add(i);
+            }
+            if (hits.Count > 1 && !allowMultiple)
+            {
+                string lengths = string.Join(", ", hits.Select(i => NoteLen(notes[i])));
+                string narrowed = length is int l ? $", length {l}" : "";
+                throw new InvalidOperationException(
+                    $"Note (channel {channel}, key {key}, tick {start}{narrowed}) matches {hits.Count} stacked notes (lengths {lengths}); " +
+                    "no notes were changed. Set lengthTick to address one of them, or pass allowMultiple=true to address all of them.");
+            }
+            result[t] = hits;
+        }
+        return result;
+    }
 
     /// <summary>Reads a pattern's raw note structs (each a 24-byte copy) plus the recorder + data pointers,
     /// or null when the pattern has no note store. An empty (count 0) store returns an empty list.</summary>
@@ -355,29 +390,30 @@ public sealed partial class FlInjectBridge
         await RefreshPatternAsync(patIdx, ct);
     }
 
-    /// <summary>Edit existing notes in place (matched by original channel+key+startTick), preserving every
-    /// other note + every unspecified field. Returns the number of notes changed.</summary>
-    public async Task<int> EditNotesAsync(int pattern, IReadOnlyList<NoteEdit> edits, CancellationToken ct = default)
+    /// <summary>Edit existing notes in place (matched by original channel+key+startTick, optionally lengthTick),
+    /// preserving every other note + every unspecified field. An edit matching several stacked duplicates is
+    /// refused before any write unless <paramref name="allowMultiple"/>. Returns the number of notes changed.</summary>
+    public async Task<int> EditNotesAsync(int pattern, IReadOnlyList<NoteEdit> edits, bool allowMultiple = false, CancellationToken ct = default)
     {
         if (edits is null || edits.Count == 0) return 0;
         int patIdx = pattern <= 0 ? await GetCurrentPatternAsync(ct) : pattern;
         ValidatePattern(patIdx);
-        LogOp("EditNotes", $"pattern={patIdx} edits={edits.Count}");
+        LogOp("EditNotes", $"pattern={patIdx} edits={edits.Count} allowMultiple={allowMultiple}");
 
         var read = await ReadNoteStructsAsync(patIdx, ct);
         if (read is null) throw new InvalidOperationException($"Pattern {patIdx} has no note store (open a project in FL).");
         var (rec, data, notes) = read.Value;
         if (notes.Count == 0) return 0;
 
-        // Match every edit against the ORIGINAL identity snapshot so one edit's move can't shadow another's.
-        var origId = notes.Select(n => (NoteCh(n), NoteKey(n), NotePos(n))).ToList();
+        // Resolve every edit against the ORIGINAL snapshot (so one edit's move can't shadow another's) and
+        // refuse ambiguous targets before touching any struct.
+        var matches = MatchNoteTargets(notes, edits.Select(e => (e.Channel, e.Key, e.StartTick, e.LengthTick)).ToList(), allowMultiple);
         int changed = 0;
-        foreach (var e in edits)
+        for (int t = 0; t < edits.Count; t++)
         {
-            for (int i = 0; i < notes.Count; i++)
+            foreach (int i in matches[t])
             {
-                if (origId[i] != (e.Channel, e.Key, e.StartTick)) continue;
-                ApplyNoteEdit(notes[i], e);
+                ApplyNoteEdit(notes[i], edits[t]);
                 changed++;
             }
         }
@@ -411,22 +447,24 @@ public sealed partial class FlInjectBridge
             ValidateNoteTime(edit.NewStartTick ?? NotePos(note), edit.NewLength ?? BitConverter.ToInt32(note, 8));
     }
 
-    /// <summary>Delete specific notes (matched by channel+key+startTick), keeping the rest of the pattern.
-    /// Returns the number deleted.</summary>
-    public async Task<int> DeleteNotesAsync(int pattern, IReadOnlyList<NoteRef> targets, CancellationToken ct = default)
+    /// <summary>Delete specific notes (matched by channel+key+startTick, optionally lengthTick), keeping the rest
+    /// of the pattern. A target matching several stacked duplicates is refused before any write unless
+    /// <paramref name="allowMultiple"/>. Returns the number deleted.</summary>
+    public async Task<int> DeleteNotesAsync(int pattern, IReadOnlyList<NoteRef> targets, bool allowMultiple = false, CancellationToken ct = default)
     {
         if (targets is null || targets.Count == 0) return 0;
         int patIdx = pattern <= 0 ? await GetCurrentPatternAsync(ct) : pattern;
         ValidatePattern(patIdx);
-        LogOp("DeleteNotes", $"pattern={patIdx} targets={targets.Count}");
+        LogOp("DeleteNotes", $"pattern={patIdx} targets={targets.Count} allowMultiple={allowMultiple}");
 
         var read = await ReadNoteStructsAsync(patIdx, ct);
         if (read is null) throw new InvalidOperationException($"Pattern {patIdx} has no note store (open a project in FL).");
         var (rec, data, notes) = read.Value;
         if (notes.Count == 0) return 0;
 
-        var kill = new HashSet<(int, int, int)>(targets.Select(t => (t.Channel, t.Key, t.StartTick)));
-        var survivors = notes.Where(n => !kill.Contains((NoteCh(n), NoteKey(n), NotePos(n)))).ToList();
+        var matches = MatchNoteTargets(notes, targets.Select(t => (t.Channel, t.Key, t.StartTick, t.LengthTick)).ToList(), allowMultiple);
+        var kill = new HashSet<int>(matches.SelectMany(m => m));
+        var survivors = notes.Where((_, i) => !kill.Contains(i)).ToList();
         int deleted = notes.Count - survivors.Count;
         if (deleted > 0) await WriteNoteStructsAsync(patIdx, rec, data, survivors, ct);
         return deleted;

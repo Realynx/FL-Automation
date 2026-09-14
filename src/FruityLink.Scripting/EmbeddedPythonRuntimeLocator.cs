@@ -33,10 +33,35 @@ public static class EmbeddedPythonRuntimeLocator
         var package = pythonPackagePath ?? EnvironmentOverride(environment, "FRUITYLINK_PYTHON_PATH", "FL_MCP_PYTHON_PATH");
         if (active is not null && runtime is null && package is null) return active;
         var defaults = active ?? InstalledOptions(hostDirectory, fileExists);
-        var resolved = new EmbeddedPythonOptions(Absolute(runtime ?? defaults.RuntimeDirectory), Absolute(package ?? defaults.PythonPackagePath));
-        if (active is not null && (!SamePath(active.RuntimeDirectory, resolved.RuntimeDirectory) || !SamePath(active.PythonPackagePath, resolved.PythonPackagePath)))
+        var resolved = new EmbeddedPythonOptions(Absolute(runtime ?? defaults.RuntimeDirectory), Absolute(package ?? defaults.PythonPackagePath))
+        {
+            ExtensionPackagePaths = DiscoverExtensionPackages(hostDirectory),
+        };
+        if (active is not null && (!SamePath(active.RuntimeDirectory, resolved.RuntimeDirectory) || !SamePath(active.PythonPackagePath, resolved.PythonPackagePath) ||
+            !SamePaths(active.ExtensionPackagePaths, resolved.ExtensionPackagePaths)))
             throw new InvalidOperationException("FL already owns another embedded Python configuration. Remove the conflicting override or restart FL to change it.");
         return active ?? resolved;
+    }
+
+    internal static IReadOnlyList<string> DiscoverExtensionPackages(string hostDirectory) =>
+        DiscoverExtensionPackages(hostDirectory, Directory.Exists, Directory.EnumerateDirectories, directory => Directory.EnumerateFiles(directory, "*.whl", SearchOption.TopDirectoryOnly));
+
+    internal static IReadOnlyList<string> DiscoverExtensionPackages(string hostDirectory, Func<string, bool> directoryExists,
+        Func<string, IEnumerable<string>> enumerateDirectories, Func<string, IEnumerable<string>> enumerateWheels)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(hostDirectory);
+        if (!Path.IsPathFullyQualified(hostDirectory)) throw new ArgumentException("FruityLink host directory must be absolute.", nameof(hostDirectory));
+        string root = Path.Combine(Path.GetFullPath(hostDirectory), "python", "extensions");
+        if (!directoryExists(root)) return [];
+        var packages = new List<string>();
+        foreach (string directory in enumerateDirectories(root).Select(Path.GetFullPath).Order(StringComparer.OrdinalIgnoreCase).ThenBy(path => path, StringComparer.Ordinal))
+        {
+            string[] wheels = enumerateWheels(directory).Select(Path.GetFullPath).Order(StringComparer.OrdinalIgnoreCase).ThenBy(path => path, StringComparer.Ordinal).ToArray();
+            if (wheels.Length > 1)
+                throw new InvalidOperationException($"Embedded Python extension '{Path.GetFileName(directory)}' contains multiple wheels. Keep exactly one installed version.");
+            if (wheels.Length == 1) packages.Add(wheels[0]);
+        }
+        return packages;
     }
 
     private static EmbeddedPythonOptions InstalledOptions(string hostDirectory, Func<string, bool> fileExists)
@@ -57,4 +82,6 @@ public static class EmbeddedPythonRuntimeLocator
         ? Path.GetFullPath(path) : throw new ArgumentException("Embedded Python runtime and package locations must be absolute.");
     private static bool SamePath(string first, string second) => string.Equals(
         Path.TrimEndingDirectorySeparator(Path.GetFullPath(first)), Path.TrimEndingDirectorySeparator(second), StringComparison.OrdinalIgnoreCase);
+    private static bool SamePaths(IReadOnlyList<string> first, IReadOnlyList<string> second) => first.Count == second.Count &&
+        first.Zip(second).All(pair => SamePath(pair.First, pair.Second));
 }

@@ -1,0 +1,4 @@
+/artifacts/
+/dist/
+/.venv/
+__pycache__/

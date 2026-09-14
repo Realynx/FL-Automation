@@ -94,6 +94,40 @@ public sealed class DispatcherTests
         Assert.Null(edit.NewKey);
     }
 
+    [Theory]
+    [InlineData("select_channel", nameof(INativeFlControl.SelectChannelAsync))]
+    [InlineData("set_channel_solo", nameof(INativeFlControl.SetChannelSoloAsync))]
+    public async Task RenamedChannelArgumentAcceptsTheLegacyIndexAlias(string operation, string method)
+    {
+        var (control, recorder) = RecordingControl.Create<INativeFlControl>();
+        await using var dispatcher = new FlScriptingDispatcher(control);
+        Assert.Contains(dispatcher.Catalog.Operations.Single(o => o.Name == operation).Parameters, p => p.Name == "channel");
+        await dispatcher.InvokeAsync(operation, RecordingControl.Json("{\"channel\":3}"));
+        await dispatcher.InvokeAsync(operation, RecordingControl.Json("{\"index\":5}"));
+        Assert.Equal(new[] { (method, 3), (method, 5) }, recorder.Calls.Select(c => (c.Method, (int)c.Arguments[0]!)).ToArray());
+        var error = await Assert.ThrowsAsync<ScriptingException>(() => dispatcher.InvokeAsync(operation, RecordingControl.Json("{\"index\":1,\"channel\":2}")));
+        Assert.Equal("invalid_arguments", error.Code);
+        Assert.Equal(2, recorder.Calls.Count);
+    }
+
+    [Fact]
+    public async Task NoteTargetsBindOptionalLengthTickAndAllowMultiple()
+    {
+        var (control, recorder) = RecordingControl.Create<INativeFlControl>();
+        await using var dispatcher = new FlScriptingDispatcher(control);
+        await dispatcher.InvokeAsync("delete_notes", RecordingControl.Json(
+            "{\"pattern\":1,\"targets\":[{\"channel\":0,\"key\":60,\"startTick\":0,\"lengthTick\":96},{\"channel\":0,\"key\":62,\"startTick\":96}],\"allowMultiple\":true}"));
+        var targets = Assert.IsAssignableFrom<IReadOnlyList<NoteRef>>(recorder.Calls.Last().Arguments[1]);
+        Assert.Equal(96, targets[0].LengthTick);
+        Assert.Null(targets[1].LengthTick);
+        Assert.Equal(true, recorder.Calls.Last().Arguments[2]);
+        await dispatcher.InvokeAsync("edit_notes", RecordingControl.Json(
+            "{\"pattern\":1,\"edits\":[{\"channel\":0,\"key\":60,\"startTick\":0,\"lengthTick\":192,\"newVelocity\":100}]}"));
+        var edit = Assert.Single(Assert.IsAssignableFrom<IReadOnlyList<NoteEdit>>(recorder.Calls.Last().Arguments[1]));
+        Assert.Equal(192, edit.LengthTick);
+        Assert.Equal(false, recorder.Calls.Last().Arguments[2]);
+    }
+
     [Fact]
     public async Task BatchKeepsCompletedChangesAndHonorsStopOnError()
     {

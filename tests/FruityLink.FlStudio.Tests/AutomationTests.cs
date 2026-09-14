@@ -86,6 +86,38 @@ public sealed class AutomationTests : IDisposable
         Assert.Single(commands, command => command.StartsWith("automation_add", StringComparison.Ordinal));
     }
 
+    [Theory]
+    [InlineData(0, "automation_set 4 2 0 0.9 -0.25 0 4 0.75 0 0")]
+    [InlineData(1, "automation_set 4 2 0 0.5 0 0 4 0.9 -0.25 0")]
+    public async Task SetPointReplacesOneValueInPlaceIncludingProtectedEndpoints(int index, string expected)
+    {
+        replies["automation_read 4"] = State;
+        replies[expected] = State;
+        replies["call 107ead0"] = "{\"ok\":1,\"ret\":\"0x0\"}";
+        replies["peek 149e8b4 4"] = Hex(-1);
+        replies["peek 14aab88 8"] = Hex(0UL);
+
+        await new FlInjectBridge().SetAutomationPointAsync(4, index, 0.9, -0.25);
+
+        Assert.Contains(expected, commands);
+        Assert.DoesNotContain(commands, command => command.StartsWith("automation_delete", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task SetPointRefusesMissingIndexAndNonLinearCurvesBeforeWriting()
+    {
+        replies["automation_read 4"] = State;
+        var bridge = new FlInjectBridge();
+        var missing = await Assert.ThrowsAsync<InvalidOperationException>(() => bridge.SetAutomationPointAsync(4, 2, 0.5, 0));
+        Assert.Contains("does not exist", missing.Message);
+        await Assert.ThrowsAsync<ArgumentOutOfRangeException>(() => bridge.SetAutomationPointAsync(4, 0, 1.5, 0));
+
+        replies["automation_read 4"] = State.Replace("\"curve\":0}]", "\"curve\":2}]");
+        var curved = await Assert.ThrowsAsync<InvalidOperationException>(() => bridge.SetAutomationPointAsync(4, 0, 0.5, 0));
+        Assert.Contains("non-linear", curved.Message);
+        Assert.DoesNotContain(commands, command => command.StartsWith("automation_set", StringComparison.Ordinal));
+    }
+
     [Fact]
     public async Task AddPointUsesInvariantWireNumbersAndNoRawWrites()
     {

@@ -41,6 +41,18 @@ class NoteInfo:
 
 
 @dataclass(frozen=True)
+class Gap:
+    """A rest region on one channel, computed locally from note snapshots: [start_tick, end_tick)."""
+
+    channel: int
+    start_tick: int
+    end_tick: int
+    length_tick: int
+    start_beat: float
+    length_beats: float
+
+
+@dataclass(frozen=True)
 class PlaylistTrackInfo:
     index: int
     name: str

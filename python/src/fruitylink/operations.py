@@ -36,7 +36,7 @@ class Operations(QueryOperations):
         return cast(float, self.invoke("get_tempo"))
 
     def set_master_volume(self, *, value: int) -> None:
-        """Master volume, 0..12800 (≈7624 ≈ 0 dB)."""
+        """Master volume as a raw native integer, 0..12800. No dB conversion is defined."""
         self.invoke("set_master_volume", **{"value": value})
 
     def get_master_volume(self) -> int:
@@ -60,7 +60,7 @@ class Operations(QueryOperations):
         return cast(int, self.invoke("get_shuffle"))
 
     def set_mixer_volume(self, *, track: int, value: int) -> None:
-        """Mixer track volume 0..12800 (track 0 = master)."""
+        """Mixer track volume as a raw native integer, 0..12800 (track 0 = master). No dB conversion is defined."""
         self.invoke("set_mixer_volume", **{"track": track, "value": value})
 
     def get_mixer_volume(self, *, track: int) -> int:
@@ -68,11 +68,11 @@ class Operations(QueryOperations):
         return cast(int, self.invoke("get_mixer_volume", **{"track": track}))
 
     def set_mixer_pan(self, *, track: int, value: int) -> None:
-        """Mixer track pan 0..12800 (6400 = center)."""
+        """Mixer track pan as a SIGNED native integer, -6400..6400: 0 = center, negative = left, 6400 = hard right. This scale differs from channel pan (0..12800, 6400 = center); a mixer value of 6400 or more is fully right. Live-verified by isolated renders (Ember Tides v006)."""
         self.invoke("set_mixer_pan", **{"track": track, "value": value})
 
     def get_mixer_pan(self, *, track: int) -> int:
-        """Read a mixer track pan 0..12800 (symmetric with SetMixerPanAsync)."""
+        """Read a mixer track pan -6400..6400 (0 = center; symmetric with SetMixerPanAsync). Untouched tracks read 0."""
         return cast(int, self.invoke("get_mixer_pan", **{"track": track}))
 
     def set_mixer_track_muted(self, *, track: int, muted: bool) -> None:
@@ -88,7 +88,7 @@ class Operations(QueryOperations):
         self.invoke("set_mixer_fx_param", **{"track": track, "slot": slot, "paramIndex": param_index, "value": value})
 
     def set_channel_volume(self, *, channel: int, value: int) -> None:
-        """Channel volume 0..12800 (10000 = default 78%)."""
+        """Channel volume as a raw native integer, 0..12800."""
         self.invoke("set_channel_volume", **{"channel": channel, "value": value})
 
     def get_channel_volume(self, *, channel: int) -> int:
@@ -167,25 +167,25 @@ class Operations(QueryOperations):
         """Read the number of channels in the rack."""
         return cast(int, self.invoke("get_channel_count"))
 
-    def select_channel(self, *, index: int) -> None:
-        """Exclusively select a channel (so the piano roll edits it)."""
-        self.invoke("select_channel", **{"index": index})
+    def select_channel(self, *, channel: int) -> None:
+        """Exclusively select a zero-based channel (so the piano roll edits it)."""
+        self.invoke("select_channel", **{"channel": channel})
 
-    def get_channel_name(self, *, index: int) -> str:
+    def get_channel_name(self, *, channel: int) -> str:
         """Read the name of a zero-based channel."""
-        return cast(str, self.invoke("get_channel_name", **{"index": index}))
+        return cast(str, self.invoke("get_channel_name", **{"channel": channel}))
 
     def list_channels(self) -> str:
         """List channel indices and names."""
         return cast(str, self.invoke("list_channels"))
 
-    def set_channel_name(self, *, index: int, name: str) -> None:
+    def set_channel_name(self, *, channel: int, name: str) -> None:
         """Rename a channel (persists across save/reload) so the model's own name→index lookups keep working on channels it created."""
-        self.invoke("set_channel_name", **{"index": index, "name": name})
+        self.invoke("set_channel_name", **{"channel": channel, "name": name})
 
-    def set_channel_solo(self, *, index: int) -> None:
-        """Toggle exclusive SOLO on a channel (solo again = un-solo) — hear one part without muting every other channel by hand."""
-        self.invoke("set_channel_solo", **{"index": index})
+    def set_channel_solo(self, *, channel: int) -> None:
+        """Toggle exclusive SOLO on a channel (solo again = un-solo) — hear one part without muting every other channel by hand. The channel is zero-based, like every other channel operation."""
+        self.invoke("set_channel_solo", **{"channel": channel})
 
     def get_mixer_track_count(self) -> int:
         """Native mixer cardinality: Master + active ordinary inserts + Current. Current has a special physical index, not count-1; use IFlStructuredQuery.QueryMixerTracksAsync to enumerate addressable Master/insert tracks."""
@@ -279,17 +279,33 @@ class Operations(QueryOperations):
         """Replace an existing channel's sample with a new audio file."""
         self.invoke("replace_channel_sample", **{"channel": channel, "samplePath": sample_path})
 
+    def load_channel_plugin_state(self, *, channel: int, path: str, use_channel_loader: bool = False) -> str:
+        """Load a plugin state or preset file into the generator ALREADY hosted by a channel, without replacing the plugin instance. Uses the wrapper's own state-file loader (dispatcher opcode 0x12). Live-verified on FL 26.1.3 with Serum 2: a VST3 .vstpreset whose class id is the plugin's GUID string with braces/dashes removed loads and changes the state in place; a plugin's proprietary preset file (e.g. .SerumPreset) is silently ignored. Set useChannelLoader to route an FL .fst through FL's channel file loader instead (the drag-and-drop path), which may swap the generator, rename the channel and start the transport; that route is refused for other formats because live it applied no state and renamed the channel. Prefer the default dispatcher route. Refuses channels without a hosted plugin and, for .fst files, files that do not name the channel's current plugin. Returns a verification line: plugin name, same-instance check, parameter count and a comparison of the plugin's wrapper state record before and after the load (sizes, short hashes and the number of differing bytes), or an explicit "unavailable" note when no snapshot could be taken. Confirm the sound with parameter displays in a separate request or an isolated render."""
+        return cast(str, self.invoke("load_channel_plugin_state", **{"channel": channel, "path": path, "useChannelLoader": use_channel_loader}))
+
+    def load_mixer_effect_state(self, *, track: int, slot: int, path: str) -> str:
+        """Load a plugin state or preset file into the effect ALREADY loaded in a mixer FX slot (0-9) through the wrapper's state-file loader (dispatcher opcode 0x12). Same format and identity rules as LoadChannelPluginStateAsync. Refuses empty slots."""
+        return cast(str, self.invoke("load_mixer_effect_state", **{"track": track, "slot": slot, "path": path}))
+
+    def get_channel_plugin_state(self, *, channel: int) -> str:
+        """Read the CURRENT state of the generator hosted by a channel as base64 of its FL wrapper plugin-data record: the same bytes an FL project stores for the plugin (for a VST3 such as Serum 2 this embeds the processor and controller component states). Implemented through FL's own serializer: a temporary project copy is written with the direct writer used by SaveCopyAsync and the channel's record is extracted, so project note validation applies and the live project's path, title and dirty flag do not change. Pair with LoadChannelPluginStateAsync to learn parameter mappings by set-then-read, or to snapshot a patch without saving the project. Refuses channels without a hosted plugin; built-in Sampler channels store no wrapper record."""
+        return cast(str, self.invoke("get_channel_plugin_state", **{"channel": channel}))
+
+    def get_mixer_effect_state(self, *, track: int, slot: int) -> str:
+        """Read the CURRENT state of the effect in a mixer FX slot (0-9; track 0 = Master) as base64 of its FL wrapper plugin-data record, through the same temporary project copy as GetChannelPluginStateAsync. Refuses empty slots."""
+        return cast(str, self.invoke("get_mixer_effect_state", **{"track": track, "slot": slot}))
+
     def get_notes(self, *, pattern: int, channel: int, offset: int = 0) -> str:
         """Read piano-roll notes of a pattern (1-based, or <=0 = current); channel<0 = all. Paged: offset skips the first N notes (raw index); the output's continuation hint feeds it back in."""
         return cast(str, self.invoke("get_notes", **{"pattern": pattern, "channel": channel, "offset": offset}))
 
-    def edit_notes(self, *, pattern: int, edits: Sequence[NoteEdit]) -> int:
-        """Edit EXISTING piano-roll notes in place, WITHOUT clearing the pattern (every other note is untouched, including fields the read tool doesn't surface — pan, fine pitch, release, cut, res). Each NoteEdit identifies a note by the (channel, key, startTick) triple GetNotesAsync shows and applies whichever new fields it carries. Returns the number of notes changed."""
-        return cast(int, self.invoke("edit_notes", **{"pattern": pattern, "edits": edits}))
+    def edit_notes(self, *, pattern: int, edits: Sequence[NoteEdit], allow_multiple: bool = False) -> int:
+        """Edit EXISTING piano-roll notes in place, WITHOUT clearing the pattern (every other note is untouched, including fields the read tool doesn't surface — pan, fine pitch, release, cut, res). Each NoteEdit identifies a note by the (channel, key, startTick) triple GetNotesAsync shows, optionally narrowed by its current lengthTick, and applies whichever new fields it carries. FL allows several notes with the same triple (stacked duplicates), so an edit that matches more than one note is refused before anything is written unless allowMultiple is true, in which case every matching note receives the edit. Returns the number of notes changed."""
+        return cast(int, self.invoke("edit_notes", **{"pattern": pattern, "edits": edits, "allowMultiple": allow_multiple}))
 
-    def delete_notes(self, *, pattern: int, targets: Sequence[NoteRef]) -> int:
-        """Delete SPECIFIC existing piano-roll notes (matched by the (channel, key, startTick) triple), leaving the rest of the pattern intact — the surgical counterpart to ClearPatternAsync. Returns the number of notes deleted."""
-        return cast(int, self.invoke("delete_notes", **{"pattern": pattern, "targets": targets}))
+    def delete_notes(self, *, pattern: int, targets: Sequence[NoteRef], allow_multiple: bool = False) -> int:
+        """Delete SPECIFIC existing piano-roll notes (matched by the (channel, key, startTick) triple, optionally narrowed by lengthTick), leaving the rest of the pattern intact — the surgical counterpart to ClearPatternAsync. A target that matches several stacked duplicates is refused before anything is deleted unless allowMultiple is true, which deletes all of them. Returns the number of notes deleted."""
+        return cast(int, self.invoke("delete_notes", **{"pattern": pattern, "targets": targets, "allowMultiple": allow_multiple}))
 
     def clone_pattern(self, *, source_pattern: int) -> int:
         """Duplicate a pattern's notes into a new empty pattern; returns the new pattern's 1-based index (0 if the source has nothing to clone). The full 24-byte note structs are copied, so pan/fine-pitch/ mute/etc. survive — a "make a variation of this part" without hand-recreating every note."""
@@ -427,6 +443,10 @@ class Operations(QueryOperations):
         """Add a named song marker at a tick position."""
         self.invoke("add_marker", **{"tick": tick, "name": name})
 
+    def delete_marker(self, *, index: int) -> None:
+        """Delete a song time marker by its zero-based index in ListMarkersAsync order. Refuses a missing index without changing the project. FL extends renders and the play range to the last marker, so remove trailing markers to shorten an audition."""
+        self.invoke("delete_marker", **{"index": index})
+
     def open_project(self, *, path: str) -> None:
         """Open the project at the specified path."""
         self.invoke("open_project", **{"path": path})
@@ -508,8 +528,12 @@ class Operations(QueryOperations):
         self.invoke("add_automation_point", **{"channel": channel, "timeBeats": time_beats, "value": value, "tension": tension})
 
     def delete_automation_point(self, *, channel: int, index: int) -> None:
-        """Delete an automation point by index and recompute its curve."""
+        """Delete an automation point by index and recompute its curve. The first and last points are protected endpoints and cannot be deleted; edit them with SetAutomationPointAsync."""
         self.invoke("delete_automation_point", **{"channel": channel, "index": index})
+
+    def set_automation_point(self, *, channel: int, index: int, value: float, tension: float) -> None:
+        """Change one existing automation point's value 0..1 and tension -1..1 in place, keeping its time. Works for the protected first and last points. Refuses a missing index and curves that contain non-linear points (replace those with SetAutomationPointsAsync)."""
+        self.invoke("set_automation_point", **{"channel": channel, "index": index, "value": value, "tension": tension})
 
     def open_export_dialog(self, *, format_index: int = 0) -> None:
         """Opens FL's audio Export dialog for the user to finish (format/path/Render)."""
