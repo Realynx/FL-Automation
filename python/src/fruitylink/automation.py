@@ -1,14 +1,25 @@
 """Automation curves use beats, unlike note and playlist native tick positions."""
 
 import math
+import re
 from collections.abc import Sequence
 
-from ._collection import checked_index
-from .automation_records import AutomationClipResult, AutomationPointSpec, AutomationTarget, PumpResult
+from ._collection import checked_index, iter_pages
+from .automation_records import (
+    AutomationChannelInfo,
+    AutomationClipResult,
+    AutomationPointSpec,
+    AutomationTarget,
+    PumpResult,
+)
 from .errors import ProtocolError
 from .models import AutomationPointInfo
 from .operations import Operations
 from .records import Timebase
+
+MAX_POINTS = 4000
+_LINK_MARKER = ": automation clip -> "
+_EVENT_ID = re.compile(r"event 0x([0-9a-fA-F]{1,8})")
 
 
 class AutomationCurve:
@@ -37,6 +48,8 @@ class AutomationCurve:
 
         Works for the protected first and last points, which delete() refuses. Curves
         that contain non-linear points are refused; replace those with set_points().
+        Tension shapes the segment ending at this point: positive = fast start, slow
+        finish; negative = slow start, accelerating finish (see AutomationPointSpec).
         """
         if isinstance(value, bool) or not isinstance(value, (int, float)) or not 0 <= value <= 1:
             raise ValueError("Automation point value must be a number within 0..1.")
@@ -46,15 +59,24 @@ class AutomationCurve:
                                        value=float(value), tension=float(tension))
 
     def set_points(self, points: Sequence[AutomationPointSpec]) -> None:
-        """Replace the complete linear envelope, starting at beat zero; times strictly increase."""
-        if not 2 <= len(points) <= 4000 or any(not isinstance(p, AutomationPointSpec) for p in points):
+        """Replace the complete linear envelope, starting at beat zero; times strictly increase.
+
+        Each point's tension belongs to the segment that ends at that point (positive = fast
+        start and slow finish, negative = slow start accelerating into the point).
+        """
+        if not 2 <= len(points) <= MAX_POINTS or any(not isinstance(p, AutomationPointSpec) for p in points):
             raise ValueError("Provide 2..4000 AutomationPointSpec values.")
         if points[0].time_beats != 0 or any(a.time_beats >= b.time_beats for a, b in zip(points, points[1:])):
             raise ValueError("First point must start at zero and times must strictly increase.")
         self._ops.set_automation_points(channel=self.channel, points=points)
 
     def add_clip(self, track: int, start_tick: int, length_tick: int) -> int:
-        """Place this automation channel on a one-based playlist track; times are ticks."""
+        """Place this automation channel on a one-based playlist track; times are ticks.
+
+        Every placement plays the same envelope from its own start: automation clips have
+        no loop or offset flag, so a pattern that differs per bar needs one envelope that
+        spans the range (``Automation.duck`` / ``Automation.tile``), not several placements.
+        """
         _placement(track, start_tick, length_tick)
         index = self._ops.add_automation_clip(channel=self.channel, track=track,
                                                start_tick=start_tick, length_tick=length_tick)
@@ -69,6 +91,41 @@ class Automation:
 
     def __getitem__(self, channel: int) -> AutomationCurve:
         return AutomationCurve(self._ops, channel)
+
+    def list(self, *, with_points: bool = True) -> tuple[AutomationChannelInfo, ...]:
+        """Inventory of every linked automation clip channel: target, event ids, point count, placements.
+
+        Reads the channel list, asks the host to describe each channel's generator (automation
+        clips report ``automation clip -> <targets>``), decodes any ``event 0x...`` ids with
+        ``AutomationTarget.from_event_id``, counts the envelope points (skipped with
+        ``with_points=False`` to save one request per clip) and pairs the channel with the
+        playlist clips whose source is that channel. Unlinked automation clips (no target yet)
+        are not automation clips to the host and are not listed.
+        """
+        clips = tuple(iter_pages(lambda offset: self._ops.query_clips(offset=offset)))
+        found: list[AutomationChannelInfo] = []
+        for channel in self._ops.query_channels():
+            link = parse_automation_link(self._ops.get_channel_plugin(channel=channel.index))
+            if link is None:
+                continue
+            event_ids = tuple(int(match, 16) for match in _EVENT_ID.findall(link))
+            targets = tuple(AutomationTarget.from_event_id(event_id) for event_id in event_ids)
+            count = len(self._ops.query_automation_points(channel=channel.index)) if with_points else -1
+            placed = tuple(clip for clip in clips if clip.source_kind == "channel" and clip.source_index == channel.index)
+            found.append(AutomationChannelInfo(channel.index, channel.name, link, event_ids, targets, count, placed))
+        return tuple(found)
+
+    def describe(self, *, with_points: bool = True) -> str:
+        """One line per automation clip channel, from ``list()``: target, points and placements."""
+        ppq = self._ops.get_ppq()
+        lines = []
+        for item in self.list(with_points=with_points):
+            decoded = ", ".join(_target_text(target) for target in item.targets) or "-"
+            places = ", ".join(f"track {c.track} @ {c.start_tick} ({_bar(c.start_tick, ppq)}) len {c.length_tick}"
+                               + (" muted" if c.muted else "") for c in item.clips) or "not placed"
+            points = "?" if item.point_count < 0 else str(item.point_count)
+            lines.append(f"[{item.channel}] {item.name}: {item.targets_text} -> {decoded}; {points} points; {places}")
+        return f"{len(lines)} automation clips" + ("\n" + "\n".join(lines) if lines else "")
 
     def create(self, target: AutomationTarget, track: int, start_tick: int, length_tick: int,
                *, name: str | None = None) -> AutomationClipResult:
@@ -93,11 +150,13 @@ class Automation:
         """Create and place a sidechain-style curve: one dip per ``beats_per_hit`` over the clip.
 
         Each hit drops the value to ``floor`` (default ``ceiling - depth``), recovers to ``ceiling``
-        over ``recovery_beats`` (``tension`` shapes that segment), holds, then drops one tick before
-        the next hit. Point times are clip-relative beats; the last point sits at the clip end.
+        over ``recovery_beats`` (``tension`` shapes that segment: the default +0.5 recovers fast and
+        eases in; negative would start slowly and accelerate), holds, then drops one tick before the
+        next hit. Point times are clip-relative beats; the last point sits at the clip end.
         Remember the target's scale: channel volume 1.0 is 12800, so pass ``ceiling`` to preserve a
         lower nominal level. Creation happens before the envelope write, so inspect the created
         channel if the second step fails. Long spans exceed the 4000-point limit; split them.
+        For an irregular hit pattern (alternating kick bars, fills) use ``duck`` with the actual hits.
         """
         _placement(track, start_tick, length_tick)
         ppq = self._ops.get_ppq()
@@ -107,38 +166,185 @@ class Automation:
         self[result.channel].set_points(points)
         return PumpResult(result, len(points))
 
+    def duck(self, target: AutomationTarget, hits_ticks: Sequence[int], start_tick: int, length_tick: int, *,
+             track: int, depth: float = 0.5, recovery_beats: float = 0.25, floor: float | None = None,
+             ceiling: float = 1.0, tension: float = 0.5, name: str | None = None) -> PumpResult:
+        """Create and place ONE envelope that dips at every hit in ``hits_ticks`` (absolute ticks).
+
+        This is ``pump`` for an irregular grid: pair it with ``fl.playlist.onsets(channel, start, end)``
+        to follow a kick channel through the arrangement, including alternating bars and fills.
+        Hits outside ``[start_tick, start_tick + length_tick)`` are ignored; duplicates collapse. Each
+        hit holds ``ceiling`` until one tick before it, drops to ``floor`` (default ``ceiling - depth``)
+        at the hit and recovers over ``recovery_beats`` (``tension`` +0.5 = fast start, slow finish).
+        Automation clips cannot loop or offset, so one long clip is the only way to follow a pattern
+        that changes per bar; spans needing more than 4000 points must be split into several clips.
+        """
+        _placement(track, start_tick, length_tick)
+        if any(type(hit) is not int for hit in hits_ticks):
+            raise ValueError("Hit positions must be integer ticks.")
+        ppq = self._ops.get_ppq()
+        timebase = Timebase(ppq)
+        hits = [timebase.beats(hit - start_tick) for hit in hits_ticks if start_tick <= hit < start_tick + length_tick]
+        points = duck_points(hits, timebase.beats(length_tick), ppq=ppq, depth=depth, recovery_beats=recovery_beats,
+                             floor=floor, ceiling=ceiling, tension=tension)
+        result = self.create(target, track, start_tick, length_tick, name=name)
+        self[result.channel].set_points(points)
+        return PumpResult(result, len(points))
+
+    def tile(self, target: AutomationTarget, shape: Sequence[AutomationPointSpec], start_tick: int, length_tick: int,
+             *, track: int, period_beats: float, offsets_beats: Sequence[float] = (0,),
+             name: str | None = None) -> PumpResult:
+        """Create and place ONE envelope that repeats ``shape`` every ``period_beats`` across the clip.
+
+        ``shape`` is a clip-relative envelope starting at beat 0 whose span fits in one period; repeat
+        ``i`` starts at ``i * period_beats + offsets_beats[i % len(offsets_beats)]`` (``[0, 0.5]``
+        alternates a half-beat shift on even and odd bars). The shape's last value holds until the
+        next repeat. See ``tile_points`` for the pure builder and ``duck`` for hit-driven dips.
+        """
+        _placement(track, start_tick, length_tick)
+        ppq = self._ops.get_ppq()
+        points = tile_points(shape, period_beats, Timebase(ppq).beats(length_tick), ppq=ppq, offsets_beats=offsets_beats)
+        result = self.create(target, track, start_tick, length_tick, name=name)
+        self[result.channel].set_points(points)
+        return PumpResult(result, len(points))
+
+
+def parse_automation_link(description: str) -> str | None:
+    """The ``<targets>`` part of a ``get_channel_plugin`` line for an automation clip, else None."""
+    if not isinstance(description, str):
+        return None
+    _, marker, targets = description.partition(_LINK_MARKER)
+    return targets.strip() if marker else None
+
 
 def pump_points(length_beats: float, *, ppq: int, depth: float = 0.5, recovery_beats: float = 0.75,
                 beats_per_hit: float = 1, floor: float | None = None, ceiling: float = 1.0,
                 tension: float = 0.5) -> list[AutomationPointSpec]:
     """Pure envelope builder behind Automation.pump(); clip-relative beats, 2..4000 points."""
-    numbers = [depth, recovery_beats, beats_per_hit, ceiling, tension, length_beats] + ([] if floor is None else [floor])
-    if any(isinstance(v, bool) or not isinstance(v, (int, float)) or not math.isfinite(v) for v in numbers):
-        raise ValueError("Pump settings must be finite numbers.")
+    _finite([beats_per_hit, length_beats])
+    if isinstance(beats_per_hit, bool) or beats_per_hit <= 0:
+        raise ValueError("Require a positive hit spacing.")
+    _duck_settings(depth, recovery_beats, floor, ceiling, tension, ppq)
+    tick = 1 / ppq
+    hits: list[float] = []
+    while len(hits) * beats_per_hit < length_beats - tick:
+        hits.append(len(hits) * beats_per_hit)
+        if len(hits) > MAX_POINTS:
+            raise ValueError("Pump curve exceeds 4000 points; place shorter clips or use a larger beats_per_hit.")
+    return duck_points(hits, length_beats, ppq=ppq, depth=depth, recovery_beats=recovery_beats, floor=floor,
+                       ceiling=ceiling, tension=tension)
+
+
+def duck_points(hits_beats: Sequence[float], length_beats: float, *, ppq: int, depth: float = 0.5,
+                recovery_beats: float = 0.25, floor: float | None = None, ceiling: float = 1.0,
+                tension: float = 0.5) -> list[AutomationPointSpec]:
+    """Pure envelope builder behind Automation.duck(): a dip at each clip-relative hit, 2..4000 points.
+
+    The curve sits at ``ceiling``, holds until one tick before each hit, drops to the dip value at
+    the hit, recovers to ``ceiling`` over ``recovery_beats`` (cut short when the next hit is closer)
+    and ends at ``length_beats``. Hits outside ``[0, length_beats - 1 tick]`` are ignored.
+    """
+    _finite(list(hits_beats) + [length_beats])
+    low = _duck_settings(depth, recovery_beats, floor, ceiling, tension, ppq)
+    tick = 1 / ppq
+    if length_beats <= tick:
+        raise ValueError("A duck clip must be longer than one tick.")
+    hits = sorted({float(hit) for hit in hits_beats if 0 <= hit < length_beats - tick})
+    points: list[AutomationPointSpec] = []
+
+    def push(time: float, value: float, shape: float = 0) -> None:
+        if not points or time > points[-1].time_beats:
+            points.append(AutomationPointSpec(time, value, shape))
+
+    if not hits or hits[0] > 0:
+        push(0, ceiling)
+    for position, hit in enumerate(hits):
+        hold_until = length_beats if position + 1 == len(hits) else hits[position + 1] - tick
+        if hit >= tick:
+            push(hit - tick, ceiling)
+        push(hit, low)
+        recovered = min(hit + recovery_beats, hold_until)
+        push(recovered, ceiling, tension)
+        push(hold_until, ceiling)
+        if len(points) > MAX_POINTS:
+            raise ValueError("Envelope exceeds 4000 points; split the span into several clips.")
+    push(length_beats, ceiling)
+    return points
+
+
+def tile_points(shape: Sequence[AutomationPointSpec], period_beats: float, length_beats: float, *, ppq: int,
+                offsets_beats: Sequence[float] = (0,)) -> list[AutomationPointSpec]:
+    """Pure envelope builder behind Automation.tile(): ``shape`` repeated every ``period_beats``.
+
+    ``shape`` starts at beat 0 with strictly increasing times that fit inside one period. Repeat
+    ``i`` is shifted by ``offsets_beats[i % len(offsets_beats)]`` (each offset must keep the shape
+    inside its period). Between repeats the last value holds; before an offset first repeat the
+    shape's first value holds from beat 0; the curve ends at ``length_beats``. Points beyond the
+    clip end are dropped (a partial last repeat). At most 4000 points.
+    """
+    if type(ppq) is not int or ppq < 1:
+        raise ValueError("PPQ must be a positive integer.")
+    if len(shape) < 2 or any(not isinstance(point, AutomationPointSpec) for point in shape):
+        raise ValueError("A tile shape needs at least two AutomationPointSpec values.")
+    if shape[0].time_beats != 0 or any(a.time_beats >= b.time_beats for a, b in zip(shape, shape[1:])):
+        raise ValueError("The shape must start at beat zero with strictly increasing times.")
+    _finite([period_beats, length_beats] + list(offsets_beats))
+    if not offsets_beats or period_beats <= 0 or length_beats <= 1 / ppq:
+        raise ValueError("Require at least one offset, a positive period and a clip longer than one tick.")
+    span = shape[-1].time_beats
+    if any(offset < 0 or offset + span > period_beats for offset in offsets_beats):
+        raise ValueError("Every offset must keep the whole shape inside one period (0 <= offset <= period - span).")
+    tick = 1 / ppq
+    points: list[AutomationPointSpec] = []
+
+    def push(time: float, value: float, tension: float = 0) -> None:
+        if time <= length_beats and (not points or time > points[-1].time_beats):
+            points.append(AutomationPointSpec(time, value, tension))
+
+    repeat = 0
+    while repeat * period_beats < length_beats:
+        base = repeat * period_beats + offsets_beats[repeat % len(offsets_beats)]
+        if repeat == 0 and base > 0:
+            push(0, shape[0].value)
+        if points:
+            push(base - tick, points[-1].value)
+        for point in shape:
+            push(base + point.time_beats, point.value, point.tension)
+        repeat += 1
+        if len(points) > MAX_POINTS:
+            raise ValueError("Tiled curve exceeds 4000 points; split the span or lengthen the period.")
+    push(length_beats, points[-1].value)
+    return points
+
+
+def _finite(values: Sequence[float]) -> None:
+    if any(isinstance(v, bool) or not isinstance(v, (int, float)) or not math.isfinite(v) for v in values):
+        raise ValueError("Envelope settings must be finite numbers.")
+
+
+def _duck_settings(depth: float, recovery_beats: float, floor: float | None, ceiling: float, tension: float,
+                   ppq: int) -> float:
+    _finite([depth, recovery_beats, ceiling, tension] + ([] if floor is None else [floor]))
     if not 0 <= depth <= 1 or not 0 < ceiling <= 1 or not -1 <= tension <= 1 or recovery_beats <= 0 \
-            or beats_per_hit <= 0 or type(ppq) is not int or ppq < 1:
+            or type(ppq) is not int or ppq < 1:
         raise ValueError("Require depth 0..1, ceiling 0<c<=1, tension -1..1, positive recovery, hit spacing, PPQ.")
     low = ceiling - depth if floor is None else floor
     if not 0 <= low < ceiling:
         raise ValueError("The dip value (floor or ceiling - depth) must be within 0 <= dip < ceiling.")
-    tick = 1 / ppq
-    if length_beats <= tick:
-        raise ValueError("A pump clip must be longer than one tick.")
-    points: list[AutomationPointSpec] = []
-    hit = 0
-    while hit * beats_per_hit < length_beats - tick:
-        start, next_start = hit * beats_per_hit, min((hit + 1) * beats_per_hit, length_beats)
-        final = next_start >= length_beats
-        hold_until = length_beats if final else next_start - tick
-        recovered = min(start + recovery_beats, hold_until)
-        points.append(AutomationPointSpec(start, low))
-        points.append(AutomationPointSpec(recovered, ceiling, tension))
-        if recovered < hold_until:
-            points.append(AutomationPointSpec(hold_until, ceiling))
-        hit += 1
-        if len(points) > 4000:
-            raise ValueError("Pump curve exceeds 4000 points; place shorter clips or use a larger beats_per_hit.")
-    return points
+    return low
+
+
+def _target_text(target: AutomationTarget | None) -> str:
+    if target is None:
+        return "undecoded"
+    if target.kind == "plugin_parameter":
+        where = f"channel {target.index}" if target.slot < 0 else f"insert {target.index} slot {target.slot}"
+        return f"{where} parameter {target.parameter}"
+    return f"{target.kind} {target.index}"
+
+
+def _bar(tick: int, ppq: int) -> str:
+    return f"bar {tick // (4 * ppq) + 1}" + ("" if tick % (4 * ppq) == 0 else f" +{tick % (4 * ppq)}")
 
 
 def _placement(track: int, start: int, length: int) -> None:
@@ -146,3 +352,6 @@ def _placement(track: int, start: int, length: int) -> None:
         raise ValueError("Playlist track and tick values must be integers.")
     if not 1 <= track <= 500 or start < 0 or length <= 0 or start + length > 2**31 - 1:
         raise ValueError("Automation placement requires track 1..500 and a positive, Int32-safe tick span.")
+
+
+__all__ = ["Automation", "AutomationCurve", "duck_points", "parse_automation_link", "pump_points", "tile_points"]

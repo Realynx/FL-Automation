@@ -6,7 +6,8 @@ from .analysis import Analysis
 from .arrangements import Arrangements
 from .automation import Automation
 from .batch import Batch
-from .channels import Channels
+from .capture import Audio
+from .channels import Channels, _sample_paths
 from .endpoint import Endpoint, discover
 from .errors import ConnectionError
 from .mixer import Mixer
@@ -16,6 +17,7 @@ from .playlist import Playlist
 from .plugins import Plugins
 from .project import Project, Transport
 from .records import Timebase
+from .samples import Samples
 from .transport import NamedPipeTransport, RequestTransport
 from .values import JsonValue
 
@@ -41,6 +43,8 @@ class Studio:
         self.plugins = Plugins(self.ops)
         self.automation = Automation(self.ops)
         self.analysis = Analysis()
+        self.samples = Samples(_sample_paths(self.ops))
+        self.audio = Audio(self)
 
     @property
     def timebase(self) -> Timebase:

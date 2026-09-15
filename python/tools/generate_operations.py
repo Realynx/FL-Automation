@@ -12,6 +12,15 @@ SCALARS = {"int": "int", "long": "int", "double": "float", "bool": "bool", "stri
            "FlAutomationTarget": "AutomationTarget", "FlAutomationPointSpec": "AutomationPointSpec",
            "FlAutomationClipResult": "AutomationClipResult"}
 RECORDS = ["ClipMove", "ClipResize", "NoteEdit", "NoteRef", "NoteSpec", "PatternClipSpec"]
+# Keyword aliases accepted next to the canonical wire name (operation -> {alias: canonical}). The volume and pan
+# setters take the property name callers reach for; the host accepts the same aliases on the wire.
+ARGUMENT_ALIASES: dict[str, dict[str, str]] = {
+    "set_channel_volume": {"volume": "value"},
+    "set_mixer_volume": {"volume": "value"},
+    "set_master_volume": {"volume": "value"},
+    "set_channel_pan": {"pan": "value"},
+    "set_mixer_pan": {"pan": "value"},
+}
 
 
 def snake_case(name: str) -> str:
@@ -35,6 +44,17 @@ def parameter(source: str) -> tuple[str, str]:
     return name, annotation
 
 
+def alias_signature(param: tuple[str, str], aliases: dict[str, str]) -> str:
+    """Make an aliased canonical parameter optional and append its alias keywords after it."""
+    wire, annotation = param
+    canonical = snake_case(wire)
+    if canonical not in aliases.values():
+        return annotation
+    kind = annotation.split(": ", 1)[1].split(" = ")[0]
+    optional = f"{canonical}: {kind} | None = None"
+    return optional + "".join(f", {alias}: {kind} | None = None" for alias, target in aliases.items() if target == canonical)
+
+
 def generate() -> str:
     source = CONTRACT.read_text(encoding="utf-8")
     declarations = re.findall(r"Task(?:<([^\n]+?)>)?\s+(\w+Async)\(([^;]+?)\);", source)
@@ -52,7 +72,10 @@ from .models import decode_record
 from .queries import QueryOperations
 from .records import ClipMove, ClipResize, NoteEdit, NoteRef, NoteSpec, PatternClipSpec
 from .transport import RequestTransport
-from .values import JsonValue, wire_arguments
+from .values import JsonValue, resolve_alias, wire_arguments
+
+ARGUMENT_ALIASES: dict[str, dict[str, str]] = ''' + repr(ARGUMENT_ALIASES) + '''
+"""Keyword aliases each operation accepts next to its canonical argument (alias -> canonical)."""
 
 
 class Operations(QueryOperations):
@@ -68,19 +91,24 @@ class Operations(QueryOperations):
         params = [parameter(p) for p in native_parameters.split(",") if "CancellationToken" not in p]
         name = snake_case(native_name)
         result = python_type(native_result) if native_result else "None"
-        signature = ", *, " + ", ".join(p[1] for p in params) if params else ""
+        aliases = ARGUMENT_ALIASES.get(name, {})
+        annotations = [alias_signature(p, aliases) for p in params]
+        signature = ", *, " + ", ".join(annotations) if params else ""
         args = ", **{" + ", ".join(f'"{p[0]}": {snake_case(p[0])}' for p in params) + "}" if params else ""
+        resolve = "".join(f'{c} = resolve_alias("{c}", {c}, {a}={a})\n        ' for a, c in aliases.items())
         previous = source[:source.index(f" {native_name}(")]
         summaries = re.findall(r"<summary>(.*?)</summary>", previous, re.DOTALL)
         summary = re.sub(r'<(?:see|paramref) (?:cref|name)="([^"]+)"\s*/>', r"\1", summaries[-1])
         doc = html.unescape(re.sub(r"\s+", " ", re.sub(r"///|<[^>]*>", "", summary))).strip()
         doc = doc.replace('"""', "'''")
+        if aliases:
+            doc += " Accepts " + ", ".join(f"``{a}=`` as an alias of ``{c}=``" for a, c in aliases.items()) + "."
         body = f'self.invoke("{name}"{args})'
         if native_result == "FlAutomationClipResult":
             body = f"return decode_record(AutomationClipResult, {body})"
         else:
             body = f"return cast({result}, {body})" if native_result else body
-        methods.append(f'\n    def {name}(self{signature}) -> {result}:\n        """{doc}"""\n        {body}\n')
+        methods.append(f'\n    def {name}(self{signature}) -> {result}:\n        """{doc}"""\n        {resolve}{body}\n')
     if len(methods) < 123:
         raise ValueError("Native contract parser did not discover the complete operation surface.")
     return header + "".join(methods)

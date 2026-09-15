@@ -19,6 +19,15 @@ from .bars import (
     transition,
 )
 from .density import note_density, tick_range_seconds
+from .describe import (
+    AudioComparison,
+    AudioDescription,
+    SampleTable,
+    compare_audio,
+    default_cache_dir,
+    describe_audio,
+    describe_samples,
+)
 from .loudness import Loudness
 from .pitch import _page, _Track, _track, _validate, pitch_track
 from .spectral import spectral, spectral_windows
@@ -101,6 +110,12 @@ class AudioAnalysis(AmplitudeAnalysis):
         return transition(self.source, other, bpm, bar, window_seconds=window_seconds, beats_per_bar=beats_per_bar,
                           start_bar=start_bar, grid_offset_seconds=grid_offset_seconds)
 
+    def describe(self, *, bpm: float | None = None, ppq: int | None = None, start_bar: int | None = None,
+                 beats_per_bar: int = 4, detail: str = "normal") -> AudioDescription:
+        """An agent-readable description (``.text``) of the selected audio; see ``describe_audio``."""
+        return describe_audio(self.source, bpm=bpm, ppq=ppq, start_bar=start_bar, beats_per_bar=beats_per_bar,
+                              detail=detail)
+
 
 class Analysis:
     """Analysis factories also available through Studio.analysis; no connection is required."""
@@ -123,8 +138,12 @@ class Analysis:
     compare_bands = staticmethod(compare_bands)
     masking_report = staticmethod(masking_report)
     transition = staticmethod(transition)
+    describe = staticmethod(describe_audio)
+    compare = staticmethod(compare_audio)
+    describe_samples = staticmethod(describe_samples)
 
 
-__all__ = ["Analysis", "AudioAnalysis", "AudioSource", "band_energy", "compare_bands", "describe_sections",
-           "from_pcm", "load_wav", "masking_report", "note_density", "pitch_track", "scan_bars",
-           "tick_range_seconds", "transition"]
+__all__ = ["Analysis", "AudioAnalysis", "AudioComparison", "AudioDescription", "AudioSource", "SampleTable",
+           "band_energy", "compare_audio", "compare_bands", "default_cache_dir", "describe_audio",
+           "describe_samples", "describe_sections", "from_pcm", "load_wav", "masking_report", "note_density",
+           "pitch_track", "scan_bars", "tick_range_seconds", "transition"]

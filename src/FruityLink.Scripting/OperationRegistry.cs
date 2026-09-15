@@ -60,13 +60,20 @@ internal sealed class BoundOperation
             OperationAvailability.Requirements(name), _result is null ? null : SchemaBuilder.ForType(_result.PropertyType));
     }
 
-    /// <summary>Wire names still accepted for parameters that were renamed for consistency (operation -> old, new),
-    /// so an older wheel keeps working against a newer host. The old name is only honoured when the new one is absent.</summary>
-    private static readonly Dictionary<string, (string Old, string New)> LegacyArgumentAliases = new(StringComparer.Ordinal)
-    {
-        ["select_channel"] = ("index", "channel"),
-        ["set_channel_solo"] = ("index", "channel"),
-    };
+    /// <summary>Wire names accepted as aliases of a canonical parameter (operation -> alias, canonical): renamed
+    /// parameters keep working from an older wheel, and the volume/pan setters accept the property name callers reach
+    /// for ("volume"/"pan") next to the canonical "value". An alias is only honoured when the canonical name is absent.</summary>
+    internal static readonly IReadOnlyDictionary<string, IReadOnlyList<(string Alias, string Canonical)>> ArgumentAliases =
+        new Dictionary<string, IReadOnlyList<(string, string)>>(StringComparer.Ordinal)
+        {
+            ["select_channel"] = new[] { ("index", "channel") },
+            ["set_channel_solo"] = new[] { ("index", "channel") },
+            ["set_channel_volume"] = new[] { ("volume", "value") },
+            ["set_mixer_volume"] = new[] { ("volume", "value") },
+            ["set_master_volume"] = new[] { ("volume", "value") },
+            ["set_channel_pan"] = new[] { ("pan", "value") },
+            ["set_mixer_pan"] = new[] { ("pan", "value") },
+        };
 
     internal object?[] Bind(JsonElement arguments)
     {
@@ -91,13 +98,16 @@ internal sealed class BoundOperation
 
     private JsonElement ApplyLegacyAliases(JsonElement arguments)
     {
-        if (!LegacyArgumentAliases.TryGetValue(Metadata.Name, out var alias) || arguments.ValueKind != JsonValueKind.Object
-            || !arguments.TryGetProperty(alias.Old, out _) || arguments.TryGetProperty(alias.New, out _))
+        if (!ArgumentAliases.TryGetValue(Metadata.Name, out var aliases) || arguments.ValueKind != JsonValueKind.Object)
             return arguments;
+        var rename = new Dictionary<string, string>(StringComparer.Ordinal);
+        foreach (var (alias, canonical) in aliases)
+            if (arguments.TryGetProperty(alias, out _) && !arguments.TryGetProperty(canonical, out _)) rename[alias] = canonical;
+        if (rename.Count == 0) return arguments;
         var renamed = new Dictionary<string, JsonElement>(StringComparer.Ordinal);
         foreach (var property in arguments.EnumerateObject())
         {
-            string name = property.Name == alias.Old ? alias.New : property.Name;
+            string name = rename.TryGetValue(property.Name, out var canonical) ? canonical : property.Name;
             if (!renamed.TryAdd(name, property.Value)) return arguments;   // duplicate keys: let the strict validation report them
         }
         return JsonSerializer.SerializeToElement(renamed, ScriptingJson.Options);

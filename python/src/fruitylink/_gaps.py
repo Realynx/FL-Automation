@@ -28,6 +28,11 @@ def note_intervals(notes: Iterable[NoteInfo], *, offset: int = 0, within: int | 
     return intervals
 
 
+def note_onsets(notes: Iterable[NoteInfo], *, channel: int, offset: int = 0, within: int | None = None) -> list[int]:
+    """Absolute start ticks of one channel's sounding notes, using the same clip rules as note_intervals."""
+    return [start for start, _ in note_intervals(notes, offset=offset, within=within, channel=channel).get(channel, [])]
+
+
 def merged(intervals: Iterable[Interval]) -> list[Interval]:
     result: list[Interval] = []
     for start, end in sorted(intervals):

@@ -7,7 +7,7 @@ from ._gaps import gaps_in_range, note_intervals
 from ._properties import IndexedObject, NativeProperty
 from .models import Gap, NoteInfo, PatternInfo
 from .operations import Operations
-from .records import NoteEdit, NoteRef, NoteSpec, Timebase
+from .records import ClipResize, NoteEdit, NoteRef, NoteSpec, Timebase
 
 
 class Notes:
@@ -31,16 +31,51 @@ class Notes:
         timebase = Timebase(self._ops.get_ppq())
         self.add_ticks(channel=channel, key=key, start=timebase.ticks(start), length=timebase.ticks(length), velocity=velocity)
 
-    def edit(self, edits: Sequence[NoteEdit], *, allow_multiple: bool = False) -> int:
+    def edit(self, edits: Sequence[NoteEdit], *, allow_multiple: bool = False, preserve_clips: bool = False) -> int:
         """Edit existing notes in place; returns the number changed. An edit whose (channel, key,
         start_tick[, length_tick]) matches several stacked notes is refused before any write unless
-        ``allow_multiple`` is True, which applies it to all of them."""
-        return self._ops.edit_notes(pattern=self.pattern, edits=edits, allow_multiple=allow_multiple)
+        ``allow_multiple`` is True, which applies it to all of them.
 
-    def delete(self, targets: Sequence[NoteRef], *, allow_multiple: bool = False) -> int:
+        The host keeps this pattern's playlist clips at their current lengths (FL alone would
+        re-derive them from the edited notes). ``preserve_clips=True`` re-checks that from here:
+        it lists the pattern's clips before and after the edit and resizes any whose length changed
+        (two extra queries; a safety net for hosts without the fix).
+        """
+        before = self._clip_lengths() if preserve_clips else None
+        changed = self._ops.edit_notes(pattern=self.pattern, edits=edits, allow_multiple=allow_multiple)
+        if before:
+            self._restore_clips(before)
+        return changed
+
+    def delete(self, targets: Sequence[NoteRef], *, allow_multiple: bool = False, preserve_clips: bool = False) -> int:
         """Delete the addressed notes; returns the number deleted. A target matching several stacked
-        notes is refused before any write unless ``allow_multiple`` is True, which deletes all of them."""
-        return self._ops.delete_notes(pattern=self.pattern, targets=targets, allow_multiple=allow_multiple)
+        notes is refused before any write unless ``allow_multiple`` is True, which deletes all of them.
+
+        Playlist clips of this pattern keep their lengths: FL alone shrinks every clip of the pattern
+        to the remaining notes (a deleted last note pulled 3072-tick clips back to 1536), which the
+        host now undoes as part of the delete. ``preserve_clips=True`` re-checks from here with two
+        extra clip queries and resizes any clip whose length still changed. Change clip lengths
+        deliberately with ``fl.clips.resize``.
+        """
+        before = self._clip_lengths() if preserve_clips else None
+        deleted = self._ops.delete_notes(pattern=self.pattern, targets=targets, allow_multiple=allow_multiple)
+        if before:
+            self._restore_clips(before)
+        return deleted
+
+    def _clip_lengths(self) -> dict[int, tuple[int, int, int]]:
+        """(track, start_tick, length_tick) of every playlist clip playing this pattern, by clip index."""
+        clips = iter_pages(lambda offset: self._ops.query_clips(offset=offset))
+        return {clip.index: (clip.track, clip.start_tick, clip.length_tick) for clip in clips
+                if clip.source_kind == "pattern" and clip.source_index == self.pattern}
+
+    def _restore_clips(self, before: dict[int, tuple[int, int, int]]) -> int:
+        after = self._clip_lengths()
+        fixes = [ClipResize(index, length) for index, (track, start, length) in before.items()
+                 if index in after and after[index][:2] == (track, start) and after[index][2] != length]
+        if fixes:
+            self._ops.resize_clips(resizes=fixes)
+        return len(fixes)
 
 
 class Pattern(IndexedObject):

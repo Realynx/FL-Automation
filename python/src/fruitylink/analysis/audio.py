@@ -11,6 +11,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import BinaryIO
 
+from . import _kernels
+
 MAX_SAMPLES = 32_000_000
 
 
@@ -88,7 +90,13 @@ def _check_size(frames: int, channels: int) -> None:
 
 
 def _check_samples(channels: tuple[array[float], ...]) -> None:
-    if any(not math.isfinite(value) or abs(value) > 1e12 for channel in channels for value in channel):
+    if _kernels.USE_NUMPY and _kernels._numpy is not None:
+        numpy = _kernels._numpy
+        bad = any(not numpy.isfinite(vector).all() or (numpy.abs(vector).max() > 1e12 if len(vector) else False)
+                  for vector in (numpy.frombuffer(channel, dtype=numpy.float64) for channel in channels))
+    else:
+        bad = any(not math.isfinite(value) or abs(value) > 1e12 for channel in channels for value in channel)
+    if bad:
         raise ValueError("PCM contains nonfinite or implausibly large samples (absolute limit 1e12).")
 
 
@@ -156,11 +164,18 @@ def _decode(data: bytes, tag: int, width: int, channels: tuple[array[float], ...
     count = len(channels)
     code = _typecode(tag, width)
     if code is not None:
+        scale = 1 if tag == 3 else 1 / 2 ** (width * 8 - 1)
+        if _kernels.USE_NUMPY and _kernels._numpy is not None:
+            numpy = _kernels._numpy
+            dtype = ("<f4" if width == 4 else "<f8") if tag == 3 else f"<i{width}"
+            planar = numpy.frombuffer(data, dtype=dtype).reshape(-1, count).T
+            for i, channel in enumerate(channels):
+                channel.frombytes((planar[i].astype(numpy.float64) * scale).tobytes())
+            return
         interleaved = array(code)
         interleaved.frombytes(data)
         if sys.byteorder != "little":  # pragma: no cover - the SDK targets little-endian hosts
             interleaved.byteswap()
-        scale = 1 if tag == 3 else 1 / 2 ** (width * 8 - 1)
         for i, channel in enumerate(channels):
             channel.extend(array("d", interleaved[i::count]) if scale == 1 else
                            array("d", [value * scale for value in interleaved[i::count]]))

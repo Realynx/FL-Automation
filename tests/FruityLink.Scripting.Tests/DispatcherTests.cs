@@ -110,6 +110,28 @@ public sealed class DispatcherTests
         Assert.Equal(2, recorder.Calls.Count);
     }
 
+    [Theory]
+    [InlineData("set_channel_volume", "{\"channel\":15,\"volume\":8000}", nameof(INativeFlControl.SetChannelVolumeAsync), 1, 8000)]
+    [InlineData("set_mixer_volume", "{\"track\":3,\"volume\":12800}", nameof(INativeFlControl.SetMixerVolumeAsync), 1, 12800)]
+    [InlineData("set_master_volume", "{\"volume\":9000}", nameof(INativeFlControl.SetMasterVolumeAsync), 0, 9000)]
+    [InlineData("set_channel_pan", "{\"channel\":2,\"pan\":6400}", nameof(INativeFlControl.SetChannelPanAsync), 1, 6400)]
+    [InlineData("set_mixer_pan", "{\"track\":3,\"pan\":-3200}", nameof(INativeFlControl.SetMixerPanAsync), 1, -3200)]
+    public async Task VolumeAndPanSettersAcceptThePropertyNameAsAnAlias(string operation, string json, string method, int argument, int expected)
+    {
+        var (control, recorder) = RecordingControl.Create<INativeFlControl>();
+        await using var dispatcher = new FlScriptingDispatcher(control);
+        Assert.Contains(dispatcher.Catalog.Operations.Single(o => o.Name == operation).Parameters, p => p.Name == "value");
+
+        await dispatcher.InvokeAsync(operation, RecordingControl.Json(json));
+
+        var call = Assert.Single(recorder.Calls);
+        Assert.Equal(method, call.Method);
+        Assert.Equal(expected, (int)call.Arguments[argument]!);
+        var error = await Assert.ThrowsAsync<ScriptingException>(() => dispatcher.InvokeAsync(operation, RecordingControl.Json(json.Replace("}", ",\"value\":1}"))));
+        Assert.Equal("invalid_arguments", error.Code);
+        Assert.Single(recorder.Calls);
+    }
+
     [Fact]
     public async Task NoteTargetsBindOptionalLengthTickAndAllowMultiple()
     {

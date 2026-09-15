@@ -20,6 +20,8 @@ public interface IFlStructuredQuery
     Task<IReadOnlyList<FlArrangementInfo>> QueryArrangementsAsync(CancellationToken ct = default);
     /// <summary>Read Master and active ordinary mixer inserts with their physical indices. Excludes the special Current track and dormant slots. Requery after insertion because indices can shift.</summary>
     Task<IReadOnlyList<FlMixerTrackInfo>> QueryMixerTracksAsync(CancellationToken ct = default);
+    /// <summary>Read one mixer track's ACTIVE sends from the native send table: destination index and effective name, the send level on FL's scale (native int / 16000: 0.8 = unity/0 dB, the level an untouched insert's default Master route reads; 1.0 = knob top, 0 = connected but silent) and the active flag. Inactive (disconnected) destinations are omitted, so a route set to level 0 still appears with level 0 while a disconnected one does not. Sidechain-flagged routes are not distinguishable from plain sends in the verified layout. This is the typed readback for SetMixerSendAsync; requery after mixer insertion because indices shift.</summary>
+    Task<IReadOnlyList<FlMixerSendInfo>> QueryMixerSendsAsync(int track, CancellationToken ct = default);
     /// <summary>Read plugin parameters without guessing normalized values from native integer bits.
     /// Negative slot selects a channel generator; otherwise select a mixer track and slot.
     /// Offset and total count unfiltered parameter slots.</summary>
@@ -75,6 +77,14 @@ public sealed record FlArrangementInfo(int Index, string Name, bool Current);
 /// <param name="Index">Physical index: zero for Master, positive for active ordinary inserts.</param>
 /// <param name="Name">Effective display name.</param><param name="Kind">Either master or insert.</param>
 public sealed record FlMixerTrackInfo(int Index, string Name, string Kind);
+
+/// <summary>One active mixer send read from a track's native send table.</summary>
+/// <param name="Source">Physical index of the sending track.</param>
+/// <param name="Destination">Physical index of the receiving track (0 = Master).</param>
+/// <param name="DestinationName">Effective display name of the destination.</param>
+/// <param name="Level">Send level on FL's scale: native int / 16000, so 0.8 is unity (0 dB) and 1.0 the knob top.</param>
+/// <param name="Active">Always true for listed sends; disconnected destinations are omitted.</param>
+public sealed record FlMixerSendInfo(int Source, int Destination, string DestinationName, double Level, bool Active);
 
 /// <summary>A plugin parameter snapshot. RawValue is plugin-specific and is not a normalized float.</summary>
 /// <param name="Index">Parameter index.</param><param name="Name">Parameter name.</param>

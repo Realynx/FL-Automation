@@ -1,13 +1,18 @@
 """Project lifecycle and transport use the same shared operations as any client."""
 
 import re
+import time
+from collections.abc import Callable
 from dataclasses import dataclass
+from typing import TypeVar
 
 from ._collection import checked_index
 from .errors import ProtocolError
 from .models import ProjectInfo
 from .operations import Operations
 from .records import Timebase
+
+T = TypeVar("T")
 
 
 @dataclass(frozen=True)
@@ -17,7 +22,23 @@ class Marker:
     tick: int
 
 
+@dataclass(frozen=True)
+class SeekResult:
+    """Outcome of a settled seek: the tick asked for, the playhead tick the host reported once two
+    consecutive reads agreed (None when the state text carried no position), whether it settled
+    within the budget, and how many position reads that took. Live evidence (Parking Lot Moon
+    2026-09-14): a stopped seek reads 14-20 ticks late for about 100 ms while FL runs its
+    automation pass, and plugin displays show the previous position's value until that pass
+    finishes (about 300 ms), so read displays after ``settled`` with ``Transport.read_at``."""
+
+    requested_tick: int
+    position_tick: int | None
+    settled: bool
+    reads: int
+
+
 _MARKER_LINE = re.compile(r"^(?P<name>.*) @ tick (?P<tick>\d+)(?: \(bar \d+\))?$")
+_POSITION = re.compile(r"\(tick (?P<tick>\d+)\)")
 
 
 def _parse_markers(text: str) -> tuple[Marker, ...]:
@@ -107,11 +128,82 @@ class Transport:
     def toggle_record(self) -> None:
         self._ops.transport_toggle_record()
 
-    def seek_ticks(self, tick: int) -> None:
-        self._ops.seek(tick=tick)
+    @property
+    def position_tick(self) -> int | None:
+        """The playhead tick from the host's state text, or None when it reports no position."""
+        match = _POSITION.search(self.state_text())
+        return int(match.group("tick")) if match else None
 
-    def seek_beats(self, beats: float) -> None:
-        self.seek_ticks(Timebase(self._ops.get_ppq()).ticks(beats))
+    def seek_ticks(self, tick: int, *, settle: bool = False, attempts: int = 20, delay: float = 0.05,
+                   sleep: Callable[[float], None] = time.sleep) -> SeekResult | None:
+        """Move the playhead to an absolute tick. ``settle=True`` waits until the reported position
+        stops moving (see ``seek_settled``) and returns the ``SeekResult``; otherwise returns None."""
+        if type(tick) is not int or tick < 0:
+            raise ValueError("tick must be a nonnegative integer.")
+        if settle:
+            return self.seek_settled(tick, attempts=attempts, delay=delay, sleep=sleep)
+        self._ops.seek(tick=tick)
+        return None
+
+    def seek_beats(self, beats: float, *, settle: bool = False) -> SeekResult | None:
+        return self.seek_ticks(Timebase(self._ops.get_ppq()).ticks(beats), settle=settle)
+
+    def seek_settled(self, tick: int, *, attempts: int = 20, delay: float = 0.05,
+                     sleep: Callable[[float], None] = time.sleep) -> SeekResult:
+        """Seek, then poll the playhead until two consecutive reads agree.
+
+        Why: after ``seek`` the stopped host still advances the reported position for roughly
+        100 ms (14-20 ticks at 100 BPM) while it runs an automation pass, so a position read in
+        the same request lands late and a short envelope (a 24-tick duck) is never sampled at
+        the requested tick. Polls up to ``attempts`` times, ``delay`` seconds apart; ``settled``
+        is False when the position was still moving at the end of the budget. Expect the settled
+        position slightly past the request; verify short envelopes from the point list instead.
+        """
+        if type(tick) is not int or tick < 0:
+            raise ValueError("tick must be a nonnegative integer.")
+        checked_index(attempts, minimum=1, maximum=200)
+        if isinstance(delay, bool) or not isinstance(delay, (int, float)) or not 0 <= delay <= 5:
+            raise ValueError("Poll delay must be 0..5 seconds.")
+        self._ops.seek(tick=tick)
+        previous: int | None = None
+        position: int | None = None
+        for read in range(1, attempts + 1):
+            if delay > 0:
+                sleep(delay)
+            position = self.position_tick
+            if position is not None and position == previous:
+                return SeekResult(tick, position, True, read)
+            previous = position
+        return SeekResult(tick, position, False, attempts)
+
+    def read_at(self, tick: int, read: Callable[[], T], *, settle: float = 0.3, attempts: int = 6,
+                delay: float = 0.1, sleep: Callable[[float], None] = time.sleep) -> T:
+        """Seek to ``tick``, wait for the host to apply automation there, then return a stable reading.
+
+        ``read`` is any zero-argument reader (``lambda: fl.mixer[6].volume``,
+        ``fl.mixer[1].effects[0].parameters.read`` bound to an index, ...). The seek settles first
+        (``seek_settled``), then ``settle`` seconds pass (live evidence: a display read right after
+        a seek shows the PREVIOUS position's automated value; 300 ms was always enough), then
+        ``read`` is called until two consecutive values compare equal, at most ``attempts`` times
+        ``delay`` apart. The last value is returned even when no two agreed.
+        """
+        if isinstance(settle, bool) or not isinstance(settle, (int, float)) or not 0 <= settle <= 10:
+            raise ValueError("settle must be 0..10 seconds.")
+        checked_index(attempts, minimum=1, maximum=100)
+        if isinstance(delay, bool) or not isinstance(delay, (int, float)) or not 0 <= delay <= 5:
+            raise ValueError("Readback delay must be 0..5 seconds.")
+        self.seek_settled(tick, sleep=sleep)
+        if settle > 0:
+            sleep(settle)
+        value = read()
+        for _ in range(attempts - 1):
+            if delay > 0:
+                sleep(delay)
+            again = read()
+            if again == value:
+                return again
+            value = again
+        return value
 
     def loop_ticks(self, start: int, end: int) -> None:
         self._ops.set_loop_region(start_tick=start, end_tick=end)

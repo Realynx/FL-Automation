@@ -113,6 +113,35 @@ public sealed class EmbeddedPythonRuntimeLocatorTests
         Assert.Contains("multiple wheels", error.Message);
     }
 
+    [Fact]
+    public void UnpackedExtensionDirectoryBecomesAnImportPathForCompiledPackages()
+    {
+        string root = Path.Combine(Host, "python", "extensions");
+        string analysis = Path.Combine(root, "analysis-support");
+        string unpacked = Path.Combine(analysis, EmbeddedPythonRuntimeLocator.UnpackedExtensionDirectory);
+        string serum = Path.Combine(root, "serum-support");
+        string serumWheel = Path.Combine(serum, "fruitylink_serum-0.1.0-py3-none-any.whl");
+        var packages = EmbeddedPythonRuntimeLocator.DiscoverExtensionPackages(Host, path => path == root || path == unpacked,
+            _ => [serum, analysis], directory => directory == serum ? [serumWheel] : []);
+
+        Assert.Equal([unpacked, serumWheel], packages);
+        Assert.Equal(["stdlib.zip", Common.RuntimeDirectory, Common.PythonPackagePath, unpacked, serumWheel],
+            EmbeddedPythonConfiguration.BuildModuleSearchPaths(Common with { ExtensionPackagePaths = packages }, "stdlib.zip"));
+    }
+
+    [Fact]
+    public void ExtensionWithBothAWheelAndAnUnpackedDirectoryIsRejected()
+    {
+        string root = Path.Combine(Host, "python", "extensions");
+        string analysis = Path.Combine(root, "analysis-support");
+        string unpacked = Path.Combine(analysis, EmbeddedPythonRuntimeLocator.UnpackedExtensionDirectory);
+
+        var error = Assert.Throws<InvalidOperationException>(() => EmbeddedPythonRuntimeLocator.DiscoverExtensionPackages(
+            Host, path => path == root || path == unpacked, _ => [analysis], _ => [Path.Combine(analysis, "numpy-2.5.1-cp314-cp314-win_amd64.whl")]));
+
+        Assert.Contains("both a wheel and a 'site-packages' directory", error.Message);
+    }
+
     private static EmbeddedPythonOptions Resolve(EmbeddedPythonOptions? active, Func<string, bool> exists,
         Dictionary<string, string?>? environment = null) => EmbeddedPythonRuntimeLocator.ResolveCore(Host, active,
         key => environment?.GetValueOrDefault(key), exists);

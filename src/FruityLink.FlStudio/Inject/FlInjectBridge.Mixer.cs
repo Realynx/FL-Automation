@@ -29,10 +29,24 @@ public sealed partial class FlInjectBridge
     private static ulong MixerTrackAddress(ulong arrayBase, int track, FlMixerLayout layout)
         => checked(arrayBase + (ulong)track * (ulong)layout.TrackStride);
 
+    /// <summary>Largest ordinary insert count FL allows (native mixer count 502 = Master + 500 inserts + Current).</summary>
+    public const int MaxMixerInserts = 500;
+
     private static void ValidateMixerTrack(int track, int count)
     {
         if (track < 0 || track > count - 2)
-            throw new ArgumentOutOfRangeException(nameof(track), $"Mixer track must be 0..{count - 2} (Master and ordinary inserts); Current and dormant slots are unavailable.");
+            throw new ArgumentOutOfRangeException(nameof(track), MixerTrackRangeMessage(track, count));
+    }
+
+    /// <summary>Names the addressable range AND the way out: the mixer currently has count-2 inserts, and
+    /// AddMixerTrackAsync grows it (the friction was a renamed loop dying at insert 17 of a 16-insert template).</summary>
+    internal static string MixerTrackRangeMessage(int track, int count)
+    {
+        int inserts = count - 2;
+        string grow = track > inserts && track <= MaxMixerInserts
+            ? $" Insert {track} does not exist yet: the mixer has {inserts} ordinary insert(s) (capacity {MaxMixerInserts}); call add_mixer_track to append one (or fl.mixer.ensure_inserts({track}) in Python) and requery indices."
+            : "";
+        return $"Mixer track must be 0..{inserts} (Master and the {inserts} active ordinary inserts); Current and dormant slots are unavailable.{grow}";
     }
 
     /// <summary>" MUTED"/" SOLO" markers from the profile's track state fields.</summary>
@@ -82,19 +96,49 @@ public sealed partial class FlInjectBridge
     /// model couldn't see existing routing at all.</summary>
     private async Task<string> DescribeSendsAsync(ulong trackStruct, FlMixerLayout layout, CancellationToken ct)
     {
+        var sends = new List<string>();
+        foreach (var (destination, level) in await ReadActiveSendsAsync(trackStruct, layout, ct))
+        {
+            string dn = await MixerTrackNameAsync(destination, layout, ct);
+            sends.Add($"->{destination} '{dn}' ({level:0.###})");
+        }
+        return sends.Count == 0 ? "sends: none" : "sends: " + string.Join(", ", sends);
+    }
+
+    /// <summary>The active (destination, level) pairs of one track's send table, read in ONE peek.</summary>
+    private async Task<IReadOnlyList<(int Destination, double Level)>> ReadActiveSendsAsync(ulong trackStruct, FlMixerLayout layout, CancellationToken ct)
+    {
         int count = await GetMixerTrackCountAsync(ct);
         int tableBytes = MixerSendTableBytes(count, layout);
         byte[] table = await PeekAbsAsync(trackStruct + (ulong)layout.SendTableOffset, tableBytes, ct);
-        var sends = new List<string>();
+        return DecodeActiveSends(table, count, layout);
+    }
+
+    /// <summary>Decode a send table: one record per destination 0..count-2 (stride SendStride) holding an
+    /// int32 level (native = level * 16000, so 12800 = 0.8 = unity) and an active byte; only active records are returned.</summary>
+    internal static IReadOnlyList<(int Destination, double Level)> DecodeActiveSends(byte[] table, int count, FlMixerLayout layout)
+    {
+        var sends = new List<(int, double)>();
         for (int d = 0; d <= count - 2; d++)
         {
             int record = d * layout.SendStride;
+            if (record + layout.SendStride > table.Length) throw new InvalidOperationException("Mixer send table read is shorter than the track count.");
             if (table[record + layout.SendActiveOffset] == 0) continue;
-            double level = BitConverter.ToInt32(table, record + layout.SendLevelOffset) / 16000.0;
-            string dn = await MixerTrackNameAsync(d, layout, ct);
-            sends.Add($"->{d} '{dn}' ({level:0.###})");
+            sends.Add((d, BitConverter.ToInt32(table, record + layout.SendLevelOffset) / 16000.0));
         }
-        return sends.Count == 0 ? "sends: none" : "sends: " + string.Join(", ", sends);
+        return sends;
+    }
+
+    /// <inheritdoc />
+    public async Task<IReadOnlyList<FlMixerSendInfo>> QueryMixerSendsAsync(int track, CancellationToken ct = default)
+    {
+        var layout = await MixerLayoutAsync(ct);
+        ulong trackStruct = await MixerTrackStructAsync(track, layout, ct);
+        if (trackStruct == 0) throw new InvalidOperationException($"Mixer track {track} not available.");
+        var result = new List<FlMixerSendInfo>();
+        foreach (var (destination, level) in await ReadActiveSendsAsync(trackStruct, layout, ct))
+            result.Add(new(track, destination, await MixerTrackNameAsync(destination, layout, ct), level, true));
+        return result;
     }
 
     private static int MixerSendTableBytes(int count, FlMixerLayout layout)
@@ -189,9 +233,12 @@ public sealed partial class FlInjectBridge
 
     // ============================ Mixer sends ============================
 
-    /// <summary>Set a mixer send srcTrack-&gt;dstTrack at level (1.0 ≈ unity). Engine funcs only (no Python ctx).</summary>
-    public async Task SetMixerSendAsync(int srcTrack, int dstTrack, double level, CancellationToken ct = default)
+    /// <summary>Set a mixer send srcTrack-&gt;dstTrack at level (native int = level * 16000; 0.8 = unity/0 dB, the
+    /// default Master route level). active=false calls FL's route-active core with enable 0 (disconnect) after
+    /// writing the level; the level write is kept so a later reconnect restores it. Engine funcs only (no Python ctx).</summary>
+    public async Task SetMixerSendAsync(int srcTrack, int dstTrack, double level, bool active = true, CancellationToken ct = default)
     {
+        LogOp("SetMixerSend", $"src={srcTrack} dst={dstTrack} level={level} active={active}");
         var layout = await MixerLayoutAsync(ct);
         int count = await GetMixerTrackCountAsync(ct);
         ValidateMixerTrack(srcTrack, count);
@@ -203,7 +250,9 @@ public sealed partial class FlInjectBridge
         ulong mgr = await MixerRoutingManagerAsync(ct);
         ulong baseArr = await GPtrAsync("14a7eb0", ct);  // *(0x14A7EB0)
         if (mgr == 0 || baseArr == 0) throw new InvalidOperationException("Mixer routing state is unavailable.");
-        await CallAsync("11a67f0", new ulong[] { mgr, (uint)srcTrack, (uint)dstTrack, 1, 1 }, ct);  // FLmx_SetRouteActiveCore
+        // FLmx_SetRouteActiveCore(manager, src, dst, enable, notify): enable 1 connects, 0 disconnects (FL may
+        // confirm "Disable routing?" when dst is a plugin sidechain source; the SDK cannot create such routes).
+        await CallAsync("11a67f0", new ulong[] { mgr, (uint)srcTrack, (uint)dstTrack, active ? 1u : 0u, 1 }, ct);
         ulong slot = MixerTrackAddress(baseArr, srcTrack, layout) + (ulong)layout.SendTableOffset
             + (ulong)dstTrack * (ulong)layout.SendStride + (ulong)layout.SendLevelOffset;
         await PokeAbsAsync(slot, BitConverter.GetBytes((int)scaledLevel), ct);

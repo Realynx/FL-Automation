@@ -107,3 +107,106 @@ def mean_channel_power(channels: Sequence[Sequence[float]], begin: int, end: int
     """Mean over channels of the mean square; robust to anti-phase stereo content."""
     frames = end - begin
     return sum(sum_squares(channel[begin:end]) for channel in channels) / (frames * len(channels))
+
+
+def block_mean_squares(values: Sequence[float], block: int) -> array[float]:
+    """Mean square of consecutive ``block``-frame groups; the final partial group keeps its own length."""
+    if block < 1:
+        raise ValueError("block must be at least one frame.")
+    count = len(values)
+    full = count // block
+    if USE_NUMPY and _numpy is not None:
+        squares = _vector(values) ** 2
+        result = array("d")
+        if full:
+            result.frombytes(squares[:full * block].reshape(full, block).mean(axis=1)
+                             .astype(_numpy.float64).tobytes())
+        if count > full * block:
+            result.append(float(squares[full * block:].mean()))
+        return result
+    result = array("d")
+    for start in range(0, count, block):
+        chunk = values[start:start + block]
+        result.append(_pure_dot(chunk, chunk) / len(chunk))
+    return result
+
+
+def active_bounds(channels: Sequence[Sequence[float]], threshold: float) -> tuple[int, int] | None:
+    """``(first, last + 1)`` frames where any channel exceeds ``threshold`` in magnitude; None when none does."""
+    first: int | None = None
+    last: int | None = None
+    for channel in channels:
+        if USE_NUMPY and _numpy is not None:
+            hits = _numpy.flatnonzero(_numpy.abs(_vector(channel)) > threshold)
+            if hits.size == 0:
+                continue
+            begin, end = int(hits[0]), int(hits[-1])
+        else:
+            begin = next((index for index, value in enumerate(channel) if abs(value) > threshold), -1)
+            if begin < 0:
+                continue
+            end = next(index for index in range(len(channel) - 1, begin - 1, -1) if abs(channel[index]) > threshold)
+        first = begin if first is None else min(first, begin)
+        last = end if last is None else max(last, end)
+    if first is None or last is None:
+        return None
+    return first, last + 1
+
+
+def hann(frames: int) -> list[float]:
+    """Periodic Hann window, matching the spectral module; a single frame is rectangular."""
+    if frames == 1:
+        return [1.0]
+    return [0.5 - 0.5 * math.cos(2 * math.pi * index / frames) for index in range(frames)]
+
+
+def mean_periodogram(values: Sequence[float], starts: Sequence[int], segment_frames: int,
+                     size: int) -> list[float]:
+    """Average one-sided modified periodogram over Hann-windowed segments (spectral module conventions).
+
+    Each segment covers ``values[start:start + segment_frames]`` and is zero-padded to ``size``.
+    Powers are normalized so that their sum equals the windowed mean square of the audio.
+    """
+    if not starts:
+        raise ValueError("mean_periodogram needs at least one segment start.")
+    window = hann(segment_frames)
+    if USE_NUMPY and _numpy is not None:
+        vector = _vector(values)
+        weights = _numpy.asarray(window)
+        frames = _numpy.stack([vector[start:start + segment_frames] for start in starts]) * weights
+        if not _numpy.isfinite(frames).all():
+            raise ValueError("Audio contains nonfinite samples or exceeds spectral numeric range.")
+        spectrum = _numpy.fft.rfft(frames, n=size, axis=1)
+        powers = (spectrum.real ** 2 + spectrum.imag ** 2) / (size * float(_numpy.dot(weights, weights)))
+        powers[:, 1:size // 2] *= 2
+        return [float(value) for value in powers.mean(axis=0)]
+    from .spectral import _periodogram
+    total = [0.0] * (size // 2 + 1)
+    for start in starts:
+        for index, power in enumerate(_periodogram(values, start, window, size)):
+            total[index] += power / len(starts)
+    return total
+
+
+def fir_filter(values: Sequence[float], taps: Sequence[float]) -> array[float]:
+    """Causal zero-state FIR convolution truncated to ``len(values)``; numpy path only.
+
+    Overlap-add with FFT blocks. Callers on the pure path keep their recursive filters.
+    """
+    if not (USE_NUMPY and _numpy is not None):
+        raise RuntimeError("fir_filter requires numpy; use the recursive filters on the pure path.")
+    vector = _vector(values)
+    kernel = _numpy.asarray(taps, dtype=_numpy.float64)
+    count, width = len(vector), len(kernel)
+    block = 1
+    while block < max(4 * width, 65536):
+        block *= 2
+    step = block - width + 1
+    kernel_spectrum = _numpy.fft.rfft(kernel, n=block)
+    output = _numpy.zeros(count + block, dtype=_numpy.float64)
+    for start in range(0, count, step):
+        chunk = vector[start:start + step]
+        output[start:start + block] += _numpy.fft.irfft(_numpy.fft.rfft(chunk, n=block) * kernel_spectrum, n=block)
+    result = array("d")
+    result.frombytes(output[:count].tobytes())
+    return result

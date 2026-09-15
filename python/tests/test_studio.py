@@ -20,7 +20,7 @@ def test_scalar_properties_and_routing_use_correct_native_arguments(fl: Studio, 
     assert transport.calls[-3:] == [
         ("invoke", {"operation": "set_channel_fx_route", "arguments": {"channel": 3, "mixerTrack": 5}}),
         ("invoke", {"operation": "set_mixer_track_muted", "arguments": {"track": 5, "muted": True}}),
-        ("invoke", {"operation": "set_mixer_send", "arguments": {"srcTrack": 5, "dstTrack": 7, "level": 0.5}})]
+        ("invoke", {"operation": "set_mixer_send", "arguments": {"srcTrack": 5, "dstTrack": 7, "level": 0.5, "active": True}})]
 
 
 def test_structured_names_do_not_parse_legacy_text(fl: Studio, transport: RecordingTransport) -> None:

@@ -30,9 +30,12 @@ search and initializes it with the public, opaque `PyInitConfig` API. Initializa
 uses isolated settings: no environment configuration, user site packages, signal
 handlers, or bytecode writes. Its import paths are `python314.zip`, the private
 runtime directory, the SDK wheel or source directory, and the deterministically
-ordered wheels installed one per directory beneath
-`FruityLink/python/extensions`. A missing extension directory is valid; multiple
-wheels in one extension directory are rejected as an ambiguous installation. It
+ordered extensions installed one per directory beneath
+`FruityLink/python/extensions`: either a single wheel, imported from its zip, or an
+unpacked `site-packages` directory for packages with compiled modules (numpy for the
+analysis fast path), which cannot import from a zip. A missing extension directory
+is valid; multiple wheels, or a wheel beside a `site-packages` directory, in one
+extension directory are rejected as an ambiguous installation. It
 does not read `PYTHONPATH`, alter PATH, scan user directories, or load FL Studio's
 own `Shared/Python/python312.dll`.
 

@@ -88,6 +88,7 @@ nav:
       - Automation clips: automation-clips.md
       - Audio analysis: python-audio-analysis.md
       - Spectral analysis: python-spectral-analysis.md
+      - Live audio capture: live-audio-capture.md
       - Optional Serum support: python/serum-support.md
       - Protocol: python-protocol.md
   - Internals and evidence:

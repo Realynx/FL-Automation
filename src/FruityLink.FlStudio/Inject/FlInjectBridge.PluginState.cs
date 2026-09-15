@@ -24,8 +24,7 @@ public sealed partial class FlInjectBridge
         string full = ResolveStateFile(path);
         ulong obj = await ChannelObjAsync(channel, ct);
         if (obj == 0) throw new InvalidOperationException($"Channel {channel} not found.");
-        if (await AI32Async(obj + 0x64, ct) < 0)
-            throw new InvalidOperationException($"Channel {channel} hosts no generator plugin (automation/bus channel).");
+        await RequireGeneratorAsync(obj, channel, "load a plugin state file into", ct);
         var (inst, count, _) = await ResolvePluginAsync(channel, -1, ct);
         if (inst == 0)
             throw new InvalidOperationException($"Channel {channel} has no hosted-plugin instance; built-in Sampler channels do not accept plugin state files.");
@@ -90,10 +89,8 @@ public sealed partial class FlInjectBridge
         LogOp("GetChannelPluginState", $"channel={channel}");
         ulong obj = await ChannelObjAsync(channel, ct);
         if (obj == 0) throw new InvalidOperationException($"Channel {channel} not found.");
-        if (await AI32Async(obj + 0x64, ct) < 0)
-            throw new InvalidOperationException($"Channel {channel} hosts no generator plugin (automation/bus channel).");
-        byte[] flp = await SnapshotProjectBytesAsync(ct);
-        byte[] state = FlpPluginStateReader.FindChannelState(flp, channel)
+        await RequireGeneratorAsync(obj, channel, "read the plugin state of", ct);
+        byte[] state = await ExtractStateAsync(flp => FlpPluginStateReader.FindChannelState(flp, channel), ct)
             ?? throw new InvalidOperationException(
                 $"Channel {channel} stores no plugin-data record in the project snapshot (built-in Sampler channels keep no wrapper state).");
         return EncodeState(state);
@@ -107,12 +104,52 @@ public sealed partial class FlInjectBridge
         ulong obj = await MixerSlotObjAsync(track, slot, ct);
         if (obj == 0 || await AI32Async(obj + 0x64, ct) < 0)
             throw new InvalidOperationException($"Mixer track {track} FX slot {slot} is empty.");
-        byte[] flp = await SnapshotProjectBytesAsync(ct);
-        byte[] state = FlpPluginStateReader.FindMixerSlotState(flp, track, slot)
+        byte[] state = await ExtractStateAsync(flp => FlpPluginStateReader.FindMixerSlotState(flp, track, slot), ct)
             ?? throw new InvalidOperationException(
                 $"Mixer track {track} FX slot {slot} has no plugin-data record in the project snapshot.");
         return EncodeState(state);
     }
+
+    /// <summary>Channels whose generator id (+0x64) is negative host no plugin: automation clips (registered in
+    /// the target-link registry) and built-in Sampler / audio-clip / layer channels. Name the kind and the remedy
+    /// instead of the former "automation/bus channel" guess, which misclassified Sampler channels (Parking Lot
+    /// Moon, 2026-09-14).</summary>
+    private async Task RequireGeneratorAsync(ulong obj, int channel, string action, CancellationToken ct)
+    {
+        if (await AI32Async(obj + 0x64, ct) >= 0) return;
+        string? targets = await DescribeAutomationTargetsAsync(obj, ct);
+        if (!string.IsNullOrEmpty(targets))
+            throw new InvalidOperationException(
+                $"Cannot {action} channel {channel}: it is an automation clip (automates {targets}) and hosts no plugin.");
+        throw new InvalidOperationException(
+            $"Cannot {action} channel {channel}: it is a built-in Sampler channel (or an audio clip / layer), which hosts no " +
+            "generator plugin and keeps no wrapper state. Sampler settings are channel controls, not plugin parameters: use " +
+            "channel volume/pan/pitch/mute/routing (fl.channels[n].volume ...), replace_channel_sample " +
+            "(fl.channels[n].replace_sample(path)) and the sample operations; see docs/capabilities.md 'Important boundaries'.");
+    }
+
+    /// <summary>Snapshot the project and extract one plugin-data record. A framing error from the reader
+    /// (InvalidDataException: the FLP event stream could not be walked) is retried once after a short settle and a
+    /// fresh snapshot, because FL may still be finishing a load when the first copy is written; a second failure
+    /// surfaces the reader's message (event, offset, writer build and remedy) as an operation failure instead of an
+    /// opaque "FL event 254 is truncated".</summary>
+    private async Task<byte[]?> ExtractStateAsync(Func<byte[], byte[]?> find, CancellationToken ct)
+    {
+        try { return find(await SnapshotProjectBytesAsync(ct)); }
+        catch (InvalidDataException first)
+        {
+            LogOp("ExtractState", $"retry after reader error: {first.Message}");
+            await Task.Delay(StateSnapshotRetryDelayMs, ct);
+            try { return find(await SnapshotProjectBytesAsync(ct)); }
+            catch (InvalidDataException second)
+            {
+                throw new InvalidOperationException(
+                    $"The plugin state could not be extracted from the project snapshot (two attempts): {second.Message}", second);
+            }
+        }
+    }
+
+    private const int StateSnapshotRetryDelayMs = 250;
 
     /// <summary>Write a throwaway project copy to the temp directory through FL's direct writer and return its
     /// bytes. The file is deleted before returning; the live project's path, title and dirty flag are untouched.</summary>
@@ -181,19 +218,22 @@ public sealed partial class FlInjectBridge
                 $"Preset '{Path.GetFileName(fullPath)}' does not name the hosted plugin '{pluginName}'; refusing to load a state file for a different plugin.");
     }
 
-    /// <summary>The channel's FLP plugin-data record, or null when a snapshot cannot be taken. Used only as
-    /// load evidence, so snapshot failures never fail the load itself.</summary>
+    /// <summary>The channel's FLP plugin-data record, or null when a snapshot cannot be taken or parsed. Used only
+    /// as load evidence, so snapshot and reader failures never fail the load itself (before 2026-09-14 an
+    /// InvalidDataException from the reader escaped here and aborted every load on FL 5570 snapshots).</summary>
     private async Task<byte[]?> TryReadChannelStateRecordAsync(int channel, CancellationToken ct)
     {
-        try { return FlpPluginStateReader.FindChannelState(await SnapshotProjectBytesAsync(ct), channel); }
+        try { return await ExtractStateAsync(flp => FlpPluginStateReader.FindChannelState(flp, channel), ct); }
         catch (InvalidOperationException) { return null; }
+        catch (InvalidDataException) { return null; }
         catch (IOException) { return null; }
     }
 
     private async Task<byte[]?> TryReadMixerStateRecordAsync(int track, int slot, CancellationToken ct)
     {
-        try { return FlpPluginStateReader.FindMixerSlotState(await SnapshotProjectBytesAsync(ct), track, slot); }
+        try { return await ExtractStateAsync(flp => FlpPluginStateReader.FindMixerSlotState(flp, track, slot), ct); }
         catch (InvalidOperationException) { return null; }
+        catch (InvalidDataException) { return null; }
         catch (IOException) { return null; }
     }
 

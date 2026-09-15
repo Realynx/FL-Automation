@@ -17,14 +17,19 @@ mixer edits, and Current is identified by native metadata at physical slot 501,
 not `count - 1`. FL 2026 live append/insert, routing/effect preservation,
 save/reopen and rendering passed. The baseline entries below retain the original
 audit context; mixer creation, typed track listing and those bounds defects are
-addressed. Typed sends/FX state and explicit send disconnection remain open.
+addressed. Typed send readback (`query_mixer_sends`, `fl.mixer.routes()`) and explicit
+send disconnection (`set_mixer_send(..., active=False)`, `MixerTrack.disconnect`) shipped
+in the Parking Lot Moon fix batch (2026-09-14, not yet live-verified); typed FX state and
+the sidechain flag remain open.
 
 Installer 0.1.21 also adds guarded automation creation/initial linking, placement
 and point editing; see [automation verification](automation-clips.md). The native
 helper rejects ordinary channels and invalid counts before edits and uses exact
 2025/2026 layouts. The unselected-clip slice/duplicate rejection below is removed
-and regression-tested. Additional destinations on an existing automation channel,
-typed send state and faithful per-channel audio capture remain follow-up work.
+and regression-tested. Additional destinations on an existing automation channel and
+faithful per-channel audio capture remain follow-up work; the capture design and its
+record-arm operations are in [live audio capture](live-audio-capture.md), awaiting live
+verification.
 
 `fl.ops` exposes the generated shared contract, and MCP's `fl_execute_python` can
 use that contract. A missing dedicated MCP tool is therefore **not** automatically
@@ -82,15 +87,28 @@ not evidence that the installer removed notes.
 enables a send and sets its level. `ListMixerEffectsAsync` includes human-readable
 send descriptions.
 
-**Missing:** explicit enable/disable, exclusive routing to a bus, a clear sidechain
-contract, and typed track/send/FX state. `IFlStructuredQuery` has no mixer query.
-`fl.mixer` iterates by count and reads names individually; effects and sends are
-primarily text. `send_to(destination, 0)` still activates the connection because
-the implementation always calls the routing core with enable `1`.
+**Missing:** exclusive routing to a bus as one operation, a clear sidechain contract,
+and typed FX state. `fl.mixer` iterates by count and reads names individually; effects
+are primarily text.
 
-**Impact:** a script cannot reliably replace a direct master route with a subgroup
-route, distinguish a zero-level connection from a disconnected route, or verify a
-complete mix graph without parsing display text.
+**Resolved since (2026-09-14, unverified live):** `IFlStructuredQuery.QueryMixerSendsAsync`
+/ `query_mixer_sends(track)` returns typed `FlMixerSendInfo` rows (source, destination,
+name, level, active); `MixerTrack.sends()`, `send_level()` and `fl.mixer.routes()` expose
+them; `SetMixerSendAsync(..., active)` and `MixerTrack.disconnect(destination)` disable a
+route instead of leaving a zero-level active send; `fl.mixer.insert_count`, `capacity`
+and `ensure_inserts(n)` grow the mixer to a wanted insert.
+
+**Still open, sidechain flag:** FL's "Sidechain to this track" is a route flag absent
+from the verified mixer layout (send records hold only level and active; a per-track
+table at +0x12A4 and an FX sub-table at +0x158 are unprofiled), and
+`FLmx_SetRouteActiveCore` takes no sidechain argument, so a send always sums audio and
+a sidechain-flagged route reads like a plain send. Workaround: duck with automation
+(`fl.automation.pump` or `fl.automation.duck` on `AutomationTarget.mixer_volume(insert)`
+keyed to `fl.playlist.onsets`), or flip the route in the GUI. Resolve the +0x12A4 table
+for 26.1.3.5570 before adding `set_mixer_send(..., sidechain=True)`.
+
+**Impact:** a script cannot mark a route as a sidechain, or read typed FX slot state
+without parsing display text.
 
 **Starting point:** existing profile fields already describe send records, active
 flags, levels, track names/types, and FX slot objects. Typed readback can reuse
@@ -166,6 +184,14 @@ always writes curve type zero.
 **Impact:** a filter sweep, send throw or ducking envelope cannot be authored from
 scratch through a coherent public operation, despite the presence of point APIs.
 
+**Still open, mixer send-level target:** no event id for a send level is known
+(`SetMixerSendAsync` pokes the send table directly; no `0x1FCx` send constant exists in
+the SDK, native bridge or RE notes), so `AutomationTarget` has no `mixer_send(src, dst)`.
+Workaround: automate the return insert's `mixer_volume`, or per source the send effect's
+wet parameter via `AutomationTarget.effect_parameter(track, slot, index)`. A send-level
+automation clip made by hand in FL and read through `fl.automation.describe()` would
+reveal the id.
+
 **Starting point:** `parent/re/11-automation-clips.md` records creation via
 `FLac_CreateAutomationClipForEvent` (`0x108A1A0`) and linking via
 `FLac_AddTargetLink` (`0xE8DEB0`). Their object/argument contracts, target descriptor,
@@ -234,6 +260,35 @@ call is known that forces that delivery from the bridge, so the host does not fo
 `Parameters.set_verified` compares normalized values and waits for the display instead.
 A host-side fix needs the wrapper's parameter-sync opcode or an idle-processing entry
 point recovered from FL's plugin host.
+
+**Still open, transport seek readback:** a stopped `seek` reads back 14-20 ticks late,
+and a display read in the same request shows the previous position's automated value;
+the bridge has no "automation pass finished" signal. `fl.transport.seek_settled`,
+`seek_ticks(settle=True)`, `fl.transport.read_at` and `parameters.read_at` / `display_at`
+poll until two consecutive reads agree (about 300 ms), which is a client-side wait, not
+a fix.
+
+**Still open, channel delete:** delete/clone/move are UI-only
+`TFruityLoopsMainForm.ChannelMenuPopup` commands with no engine call (FL's scripting API
+has none either). Workaround: `Channel.retire()` / `fl.channels.retire(index)` mutes the
+channel, routes it to Master and renames it "(unused) …".
+
+**Still open, Sampler channel settings:** reverse, fades, trim/sample end and stretch
+mode are not REC_Chan events, so the command bus cannot reach them (Edison is GUI-only).
+`get_channel_control` / `set_channel_control` expose the bus generically
+(`Channel.stretch_time` = REC id 14, `Channel.sample_offset` = 13, ids from the FL SDK
+table, not live-verified). Workaround: edit the WAV offline (`wave` module or
+`fruitylink.analysis`) and `Channel.replace_sample`; see the Python API "Sampler
+channel settings". FL also exposes no Sampler-file query, so `fl.samples.describe(channel)`
+relies on this session's `add_sample` / `replace_sample` history or an explicit `path`;
+a native `get_channel_sample_path` would close that.
+
+**Still open, wrapper parameter naming:** Serum 2's effect rack reaches the wrapper only
+as "FX Main Param 1..16" per bus, and every preset stores `FXRack{n}/proxyParams = null`,
+so those slots cannot be named from the harvested map. Workaround: author effects through
+state (`SerumPatch.fx.*` then `load_preset`) and read them with
+`fruitylink_serum.describe.fx_slot_names(state)`. Stock "^b^a" prefixes and duplicate
+names (`"Distortion [19]"`) are handled Python-side.
 
 **Impact:** variations can lose automation or sound design, mistakes cannot be
 cleanly removed, and project cleanup/organization requires the UI. Also,

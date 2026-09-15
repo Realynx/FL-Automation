@@ -92,6 +92,39 @@ reload preserve the last user-selected visibility. Update the shared host and
 native bridge together, then restart FL. The first launch after upgrading has no
 saved visibility preference yet; close an unwanted window once to record it.
 
+## A request times out right after loading a third-party plugin
+
+Symptom (Parking Lot Moon, 2026-09-14): `effects[4].load("Super VHS")` succeeded and its
+parameters read, then the **next** request hung at its first native call and failed after
+60 s with `FL operation timed out or was cancelled`, leaving that request's target slot
+empty. The plugin was unlicensed on this machine and had opened its cloud sign-in dialog
+on FL's UI thread; every bridge call is marshalled onto that thread, so it blocked until
+the dialog was dismissed. This is plugin licence state, not the bridge.
+
+The bounded timeout now names what it can see: `FL Studio did not respond within 60000 ms
+(FL's UI thread is not processing messages; visible FL windows: 'Sign in - Super VHS' ...)`.
+The probe only reads window-manager state (`IsHungAppWindow`, window titles with an
+abort-if-hung timeout); it never answers or closes the dialog. Remedy: authorise cloud or
+licence-checked plugins in the FL GUI once before scripting them; after a timeout,
+dismiss the dialog, re-inspect `effects.list_text()` for empty slots and redo the
+request. The first request after recovery may still be slow while FL catches up.
+
+## Plugin state reads fail with "FL event N is truncated"
+
+`get_state`, `load_state`, `fruitylink_serum.load_preset` and `describe_state` read the plugin's
+wrapper record from a temporary project copy written by FL. FL 26.1.3.5570 writes event 0xAC
+with a tag byte and a 2- or 4-byte payload (3 or 5 bytes), which older readers framed as 4
+bytes; the walk then drifted and eventually reported a bogus event (`FL event 254 is
+truncated`) on every channel of a project opened from an older template, while a project
+closed and reopened through FL happened to resync. The reader now tries the tagged rule,
+then the legacy rule, and accepts only a walk that lands exactly on the chunk end; a load
+whose evidence snapshot cannot be parsed still applies the file (the snapshot is evidence,
+not a precondition), and a state read retries once after a short settle.
+
+If the error still appears it names the event, the offset and the FL build that wrote the
+snapshot: save the project (`fl.project.save()`) or close it to a new version and reopen,
+then retry; keep the `.flp` for a reader update if it persists.
+
 ## Find logs and report a problem
 
 The default host log is:

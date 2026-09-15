@@ -367,12 +367,16 @@ public sealed partial class FlInjectBridge
     /// <summary>Place many pattern clips, then refresh each touched pattern's clip caches + repaint ONCE
     /// (not per clip — the win over looping the singular). Each insert reuses the singular's realize-both-
     /// recorders + atomic scratch-guarded InsertClipRaw core; clips are addressed by (pattern,track,start)
-    /// so the add-order index shifts don't matter.</summary>
+    /// so the add-order index shifts don't matter. An explicit LengthTick is pinned through the clip's
+    /// source range (the same path as ResizeClipsAsync), so FL's pattern refresh keeps it instead of
+    /// re-deriving the pattern's own length (Parking Lot Moon 2026-09-14: 8-bar specs came back 9-10 bars).</summary>
     public async Task AddPatternClipsAsync(IReadOnlyList<PatternClipSpec> clips, CancellationToken ct = default)
     {
         if (clips is null || clips.Count == 0) return;
         LogOp("AddPatternClips", string.Join(", ", clips.Select(c => $"pat{c.Pattern}@t{c.Track}:{c.StartTick}" + (c.LengthTick > 0 ? $"len{c.LengthTick}" : ""))));
 
+        // Resolved once, only when a spec carries an explicit length (the default path stays symbol-free).
+        ulong setSrcRange = clips.Any(c => c.LengthTick > 0) ? await ResolveSymbolAddressAsync("FLpl_SetClipSourceRange", ct) : 0;
         // Distinct patterns touched — each needs its clip-length caches rebuilt once at the end.
         var patterns = new HashSet<int>();
         foreach (var c in clips)
@@ -398,7 +402,10 @@ public sealed partial class FlInjectBridge
             // @0xCB0780: 0x50005000 + (N<<16)) — the SAME index that drives the note recorder / name / length.
             // Feeding a 0-based index here stored N-1, so pattern 1 -> slot 0 ("pattern 0"), pattern 2 -> pattern 1, etc.
             // InsertClipRaw is itself atomic under _scratchGate (+ its own RecountActiveClips).
-            await InsertClipRawAsync(c.StartTick, 0x50005000u + ((uint)c.Pattern << 16), len, c.Track, -1, -1, ct);
+            int index = await InsertClipRawAsync(c.StartTick, 0x50005000u + ((uint)c.Pattern << 16), len, c.Track, -1, -1, ct);
+            // Pin the requested length NOW (the returned index is valid until the next insert): without the
+            // source range the RefreshPattern pass below re-derives +0x08 from the pattern content.
+            if (c.LengthTick > 0) await PinClipLengthAsync(await ClipAddrAsync(index, ct), len, setSrcRange, ct);
             patterns.Add(c.Pattern);
         }
         // ONE refresh pass at the end: resolve each new clip's derived length cache + dirty so it renders
@@ -458,18 +465,59 @@ public sealed partial class FlInjectBridge
         {
             if (r.Index < 0 || r.Index >= count)
                 throw new InvalidOperationException($"Clip index {r.Index} out of range (0..{count - 1}).");
-            int len = Math.Max(1, r.LengthTick);
-            ulong clip = data + (ulong)r.Index * (ulong)stride;
-            // Persist the resize THROUGH the song-length recompute below. Poking +0x08 alone sets a DERIVED
-            // CACHE that RecomputeSongLength's arrangement re-select (FL's d49840) re-resolves from the clip's
-            // SOURCE RANGE (+0x18/+0x1c) — so a +0x08-only resize is reverted (and the song shrinks back). Set
-            // the source range [0..len] via FL's own setter FIRST so the resolver derives the SAME extended
-            // length: the resize survives the refresh AND the song grows to cover it (RE: re/25 §Deferred).
-            await CallFAbsAsync(setSrcRange, new ulong[] { clip, Bits(0), Bits(len) }, ct);
-            await PokeAbsAsync(clip + 8, BitConverter.GetBytes(len), ct);
+            await PinClipLengthAsync(data + (ulong)r.Index * (ulong)stride, Math.Max(1, r.LengthTick), setSrcRange, ct);
         }
         await RepaintPlaylistAsync(ct);
         await RecomputeSongLengthAsync(ct);   // grow/shrink the transport play-range to cover the resized clips
+    }
+
+    /// <summary>Persist a clip length THROUGH FL's own refreshes. Poking +0x08 alone sets a DERIVED CACHE that
+    /// RecomputeSongLength's arrangement re-select (FL's d49840) and the pattern rebuild (11d4140) re-resolve
+    /// from the clip's SOURCE RANGE (+0x18/+0x1c) — so a +0x08-only write is reverted (and the song shrinks
+    /// back). Set the source range [0..len] via FL's own setter FIRST so the resolver derives the SAME
+    /// length: the write survives the refresh AND the song grows to cover it (RE: re/25 §Deferred).
+    /// <paramref name="setSrcRange"/> is the resolved FLpl_SetClipSourceRange address.</summary>
+    private async Task PinClipLengthAsync(ulong clip, int len, ulong setSrcRange, CancellationToken ct)
+    {
+        await CallFAbsAsync(setSrcRange, new ulong[] { clip, Bits(0), Bits(len) }, ct);
+        await PokeAbsAsync(clip + 8, BitConverter.GetBytes(len), ct);
+    }
+
+    /// <summary>(index, start, track field, length) of every playlist clip whose source is the 1-based
+    /// <paramref name="patIdx"/>, read from the live collection (same source decode as QueryClipsAsync).
+    /// Empty when the playlist is unavailable.</summary>
+    private async Task<List<(int Index, int Start, short TrackField, int Length)>> PatternClipLengthsAsync(int patIdx, CancellationToken ct)
+    {
+        var result = new List<(int, int, short, int)>();
+        var (data, stride, count) = await ClipCollectionAsync(ct);
+        if (data == 0 || stride is < 0x24 or > 4096 || count <= 0) return result;
+        count = CheckedQueryCount(count, 1_000_000);
+        for (int i = 0; i < count; i++)
+        {
+            byte[] raw = await PeekAbsAsync(checked(data + (ulong)i * (ulong)stride), 0x10, ct);
+            uint source = BitConverter.ToUInt32(raw, 4);
+            if (source < 0x50000000 || (int)((source - 0x50000000) >> 16) != patIdx) continue;
+            result.Add((i, BitConverter.ToInt32(raw, 0), BitConverter.ToInt16(raw, 0xc), BitConverter.ToInt32(raw, 8)));
+        }
+        return result;
+    }
+
+    /// <summary>Re-pin the lengths captured by <see cref="PatternClipLengthsAsync"/> before a pattern rebuild.
+    /// FL re-derives every clip of a pattern from its new content when notes change (a deleted last note shrank
+    /// 3072-tick clips to 1536 without any clip call, Parking Lot Moon 2026-09-14); a note edit must leave placed
+    /// clips alone. Only clips still at the same slot/start/track are restored; clips that already match are
+    /// untouched, so an unchanged pattern costs no write.</summary>
+    private async Task RestoreClipLengthsAsync(int patIdx, List<(int Index, int Start, short TrackField, int Length)> before, CancellationToken ct)
+    {
+        if (before.Count == 0) return;
+        var after = await PatternClipLengthsAsync(patIdx, ct);
+        var wanted = before.Where(c => c.Length > 0).ToDictionary(c => c.Index, c => c);
+        var restore = after
+            .Where(c => wanted.TryGetValue(c.Index, out var was) && was.Start == c.Start && was.TrackField == c.TrackField && was.Length != c.Length)
+            .Select(c => new ClipResize(c.Index, wanted[c.Index].Length)).ToList();
+        if (restore.Count == 0) return;
+        LogOp("RestoreClipLengths", $"pattern={patIdx} clips={restore.Count}");
+        await ResizeClipsAsync(restore, ct);
     }
 
     public Task DeleteClipAsync(int clipIndex, CancellationToken ct = default)

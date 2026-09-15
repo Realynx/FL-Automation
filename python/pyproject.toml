@@ -13,8 +13,13 @@ license-files = ["LICENSE"]
 authors = [{name = "Realynx"}]
 dependencies = []
 
+[project.optional-dependencies]
+# numpy switches fruitylink.analysis to its vectorised kernels (same results, minutes -> seconds on a full song).
+# The pure-Python path stays the default; nothing here is required to import the package.
+analysis = ["numpy>=2.3"]
+
 [dependency-groups]
-dev = ["ruff>=0.12", "mypy>=1.15", "pytest>=8", "build>=1.2"]
+dev = ["ruff>=0.12", "mypy>=1.15", "pytest>=8", "build>=1.2", "numpy>=2.3"]
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/fruitylink"]

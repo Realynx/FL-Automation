@@ -56,6 +56,9 @@ class NoteEdit:
 
 @dataclass(frozen=True)
 class ClipMove:
+    """Move clip ``index`` (zero-based playlist clip) to ``start_tick`` on one-based ``track``.
+    ``fl.clips.move`` also accepts plain ``(index, start_tick, track)`` tuples."""
+
     index: int
     start_tick: int
     track: int
@@ -63,16 +66,23 @@ class ClipMove:
 
 @dataclass(frozen=True)
 class ClipResize:
+    """Set clip ``index`` (zero-based playlist clip) to ``length_tick`` ticks. ``fl.clips.resize``
+    also accepts ``resize(index, length_tick)`` and plain ``(index, length_tick)`` tuples."""
+
     index: int
     length_tick: int
 
 
 @dataclass(frozen=True)
 class PatternClipSpec:
+    """Place one-based ``pattern`` on one-based playlist ``track`` at ``start_tick`` for ``length_tick``
+    ticks. A positive length is pinned: the clip keeps it even when the pattern's content is longer
+    (overhanging notes) or shorter. ``length_tick`` 0 takes the pattern's own length and follows it."""
+
     pattern: int
     track: int
     start_tick: int
-    length_tick: int
+    length_tick: int = 0
 
 
 @dataclass(frozen=True)

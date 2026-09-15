@@ -290,6 +290,29 @@ def test_set_verified_compares_normalized_values_with_tolerance_and_skips_settli
     assert [call[1]["operation"] for call in transport.calls].count("query_plugin_parameters") == 2
 
 
+def test_set_verified_reports_an_exactly_equal_slot_as_verified_and_unchanged(
+        fl: Studio, transport: RecordingTransport) -> None:
+    # Delay 3 "Tempo sync" already On (1.0): the raw value cannot move, which used to read as verified=False.
+    transport.responses["query_plugin_parameters"] = _slot(2, "Tempo sync", _bits(1.0), "On")
+    result = fl.channels[1].parameters.set_verified(2, 1.0, attempts=6, delay=0.05, sleep=lambda _: None)
+    assert result.verified is True and result.unchanged is True
+    assert result.attempts == 1 and result.display_changed is False
+    assert result.raw_before == result.raw_after and result.normalized_after == 1.0
+    operations = [call[1]["operation"] for call in transport.calls]
+    assert operations == ["query_plugin_parameters", "set_plugin_param", "query_plugin_parameters"]
+
+
+def test_set_verified_keeps_unchanged_false_for_a_real_change(fl: Studio, transport: RecordingTransport) -> None:
+    reads = iter([_slot(199, "Sub Shape", _bits(0.2), "Saw"), _slot(199, "Sub Shape", _bits(0.8), "Square")])
+
+    def handler(method: str, params: dict[str, JsonValue]) -> JsonValue:
+        return next(reads) if params["operation"] == "query_plugin_parameters" else None
+
+    transport.handler = handler
+    result = fl.channels[1].parameters.set_verified(199, 0.8, attempts=2, delay=0, sleep=lambda _: None)
+    assert result.verified is True and result.unchanged is False and result.display_changed is True
+
+
 def test_normalized_from_raw_rejects_integer_scales_and_out_of_range_bits() -> None:
     from fruitylink.plugins import normalized_from_raw
     assert normalized_from_raw(_bits(0.25)) == pytest.approx(0.25)
@@ -297,3 +320,42 @@ def test_normalized_from_raw_rejects_integer_scales_and_out_of_range_bits() -> N
     assert normalized_from_raw(1234) is None          # a native integer scale decodes to a denormal
     assert normalized_from_raw(_bits(1.5)) is None
     assert normalized_from_raw(_bits(float("nan"))) is None
+
+
+def test_normalized_from_raw_decodes_a_native_switch_integer() -> None:
+    from fruitylink.plugins import normalized_from_raw
+
+    # Live evidence 2026-09-14 (Fruity Delay 3 "Tempo sync" On): stock FL effects report a plain
+    # integer, and the float32 bit patterns 0 and 1 are +0.0 and a 1.4e-45 denormal, so 0/1 can only
+    # be the switch's own normalized value. Wider native scales stay undecodable.
+    assert normalized_from_raw(1) == 1.0
+    assert normalized_from_raw(0) == 0.0
+    assert normalized_from_raw(2) is None
+    assert PluginParameterInfo(2, "Tempo sync", 1, "On").normalized == 1.0
+    assert PluginParameterInfo(2, "Tempo sync", 0, "Off").normalized == 0.0
+    assert PluginParameterInfo(18, "Distortion", 32768, "50 %").normalized is None
+
+
+def test_set_verified_on_a_native_switch_that_already_holds_the_value(
+        fl: Studio, transport: RecordingTransport) -> None:
+    # Check 15 of the 2026-09-14 live run: rawValue 1, displayValue "On", normalized null gave
+    # verified=False, unchanged=False after 6 attempts (300 ms of readbacks). One readback now.
+    transport.responses["query_plugin_parameters"] = _slot(2, "Tempo sync", 1, "On")
+    result = fl.mixer[4].effects[3].parameters.set_verified("Tempo sync", 1.0, attempts=6, delay=0.05,
+                                                            sleep=lambda _: None)
+    assert (result.verified, result.unchanged, result.attempts) == (True, True, 1)
+    assert (result.raw_before, result.raw_after) == (1, 1)
+    assert result.display_after == "On" and result.display_changed is False
+    assert result.normalized_after == 1.0
+    assert [call[1]["operation"] for call in transport.calls].count("set_plugin_param") == 1
+
+
+def test_set_verified_flips_a_native_switch_off_and_sees_the_integer_move(
+        fl: Studio, transport: RecordingTransport) -> None:
+    reads = iter([_slot(2, "Tempo sync", 1, "On"), _slot(2, "Tempo sync", 0, "Off")])
+    transport.handler = lambda method, params: (
+        next(reads) if params["operation"] == "query_plugin_parameters" else None)
+    result = fl.mixer[4].effects[3].parameters.set_verified(2, 0.0, attempts=6, delay=0, sleep=lambda _: None)
+    assert (result.verified, result.unchanged, result.display_changed) == (True, False, True)
+    assert (result.raw_before, result.raw_after, result.attempts) == (1, 0, 1)
+    assert result.normalized_after == 0.0

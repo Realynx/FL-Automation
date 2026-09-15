@@ -55,7 +55,33 @@ channel has been created in Glass Satellites.
   spectral centroid/rolloff, dominant bins and time-window pages.
 - [ ] Add a verified per-mixer audio capture/stem workflow. Existing untimed peak
   meters are insufficient for RMS, PSR or spectral analysis; file measurements
-  must identify their actual source.
+  must identify their actual source. Progress 2026-09-14: FL disk recording chosen
+  (see [live audio capture](live-audio-capture.md)); `SetMixerTrackArmedAsync` /
+  `GetMixerTrackArmedAsync` over the harvested `FLmx_SetTrackArmed`, and
+  `fl.audio.capture` / `decide` / `measure_section`; live verification pending.
+- [x] Describe audio for an agent: `fruitylink.analysis.describe_audio`,
+  `compare_audio`, `describe_samples` (also `fl.analysis.describe` and
+  `fl.samples.describe`); numpy ships as the optional `analysis-support` extension.
+
+## Known gaps carried from Parking Lot Moon (2026-09-14)
+
+Each is documented with its workaround in [API gaps](api-gaps.md) and the Python API.
+
+- [ ] Channel delete: UI-only in FL. Workaround `fl.channels.retire(index)`.
+- [ ] Sidechain send flag: not in the verified mixer layout (+0x12A4 table unprofiled).
+  Workaround `fl.automation.duck` / `pump` on `mixer_volume(insert)`, or the GUI.
+- [ ] Sampler reverse / fades / trim / stretch mode: not REC events. Workaround an
+  offline WAV edit plus `Channel.replace_sample`; `stretch_time` / `sample_offset`
+  ids 13/14 need live confirmation.
+- [ ] Mixer send-level automation target: no event id known. Workaround the return
+  insert's `mixer_volume` or the send effect's wet parameter
+  (`AutomationTarget.effect_parameter`).
+- [ ] Serum 2 FX proxy slot names: `proxyParams = null` in every preset. Workaround
+  state-based `SerumPatch.fx` plus `describe.fx_slot_names`.
+- [ ] Seek readback / automation-pass signal: none in the bridge; `seek_settled` and
+  `read_at` wait client-side.
+- [ ] `get_channel_sample_path`: FL exposes no Sampler-file query, so
+  `fl.samples.describe(channel)` relies on session history or `path=`.
 
 ## Optional synth preset selection and auditioning
 

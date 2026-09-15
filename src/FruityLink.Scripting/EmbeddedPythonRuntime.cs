@@ -6,7 +6,8 @@ namespace FruityLink.Scripting;
 /// <summary>Absolute locations of the private CPython 3.14 runtime, SDK package, and trusted installed extensions.</summary>
 public sealed record EmbeddedPythonOptions(string RuntimeDirectory, string PythonPackagePath)
 {
-    /// <summary>Wheel paths discovered beneath the framework's private Python extension directory.</summary>
+    /// <summary>Import paths discovered beneath the framework's private Python extension directory: one wheel per
+    /// extension, or that extension's unpacked <c>site-packages</c> directory when it ships compiled modules.</summary>
     public IReadOnlyList<string> ExtensionPackagePaths { get; init; } = [];
 }
 

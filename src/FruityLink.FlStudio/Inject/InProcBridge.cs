@@ -115,7 +115,15 @@ public static class InProcBridge
 
     // Inject the blocking native work for tests while retaining the actual dispatch, timeout and
     // cancellation behavior. Production always uses the allocated-response Raw implementation.
-    internal static async Task<string> RawAsync(string message, int timeoutMs, CancellationToken ct, Func<string, string> nativeCall)
+    internal static Task<string> RawAsync(string message, int timeoutMs, CancellationToken ct, Func<string, string> nativeCall)
+        => RawAsync(message, timeoutMs, ct, nativeCall, UiThreadProbe.Describe);
+
+    /// <summary><paramref name="probe"/> runs only after a timeout and must not touch FL's UI thread; it names
+    /// what is visibly blocking it (a plugin's modal sign-in dialog, an FL message box) so the error points at the
+    /// plugin instead of the bridge. Live 2026-09-14: an unlicensed Super VHS opened its cloud sign-in dialog on
+    /// FL's UI thread and the NEXT request timed out with no hint of the cause.</summary>
+    internal static async Task<string> RawAsync(string message, int timeoutMs, CancellationToken ct, Func<string, string> nativeCall,
+        Func<string?> probe)
     {
         ct.ThrowIfCancellationRequested();
         var work = Task.Run(() => nativeCall(message), ct);
@@ -127,13 +135,31 @@ public static class InProcBridge
         }
         catch (TimeoutException)
         {
-            throw new TimeoutException(
-                $"FL Studio did not respond within {timeoutMs} ms (it may be busy or showing a dialog): {message}");
+            throw new TimeoutException(TimeoutMessage(message, timeoutMs, SafeProbe(probe)));
         }
         finally
         {
             _ = work.ContinueWith(static t => { _ = t.Exception; }, CancellationToken.None,
                 TaskContinuationOptions.OnlyOnFaulted | TaskContinuationOptions.ExecuteSynchronously, TaskScheduler.Default);
+        }
+    }
+
+    /// <summary>The bounded-timeout error text. <paramref name="hint"/> (from <see cref="UiThreadProbe"/>) names the
+    /// visible windows on FL's UI thread when it is hung; null means nothing beyond the generic advice is known.</summary>
+    internal static string TimeoutMessage(string message, int timeoutMs, string? hint)
+    {
+        string cause = hint is null
+            ? "it may be busy or showing a dialog"
+            : $"{hint}; a plugin waiting for a sign-in/licence or message box blocks FL's UI thread until it is dismissed in the GUI, then retry the request and re-inspect the slot it targeted";
+        return $"FL Studio did not respond within {timeoutMs} ms ({cause}): {message}";
+    }
+
+    private static string? SafeProbe(Func<string?> probe)
+    {
+        try { return probe(); }
+        catch (Exception error) when (error is not OutOfMemoryException)
+        {
+            return null;   // the probe is best-effort diagnostics; never let it mask the timeout
         }
     }
 }

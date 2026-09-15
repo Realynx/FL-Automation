@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import math
 import os
+import re
 from collections.abc import Mapping
 from pathlib import Path
 from typing import Any
@@ -32,11 +33,15 @@ from .builder import Schema, default_schema, normalized_to_hz
 
 __all__ = [
     "DEFAULT_OSCILLATOR_ENABLED",
+    "FX_PROXY_NOTE",
     "VELOCITY_SOURCE_ID",
     "describe_container",
     "describe_preset",
     "describe_state",
+    "explain_parameter",
+    "explain_parameters",
     "format_description",
+    "fx_slot_names",
     "signal_path_notes",
 ]
 
@@ -359,6 +364,110 @@ def describe_state(fl: Any, channel: int, *, slot: int | None = None, schema: Sc
     if slot is not None:
         description["slot"] = slot
     return description
+
+
+FX_PROXY_NOTE = (
+    "FL's wrapper lists Serum 2's FX as 'FX Main Param 1..16', 'FX Bus1 Param 1..16' and 'FX Bus2 Param 1..16': "
+    "these are Serum's host-automation proxy slots for each rack. Which unit parameter a slot drives is assigned "
+    "in Serum's FX-rack UI (state key FXRack{n}/proxyParams) and every preset in the library stores proxyParams as "
+    "null, so no name can be derived; the wrapper exposes no 'add effect' or effect-type parameter either. Set FX "
+    "through the state instead: SerumPatch(...).fx.chorus(...) -> load_preset, or edit the rack in the GUI and "
+    "read it back with describe_state."
+)
+_FX_PROXY = re.compile(r"^FX\s*(Main|Bus\s*1|Bus\s*2)\s*Param\s*(\d+)$", re.IGNORECASE)
+_WT_POS = re.compile(r"^([ABC])\s*WT\s*Pos$", re.IGNORECASE)
+_RACK_INDEX = {"main": 0, "bus1": 1, "bus2": 2}
+
+
+def fx_slot_names(state: Mapping[str, Any], *, schema: Schema | None = None) -> dict[str, Any]:
+    """What is knowable about the FX racks from a decoded state: per rack, the loaded units in processing
+    order with their labels and the parameter keys they store, plus the note on why the wrapper's proxy
+    parameters stay anonymous. ``units`` is empty for a rack without effects."""
+    racks = _fx(state, schema or default_schema())
+    by_rack = {rack["rack"]: rack for rack in racks}
+    return {
+        "racks": [
+            {"rack": r, "role": "main chain" if r == 0 else f"FX bus {r}", "fl_prefix": f"FX {'Main' if r == 0 else f'Bus{r}'} Param",
+             "units": [{"index": u["index"], "label": u["label"], "section": u["section"], "enabled": u["enabled"],
+                        "parameters": sorted(u["params"])} for u in by_rack.get(r, {"units": []})["units"]]}
+            for r in range(3)
+        ],
+        "proxy_parameters": FX_PROXY_NOTE,
+    }
+
+
+def explain_parameter(name: str, normalized: float | None = None, *, state: Mapping[str, Any] | None = None,
+                      schema: Schema | None = None) -> dict[str, Any]:
+    """Name the meaning of one FL wrapper parameter value where the schema knows it.
+
+    ``Sub Shape``: the enum label for the normalized value (0.0 sine, 0.2 roundrect, 0.4 triangle, 0.6 saw,
+    0.8 square, 1.0 pulse; live 0.25 read back as RoundRect). ``A/B/C WT Pos``: the frame number and, with a
+    decoded ``state`` (``loading.read_state``), the loaded table and the frame's derived label. ``FX ... Param n``:
+    the rack's loaded units from ``state`` and :data:`FX_PROXY_NOTE`. Anything else returns ``known=False``.
+    """
+    schema = schema or default_schema()
+    clean = name.strip()
+    if clean.casefold() == "sub shape":
+        table = schema_data.wavetables()["sub_oscillator_shapes"]["fl_normalized"]
+        labels = {float(v): _SUB_SHAPE_NAMES.get(k, k) for k, v in table.items()}
+        out: dict[str, Any] = {"parameter": clean, "known": True, "kind": "enum",
+                               "values": {v: labels[v] for v in sorted(labels)}}
+        if normalized is not None:
+            out["value"] = labels[min(labels, key=lambda v: abs(v - normalized))]
+        return out
+    match = _WT_POS.match(clean)
+    if match:
+        n = "ABC".index(match.group(1).upper())
+        out = {"parameter": clean, "known": True, "kind": "wavetable frame",
+               "rule": "normalized * 256 = table position; frame = round(position / 256 * num_frames), minimum 1"}
+        if state is not None:
+            node = state.get(f"Oscillator{n}")
+            wt = _wavetable(node, n, schema) if isinstance(node, Mapping) else None
+            if wt:
+                out.update(table=wt["display_name"] or wt["path"], num_frames=wt["num_frames"], frame=wt["frame"],
+                           frame_label=wt["frame_label"], known_table=wt["known_table"])
+                if normalized is not None and wt["num_frames"]:
+                    frame = schema_data.frame_for_table_pos(normalized * 256.0, wt["num_frames"])
+                    info = schema.wavetable(wt["path"]) if wt["path"] else None
+                    out["value"] = {"frame": frame, "label": next((lbl for lbl, frames in info.frames_by_label.items()
+                                                                   if frame in frames), None) if info else None}
+        else:
+            out["note"] = "pass state=loading.read_state(fl, channel) to resolve the table and frame label"
+        return out
+    match = _FX_PROXY.match(clean)
+    if match:
+        rack = _RACK_INDEX[match.group(1).replace(" ", "").casefold()]
+        out = {"parameter": clean, "known": False, "kind": "fx proxy slot", "rack": rack, "slot": int(match.group(2)),
+               "note": FX_PROXY_NOTE}
+        if state is not None:
+            out["units"] = [u["label"] for u in fx_slot_names(state, schema=schema)["racks"][rack]["units"]]
+        return out
+    return {"parameter": clean, "known": False}
+
+
+def explain_parameters(fl: Any, channel: int, *, slot: int | None = None, filter: str | None = None,
+                       state: Mapping[str, Any] | None = None, schema: Schema | None = None) -> list[dict[str, Any]]:
+    """The wrapper parameter list of a Serum 2 instance with ``meaning`` attached where the schema knows it.
+
+    Pages ``parameters.all(filter)`` (512 slots per request) and reads the state once through
+    ``loading.read_state`` unless ``state`` is given; a state read failure leaves the enum labels and marks
+    wavetable rows ``state_unavailable``. Each row: ``index``, ``name``, ``display``, ``normalized``, ``meaning``.
+    """
+    parameters = fl.mixer[channel].effects[slot].parameters if slot is not None else fl.channels[channel].parameters
+    if state is None:
+        try:
+            state = loading.read_state(fl, channel, slot=slot).state
+        except Exception as error:  # noqa: BLE001 - diagnostics must not hide the parameter list
+            state = None
+            failure = f"{type(error).__name__}: {error}"
+    rows = []
+    for item in parameters.all(filter):
+        meaning = explain_parameter(item.name, item.normalized, state=state, schema=schema)
+        if state is None and meaning.get("kind") == "wavetable frame":
+            meaning["state_unavailable"] = failure
+        rows.append({"index": item.index, "name": item.name, "display": item.display_value,
+                     "normalized": item.normalized, "meaning": meaning})
+    return rows
 
 
 def _fmt_level(level: Any) -> str:

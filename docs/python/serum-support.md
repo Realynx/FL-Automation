@@ -215,6 +215,35 @@ name and unit it maps to. `snapshot_preset(fl, channel, name, output_dir=...)` w
 live state as a `.SerumPreset` that `build_preset` can edit and `load_preset` can reload.
 These two functions are unit-tested on synthetic containers and not yet live-verified.
 
+### What the FL wrapper parameter list can and cannot name
+
+FL exposes Serum 2 as about 4240 wrapper parameters (`fl.channels[n].parameters.all()` pages them
+in nine requests). Three groups of them are enums or opaque slots; `describe.explain_parameter(name,
+normalized, state=...)` and `describe.explain_parameters(fl, channel)` attach the meaning where the
+schema knows it:
+
+| Parameter | What the value means | Source |
+| --- | --- | --- |
+| `Sub Shape` | 0.0 sine, 0.2 roundrect, 0.4 triangle, 0.6 saw, 0.8 square, 1.0 pulse (nearest anchor; live 0.25 read back as RoundRect) | `wavetables.json` `sub_oscillator_shapes`, verified |
+| `A/B/C WT Pos` | frame = round(normalized * 256 / 256 * num_frames), minimum 1; with the decoded state the loaded table, its frame count and the frame's derived label (saw/sine/square/...) are named | `wavetables.json` position rule (inferred from one live point) |
+| `FX Main Param 1..16`, `FX Bus1 Param 1..16`, `FX Bus2 Param 1..16` | **opaque**: Serum's host-automation proxy slots per rack. Their assignment to a unit parameter is made in Serum's FX-rack UI (`FXRack{n}/proxyParams`), every preset in the installed library stores `proxyParams` as null, and the wrapper has no "add effect" or effect-type parameter, so no per-effect name can be derived. `fx_slot_names(state)` lists the units actually loaded in each rack (label, order, stored parameter keys) | `fx-schema.json` + state |
+
+To enable or configure an effect deterministically, write the state rather than the wrapper
+parameters: `SerumPatch(...).fx.chorus(rate=..., depth=..., mix=...)` -> `load_preset`, or set it in
+the GUI and read it back with `describe_state`. The other calibrations from the 2026-09-14 session
+(Filter 1 Freq `8 * 2756^v` Hz, envelope times, sustain dB, unison, detune, width, fine, Main Vol)
+are in the SDK's scale table: `fruitylink.plugins.scale_for("Serum 2", "Filter 1 Freq")`.
+
+```python
+from fruitylink_serum import describe, loading
+state = loading.read_state(fl, 4).state
+rows = describe.explain_parameters(fl, 4, filter="WT Pos", state=state)
+# [{'index': 62, 'name': 'A WT Pos', 'display': '4', 'normalized': 0.44,
+#   'meaning': {'known': True, 'kind': 'wavetable frame', 'table': 'Default Shapes', 'num_frames': 9,
+#               'value': {'frame': 4, 'label': 'square'}, ...}}]
+describe.fx_slot_names(state)["racks"][0]["units"]   # [{'label': 'Reverb', 'parameters': ['kParamWet', ...]}, ...]
+```
+
 ## Build a patch from a musical description
 
 `SerumPatch` describes a Serum 2 patch in musical units and produces the loadable file:

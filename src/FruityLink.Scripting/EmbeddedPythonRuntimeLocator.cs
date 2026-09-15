@@ -43,6 +43,10 @@ public static class EmbeddedPythonRuntimeLocator
         return active ?? resolved;
     }
 
+    /// <summary>Directory name of an unpacked extension: compiled packages (numpy) cannot import from a wheel zip,
+    /// so an extension may instead ship its wheel contents extracted into <c>&lt;extension&gt;/site-packages</c>.</summary>
+    internal const string UnpackedExtensionDirectory = "site-packages";
+
     internal static IReadOnlyList<string> DiscoverExtensionPackages(string hostDirectory) =>
         DiscoverExtensionPackages(hostDirectory, Directory.Exists, Directory.EnumerateDirectories, directory => Directory.EnumerateFiles(directory, "*.whl", SearchOption.TopDirectoryOnly));
 
@@ -59,7 +63,12 @@ public static class EmbeddedPythonRuntimeLocator
             string[] wheels = enumerateWheels(directory).Select(Path.GetFullPath).Order(StringComparer.OrdinalIgnoreCase).ThenBy(path => path, StringComparer.Ordinal).ToArray();
             if (wheels.Length > 1)
                 throw new InvalidOperationException($"Embedded Python extension '{Path.GetFileName(directory)}' contains multiple wheels. Keep exactly one installed version.");
+            string unpacked = Path.Combine(directory, UnpackedExtensionDirectory);
+            bool hasUnpacked = directoryExists(unpacked);
+            if (wheels.Length == 1 && hasUnpacked)
+                throw new InvalidOperationException($"Embedded Python extension '{Path.GetFileName(directory)}' contains both a wheel and a '{UnpackedExtensionDirectory}' directory. Keep exactly one installed form.");
             if (wheels.Length == 1) packages.Add(wheels[0]);
+            else if (hasUnpacked) packages.Add(unpacked);
         }
         return packages;
     }

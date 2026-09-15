@@ -172,6 +172,15 @@ static const SymEntry g_symbolDefinitions[] = {
     { "TransportRangeStart", "57 56 53 48 83 EC 30 48 8B 05 ?? ?? ?? ?? 8B 18 48 8B 05 ?? ?? ?? ?? 8B 30 48 8B 0D ?? ?? ?? ?? E8 ?? ?? ?? ?? 48 8B 05 ?? ?? ?? ?? C7 00 00 00 00 00", SK_DataRef, 10, 14, 0, 0, { 0, 0x14A95F8ULL, 0 }, 0, RS_Unresolved },
     { "TransportRangeEnd", "57 56 53 48 83 EC 30 48 8B 05 ?? ?? ?? ?? 8B 18 48 8B 05 ?? ?? ?? ?? 8B 30 48 8B 0D ?? ?? ?? ?? E8 ?? ?? ?? ?? 48 8B 05 ?? ?? ?? ?? C7 00 00 00 00 00", SK_DataRef, 19, 23, 0, 0, { 0, 0x14ABB38ULL, 0 }, 0, RS_Unresolved },
     { "FLmx_InsertTracks", "55 41 56 41 55 57 56 53 48 83 EC 58 48 8B EC 89 4D 24 89 55 28 48 C7 45 30 00 00 00 00 48 C7 45 38 00 00 00 00 48 C7 45 40 00 00 00 00 48 C7 45 48 00 00 00 00 44 88 85 A0 00 00 00 90 B8 F6 01 00 00", SK_Function, 0, 0, 0, 0, { 0, 0x11A7B30ULL, 0 }, 0, RS_Unresolved },
+    // Mixer disk-recording arm (live per-insert capture). Anchor: the main-thread callback behind FL's own
+    // scripting `mixer.armTrack` (PyMethodDef 0x1518F58 in 26.1.3.5570 / 0x1407240 in 25.2.5.5319; callback
+    // 0xD610E0 / 0xE06970). Its tail loads the track (value == -1 means toggle), compares the armed byte at
+    // trackStruct + <disp32> (0x1470 / 0x145C; the same field mixer.isTrackArmed reads) and calls the setter
+    // thunk with (RCX = trackStruct, DL = armed, R8 = 0), which forwards to the recorder object at +0x158 /
+    // +0x1460. The CALL rel32 decodes to that thunk; the CMP disp32 is the armed-byte offset. Both are unique
+    // on both installed binaries (analysis/verified-symbols-arm-2026-09-14.json).
+    { "FLmx_SetTrackArmed", "48 8B 43 20 48 83 F8 FF 75 3C 48 8B 43 18 48 8B 0D ?? ?? ?? ?? 48 8B D0 48 69 D2 ?? ?? ?? ?? 48 8D 0C ?? 48 8B 15 ?? ?? ?? ?? 48 69 C0 ?? ?? ?? ?? 80 BC ?? ?? 14 00 00 00 0F 94 C2 4D 33 C0 E8 ?? ?? ?? ??", SK_DataRef, 64, 68, 0, 0, { 0, 0x11C59D0ULL, 0 }, 0, RS_Unresolved },
+    { "MixerTrackArmedOffset", "48 8B 43 20 48 83 F8 FF 75 3C 48 8B 43 18 48 8B 0D ?? ?? ?? ?? 48 8B D0 48 69 D2 ?? ?? ?? ?? 48 8D 0C ?? 48 8B 15 ?? ?? ?? ?? 48 69 C0 ?? ?? ?? ?? 80 BC ?? ?? 14 00 00 00 0F 94 C2 4D 33 C0 E8 ?? ?? ?? ??", SK_VtableSlot, 52, 0, 4, 0, { 0, 0, 0 }, 0, RS_Unresolved },
 };
 static const int g_symCount = (int)(sizeof(g_symbolDefinitions) / sizeof(g_symbolDefinitions[0]));
 static std::vector<SymEntry> g_syms(g_symbolDefinitions, g_symbolDefinitions + g_symCount);

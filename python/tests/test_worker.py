@@ -29,6 +29,18 @@ def test_failure_without_result_or_with_unserializable_result_reports_but_does_n
     assert result["ok"] is False and "resultPartial" not in result and "resultPartialError" not in result
 
 
+def test_result_dicts_keyed_by_numbers_are_returned_not_refused(fl: Studio) -> None:
+    # Checks 11 and 21 of the 2026-09-14 live run: {int: ...} reads (Sampler controls) and Serum's
+    # explain_parameters enum table (keyed by the normalized value) raised
+    # "JSON object keys must be strings." out of _safe_result and lost the whole result.
+    result = execute("result = {'reads': {2: 256, 14: 1000}, 'values': {0.0: 'sine', 1.0: 'pulse'}}", fl)
+    assert result["ok"] is True
+    assert result["result"] == {"reads": {"2": 256, "14": 1000}, "values": {"0.0": "sine", "1.0": "pulse"}}
+    json.dumps(result["result"], allow_nan=False)
+    refused = execute("result = {(1, 2): 'bad'}", fl)
+    assert refused["ok"] is False and "JSON object keys" in str(refused["error"])
+
+
 def test_oversized_response_drops_result_but_keeps_output_and_error() -> None:
     response: dict[str, JsonValue] = {"ok": True, "result": "x" * 600, "stdout": "kept\n", "stderr": "",
                                       "stdoutTruncated": False, "stderrTruncated": False}

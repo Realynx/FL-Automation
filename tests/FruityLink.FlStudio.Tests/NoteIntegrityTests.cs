@@ -172,6 +172,57 @@ public sealed class NoteIntegrityTests
         Assert.Equal(64, BitConverter.ToUInt16(survivor, 0xC));
     }
 
+    private const uint Pattern1Clip = 0x50005000u + (1u << 16), Pattern2Clip = 0x50005000u + (2u << 16);
+
+    [Fact]
+    public async Task DeleteRestoresPlacedClipLengthsThatThePatternRebuildShrank()
+    {
+        using var native = new NoteNative();
+        native.Seed(new NoteSpec(1, 60, 0, 1536, 100), new NoteSpec(1, 60, 1536, 1536, 100));
+        native.SeedClips((Pattern1Clip, 0, 490, 3072), (Pattern2Clip, 3072, 488, 768), (Pattern1Clip, 6144, 490, 3072));
+        // The live host re-derives every clip of the edited pattern from its remaining notes.
+        native.OnRebuild = () => { native.SetClipLength(0, 1536); native.SetClipLength(2, 1536); };
+
+        Assert.Equal(1, await new FlInjectBridge().DeleteNotesAsync(1, [new(1, 60, 1536)]));
+
+        Assert.Single(native.Records);
+        Assert.Equal(3072, native.ClipLength(0));
+        Assert.Equal(3072, native.ClipLength(2));
+        Assert.Equal(768, native.ClipLength(1));
+        string bits3072 = BitConverter.DoubleToInt64Bits(3072).ToString("x", CultureInfo.InvariantCulture);
+        Assert.Equal([$"callfabs 60100 90000 0 {bits3072}", $"callfabs 60100 90070 0 {bits3072}"],
+            native.Commands.Where(command => command.StartsWith("callfabs", StringComparison.Ordinal)).ToArray());
+        Assert.True(native.Commands.IndexOf("call 11d4140 1 1") < native.Commands.FindIndex(c => c.StartsWith("callfabs", StringComparison.Ordinal)),
+            "clip lengths are re-pinned after the rebuild that shrank them");
+    }
+
+    [Fact]
+    public async Task EditLeavesClipsAloneWhenTheRebuildKeepsTheirLengths()
+    {
+        using var native = new NoteNative();
+        native.Seed(new NoteSpec(1, 60, 0, 1536, 100), new NoteSpec(1, 60, 1536, 1536, 100));
+        native.SeedClips((Pattern1Clip, 0, 490, 3072), (Pattern2Clip, 3072, 488, 768));
+
+        Assert.Equal(1, await new FlInjectBridge().EditNotesAsync(1, [new(1, 60, 1536, NewVelocity: 90)]));
+
+        Assert.Equal(3072, native.ClipLength(0));
+        Assert.DoesNotContain(native.Commands, command => command.StartsWith("callfabs", StringComparison.Ordinal));
+        Assert.DoesNotContain(native.Commands, command => command.StartsWith("resolve", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task DeleteWithoutAPlaylistStillWritesNotes()
+    {
+        using var native = new NoteNative();
+        native.Seed(new NoteSpec(1, 60, 0, 96, 100), new NoteSpec(1, 64, 96, 96, 100));
+
+        Assert.Equal(1, await new FlInjectBridge().DeleteNotesAsync(1, [new(1, 64, 96)]));
+
+        Assert.Single(native.Records);
+        Assert.Contains("call 11e32c0", native.Commands);
+        Assert.DoesNotContain(native.Commands, command => command.StartsWith("callfabs", StringComparison.Ordinal));
+    }
+
     [Fact]
     public async Task CloneOfOrphanNotesRejectsBeforeSelectingOrCreatingPattern()
     {
@@ -232,11 +283,41 @@ public sealed class NoteIntegrityTests
             for (int i = 0; i < Records.Count; i++) Write(Data + (ulong)i * 24, Records[i]);
         }
 
+        /// <summary>Seed a playlist clip collection (stride 0x38 at <see cref="ClipData"/>) so note edits can see
+        /// placed clips; each entry is (source id, start tick, track field, length).</summary>
+        public void SeedClips(params (uint Source, int Start, short TrackField, int Length)[] clips)
+        {
+            Arrangement = 0x70000;
+            Write(0x70014, BitConverter.GetBytes(0x80000UL));
+            Write(0x80008, BitConverter.GetBytes(ClipData));
+            Write(0x80010, BitConverter.GetBytes(ClipStride));
+            Write(0x80014, BitConverter.GetBytes(clips.Length));
+            Write(0x149e8b4, BitConverter.GetBytes(-1));   // no current arrangement: RecomputeSongLength is a no-op
+            for (int i = 0; i < clips.Length; i++)
+            {
+                ulong clip = ClipData + (ulong)i * (ulong)ClipStride;
+                Write(clip, BitConverter.GetBytes(clips[i].Start));
+                Write(clip + 4, BitConverter.GetBytes(clips[i].Source));
+                Write(clip + 8, BitConverter.GetBytes(clips[i].Length));
+                Write(clip + 0xc, BitConverter.GetBytes(clips[i].TrackField));
+            }
+        }
+
+        public const ulong ClipData = 0x90000;
+        public const int ClipStride = 0x38;
+        public ulong Arrangement { get; private set; }
+        /// <summary>Runs on FL's pattern rebuild (11d4140), where the live host re-derives clip lengths.</summary>
+        public Action? OnRebuild { get; set; }
+        public int ClipLength(int index) => BitConverter.ToInt32(Read(ClipData + (ulong)index * (ulong)ClipStride + 8, 4));
+        public void SetClipLength(int index, int length) => Write(ClipData + (ulong)index * (ulong)ClipStride + 8, BitConverter.GetBytes(length));
+
         private Task<string> SendAsync(string command, int timeout, CancellationToken ct)
         {
             ct.ThrowIfCancellationRequested(); Commands.Add(command);
             Write(0x20010, BitConverter.GetBytes(ChannelCount));
             string[] parts = command.Split(' ');
+            if (parts[0] == "resolve") return Task.FromResult(parts[1] == "sym:FLpl_SetClipSourceRange" ? "60100" : "0");
+            if (parts[0] == "callfabs") return Task.FromResult("{\"ok\":1,\"ret\":\"0x0\",\"xmm0\":\"0x0\"}");
             ulong address = ulong.Parse(parts[1], NumberStyles.HexNumber, CultureInfo.InvariantCulture);
             string result = parts[0] switch
             {
@@ -252,6 +333,8 @@ public sealed class NoteIntegrityTests
         private string Call(string[] parts)
         {
             if (parts[1] == "11d4080") return "{\"ok\":1,\"ret\":\"0x30000\"}";
+            if (parts[1] == "11e32c0") return $"{{\"ok\":1,\"ret\":\"0x{Arrangement:x}\"}}";   // FLpl_GetCurrentArrangement
+            if (parts[1] == "11d4140") OnRebuild?.Invoke();
             if (parts[1] == "f6d740")
             {
                 if (FailAppend) return "{\"ok\":0,\"ret\":\"0x0\"}";

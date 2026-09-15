@@ -12,7 +12,10 @@ from .models import decode_record
 from .queries import QueryOperations
 from .records import ClipMove, ClipResize, NoteEdit, NoteRef, NoteSpec, PatternClipSpec
 from .transport import RequestTransport
-from .values import JsonValue, wire_arguments
+from .values import JsonValue, resolve_alias, wire_arguments
+
+ARGUMENT_ALIASES: dict[str, dict[str, str]] = {'set_channel_volume': {'volume': 'value'}, 'set_mixer_volume': {'volume': 'value'}, 'set_master_volume': {'volume': 'value'}, 'set_channel_pan': {'pan': 'value'}, 'set_mixer_pan': {'pan': 'value'}}
+"""Keyword aliases each operation accepts next to its canonical argument (alias -> canonical)."""
 
 
 class Operations(QueryOperations):
@@ -35,8 +38,9 @@ class Operations(QueryOperations):
         """Read tempo in beats per minute."""
         return cast(float, self.invoke("get_tempo"))
 
-    def set_master_volume(self, *, value: int) -> None:
-        """Master volume as a raw native integer, 0..12800. No dB conversion is defined."""
+    def set_master_volume(self, *, value: int | None = None, volume: int | None = None) -> None:
+        """Master volume as a raw native integer, 0..12800. No dB conversion is defined. Accepts ``volume=`` as an alias of ``value=``."""
+        value = resolve_alias("value", value, volume=volume)
         self.invoke("set_master_volume", **{"value": value})
 
     def get_master_volume(self) -> int:
@@ -59,16 +63,18 @@ class Operations(QueryOperations):
         """Read global shuffle/swing, 0..128 (symmetric with SetShuffleAsync)."""
         return cast(int, self.invoke("get_shuffle"))
 
-    def set_mixer_volume(self, *, track: int, value: int) -> None:
-        """Mixer track volume as a raw native integer, 0..12800 (track 0 = master). No dB conversion is defined."""
+    def set_mixer_volume(self, *, track: int, value: int | None = None, volume: int | None = None) -> None:
+        """Mixer track volume as a raw native integer on FL's fader scale 0..16000 (track 0 = master): 12800 (= 0.8, every track's default) is 0 dB, 16000 is the fader top (about +4.05 dB on the render-calibrated curve; FL's own hint says +5.6 dB) and 0 is silence. FL's fader law is not linear in dB: the SDK models it as dB = 20 * 2.09 * log10(raw / 12800), the exponent measured by render calibration 2026-09-14 (so 6400 is about -12.6 dB, measured -12.70, and 3200 about -25 dB); use the Python helpers fruitylink.levels.mixer_volume_from_db / MixerTrack.volume_db for dB values. Values above 16000 are clamped. Accepts ``volume=`` as an alias of ``value=``."""
+        value = resolve_alias("value", value, volume=volume)
         self.invoke("set_mixer_volume", **{"track": track, "value": value})
 
     def get_mixer_volume(self, *, track: int) -> int:
-        """Read a mixer track volume 0..12800 (symmetric with SetMixerVolumeAsync)."""
+        """Read a mixer track volume 0..16000 (12800 = 0 dB; symmetric with SetMixerVolumeAsync)."""
         return cast(int, self.invoke("get_mixer_volume", **{"track": track}))
 
-    def set_mixer_pan(self, *, track: int, value: int) -> None:
-        """Mixer track pan as a SIGNED native integer, -6400..6400: 0 = center, negative = left, 6400 = hard right. This scale differs from channel pan (0..12800, 6400 = center); a mixer value of 6400 or more is fully right. Live-verified by isolated renders (Ember Tides v006)."""
+    def set_mixer_pan(self, *, track: int, value: int | None = None, pan: int | None = None) -> None:
+        """Mixer track pan as a SIGNED native integer, -6400..6400: 0 = center, negative = left, 6400 = hard right. This scale differs from channel pan (0..12800, 6400 = center); a mixer value of 6400 or more is fully right. Live-verified by isolated renders (Ember Tides v006). Accepts ``pan=`` as an alias of ``value=``."""
+        value = resolve_alias("value", value, pan=pan)
         self.invoke("set_mixer_pan", **{"track": track, "value": value})
 
     def get_mixer_pan(self, *, track: int) -> int:
@@ -83,20 +89,30 @@ class Operations(QueryOperations):
         """Read a mixer track's mute state (symmetric with SetMixerTrackMutedAsync)."""
         return cast(bool, self.invoke("get_mixer_track_muted", **{"track": track}))
 
+    def set_mixer_track_armed(self, *, track: int, armed: bool) -> None:
+        """Arm or disarm a mixer track's disk recording (the disc button; track 0 = Master). While FL's transport records, every armed track writes one WAV of its post-FX output into FL's recorded-audio folder, which is how live per-insert capture works. Idempotent: FL's own setter (the routine behind its scripting armTrack) is only invoked when the state differs, and the state is re-read afterwards. Requires the verified mixer layout plus the harvested FLmx_SetTrackArmed/MixerTrackArmedOffset symbols; refused otherwise."""
+        self.invoke("set_mixer_track_armed", **{"track": track, "armed": armed})
+
+    def get_mixer_track_armed(self, *, track: int) -> bool:
+        """Read a mixer track's disk-recording arm state (symmetric with SetMixerTrackArmedAsync): the byte FL's own isTrackArmed reads. Refused until the mixer layout and the armed-byte offset resolve on the running build."""
+        return cast(bool, self.invoke("get_mixer_track_armed", **{"track": track}))
+
     def set_mixer_fx_param(self, *, track: int, slot: int, param_index: int, value: int) -> None:
         """A mixer FX-slot plugin parameter (normalized fixed-point value)."""
         self.invoke("set_mixer_fx_param", **{"track": track, "slot": slot, "paramIndex": param_index, "value": value})
 
-    def set_channel_volume(self, *, channel: int, value: int) -> None:
-        """Channel volume as a raw native integer, 0..12800."""
+    def set_channel_volume(self, *, channel: int, value: int | None = None, volume: int | None = None) -> None:
+        """Channel volume as a raw native integer, 0..12800 (FL's default is 10000 = 78 %). The scale is a power curve, not linear dB: the SDK models FL's fader law as dB = 20 * 2.09 * log10(raw / 10240) (10240 = 0 dB, 12800 = about +4.05 dB, 10000 = about -0.4 dB, 6400 = about -8.5 dB, 5000 = about -13 dB, 3200 = about -21 dB), so halving the raw value costs about 12.6 dB (render-measured 12.54). Use fruitylink.levels.channel_volume_from_db / Channel.volume_db for dB values; keep channel volumes near 10000 and trim with plugin gains for large changes. Accepts ``volume=`` as an alias of ``value=``."""
+        value = resolve_alias("value", value, volume=volume)
         self.invoke("set_channel_volume", **{"channel": channel, "value": value})
 
     def get_channel_volume(self, *, channel: int) -> int:
         """Read channel volume 0..12800 (symmetric with SetChannelVolumeAsync)."""
         return cast(int, self.invoke("get_channel_volume", **{"channel": channel}))
 
-    def set_channel_pan(self, *, channel: int, value: int) -> None:
-        """Channel pan 0..12800 (6400 = center)."""
+    def set_channel_pan(self, *, channel: int, value: int | None = None, pan: int | None = None) -> None:
+        """Channel pan 0..12800 (6400 = center). Accepts ``pan=`` as an alias of ``value=``."""
+        value = resolve_alias("value", value, pan=pan)
         self.invoke("set_channel_pan", **{"channel": channel, "value": value})
 
     def get_channel_pan(self, *, channel: int) -> int:
@@ -126,6 +142,14 @@ class Operations(QueryOperations):
     def get_channel_fx_route(self, *, channel: int) -> int:
         """Read a channel's mixer-track route (symmetric with SetChannelFxRouteAsync)."""
         return cast(int, self.invoke("get_channel_fx_route", **{"channel": channel}))
+
+    def get_channel_control(self, *, channel: int, control: int) -> int:
+        """Read a built-in channel control by its FL REC_Chan event index (the same command-bus namespace as volume 0, pan 1, pitch 4, mute 7 and mixer route 8, which are live-verified) as a raw native integer. Other entries follow the FL SDK REC_Chan table and are NOT live-verified yet: 2 filter cutoff, 3 filter resonance, 13 Sampler sample start offset, 14 Sampler time-stretch time; every value is FL's raw unit for that control, so read the current value first, write, and confirm in the Channel settings window. Index must be 0..8191 (below the hosted-plugin parameter block, which SetPluginParamAsync covers)."""
+        return cast(int, self.invoke("get_channel_control", **{"channel": channel, "control": control}))
+
+    def set_channel_control(self, *, channel: int, control: int, value: int) -> None:
+        """Write a built-in channel control by REC_Chan event index with a raw native integer (see GetChannelControlAsync for the index table and its verification status). Built-in Sampler settings that are not REC events (reverse, fade in/out, trim/sample end, stretch mode) have no command-bus path; pre-process the audio file and ReplaceChannelSampleAsync instead."""
+        self.invoke("set_channel_control", **{"channel": channel, "control": control, "value": value})
 
     def add_note(self, *, pattern: int, channel: int, key: int, start_tick: int, length_tick: int, velocity: int) -> None:
         """Add a note to a pattern's piano roll for a channel (pattern: 1-based, or <=0 = current). channel must be an existing zero-based channel rack index; query channels after adding or removing one. key = MIDI 0..131 (60 = middle C), startTick >= 0, lengthTick > 0 in PPQ ticks, velocity 0..127. Invalid values and startTick + lengthTick above int.MaxValue are rejected, not clamped."""
@@ -207,9 +231,9 @@ class Operations(QueryOperations):
         """Rename a mixer track/bus (persists) so a bus the model creates is resolvable by name later."""
         self.invoke("set_mixer_track_name", **{"track": track, "name": name})
 
-    def set_mixer_send(self, *, src_track: int, dst_track: int, level: float) -> None:
-        """Set a mixer send srcTrack->dstTrack at level (1.0 ≈ unity)."""
-        self.invoke("set_mixer_send", **{"srcTrack": src_track, "dstTrack": dst_track, "level": level})
+    def set_mixer_send(self, *, src_track: int, dst_track: int, level: float, active: bool = True) -> None:
+        """Set a mixer send srcTrack->dstTrack. level uses FL's send scale where 0.8 = unity (0 dB; the level every insert's default Master route reads back), 1.0 = the knob top (about +4.05 dB) and 0 = silent but still connected; the same fader law as mixer volume (native int = level * 16000). With active=false the route is disconnected instead (FL's route-active core with enable 0; FL may show a "Disable routing?" confirmation when the destination is used as a plugin sidechain, so for unattended runs prefer level 0 on a route you cannot confirm). There is no sidechain flag: FL's "Sidechain to this track" is a differently flagged route whose location is not in the verified mixer layout, so a send always sums audio into the destination. Read routes back with IFlStructuredQuery.QueryMixerSendsAsync or the "sends:" line of ListMixerEffectsAsync."""
+        self.invoke("set_mixer_send", **{"srcTrack": src_track, "dstTrack": dst_track, "level": level, "active": active})
 
     def set_mixer_eq_gain(self, *, track: int, band: int, value: int) -> None:
         """Mixer track EQ band gain (band 0=low,1=mid,2=high; value 0..0x40000000, ~0x20000000 = 0 dB)."""
@@ -280,7 +304,7 @@ class Operations(QueryOperations):
         self.invoke("replace_channel_sample", **{"channel": channel, "samplePath": sample_path})
 
     def load_channel_plugin_state(self, *, channel: int, path: str, use_channel_loader: bool = False) -> str:
-        """Load a plugin state or preset file into the generator ALREADY hosted by a channel, without replacing the plugin instance. Uses the wrapper's own state-file loader (dispatcher opcode 0x12). Live-verified on FL 26.1.3 with Serum 2: a VST3 .vstpreset whose class id is the plugin's GUID string with braces/dashes removed loads and changes the state in place; a plugin's proprietary preset file (e.g. .SerumPreset) is silently ignored. Set useChannelLoader to route an FL .fst through FL's channel file loader instead (the drag-and-drop path), which may swap the generator, rename the channel and start the transport; that route is refused for other formats because live it applied no state and renamed the channel. Prefer the default dispatcher route. Refuses channels without a hosted plugin and, for .fst files, files that do not name the channel's current plugin. Returns a verification line: plugin name, same-instance check, parameter count and a comparison of the plugin's wrapper state record before and after the load (sizes, short hashes and the number of differing bytes), or an explicit "unavailable" note when no snapshot could be taken. Confirm the sound with parameter displays in a separate request or an isolated render."""
+        """Load a plugin state or preset file into the generator ALREADY hosted by a channel, without replacing the plugin instance. Uses the wrapper's own state-file loader (dispatcher opcode 0x12). Live-verified on FL 26.1.3: a VST3 .vstpreset whose class id is the plugin's GUID string with braces/dashes removed loads into Serum 2 and changes the state in place, and a native plugin's own preset format can load too (GMS .gmsynth from Data/Patches/Plugin presets/Generators/GMS applied in place: 226 differing state bytes, the pad became audible), while a third-party proprietary preset (.SerumPreset) is silently ignored. Load a factory preset BEFORE authoring a native synth by parameter: a fresh GMS has no oscillator waveforms (chosen in the GUI, not parameters) and renders silence. Set useChannelLoader to route an FL .fst through FL's channel file loader instead (the drag-and-drop path), which may swap the generator, rename the channel and start the transport; that route is refused for other formats because live it applied no state and renamed the channel. Prefer the default dispatcher route. Refuses channels without a hosted plugin and, for .fst files, files that do not name the channel's current plugin. Returns a verification line: plugin name, same-instance check, parameter count and a comparison of the plugin's wrapper state record before and after the load (sizes, short hashes and the number of differing bytes), or an explicit "unavailable" note when no snapshot could be taken. Confirm the sound with parameter displays in a separate request or an isolated render."""
         return cast(str, self.invoke("load_channel_plugin_state", **{"channel": channel, "path": path, "useChannelLoader": use_channel_loader}))
 
     def load_mixer_effect_state(self, *, track: int, slot: int, path: str) -> str:
@@ -300,11 +324,11 @@ class Operations(QueryOperations):
         return cast(str, self.invoke("get_notes", **{"pattern": pattern, "channel": channel, "offset": offset}))
 
     def edit_notes(self, *, pattern: int, edits: Sequence[NoteEdit], allow_multiple: bool = False) -> int:
-        """Edit EXISTING piano-roll notes in place, WITHOUT clearing the pattern (every other note is untouched, including fields the read tool doesn't surface — pan, fine pitch, release, cut, res). Each NoteEdit identifies a note by the (channel, key, startTick) triple GetNotesAsync shows, optionally narrowed by its current lengthTick, and applies whichever new fields it carries. FL allows several notes with the same triple (stacked duplicates), so an edit that matches more than one note is refused before anything is written unless allowMultiple is true, in which case every matching note receives the edit. Returns the number of notes changed."""
+        """Edit EXISTING piano-roll notes in place, WITHOUT clearing the pattern (every other note is untouched, including fields the read tool doesn't surface — pan, fine pitch, release, cut, res). Each NoteEdit identifies a note by the (channel, key, startTick) triple GetNotesAsync shows, optionally narrowed by its current lengthTick, and applies whichever new fields it carries. FL allows several notes with the same triple (stacked duplicates), so an edit that matches more than one note is refused before anything is written unless allowMultiple is true, in which case every matching note receives the edit. Returns the number of notes changed. Playlist clips of the pattern keep their lengths (FL would otherwise re-derive them from the edited notes)."""
         return cast(int, self.invoke("edit_notes", **{"pattern": pattern, "edits": edits, "allowMultiple": allow_multiple}))
 
     def delete_notes(self, *, pattern: int, targets: Sequence[NoteRef], allow_multiple: bool = False) -> int:
-        """Delete SPECIFIC existing piano-roll notes (matched by the (channel, key, startTick) triple, optionally narrowed by lengthTick), leaving the rest of the pattern intact — the surgical counterpart to ClearPatternAsync. A target that matches several stacked duplicates is refused before anything is deleted unless allowMultiple is true, which deletes all of them. Returns the number of notes deleted."""
+        """Delete SPECIFIC existing piano-roll notes (matched by the (channel, key, startTick) triple, optionally narrowed by lengthTick), leaving the rest of the pattern intact — the surgical counterpart to ClearPatternAsync. A target that matches several stacked duplicates is refused before anything is deleted unless allowMultiple is true, which deletes all of them. Returns the number of notes deleted. Playlist clips of the pattern keep their lengths (FL would otherwise shrink them to the remaining notes); resize clips explicitly with ResizeClips."""
         return cast(int, self.invoke("delete_notes", **{"pattern": pattern, "targets": targets, "allowMultiple": allow_multiple}))
 
     def clone_pattern(self, *, source_pattern: int) -> int:
@@ -396,7 +420,7 @@ class Operations(QueryOperations):
         self.invoke("move_clips", **{"moves": moves})
 
     def add_pattern_clips(self, *, clips: Sequence[PatternClipSpec]) -> None:
-        """Place many pattern clips in one pass (each realized + inserted atomically), then one refresh/repaint. Clips are addressed by (pattern,track,start), so add-order index shifts don't matter."""
+        """Place many pattern clips in one pass (each realized + inserted atomically), then one refresh/repaint. Clips are addressed by (pattern,track,start), so add-order index shifts don't matter. A positive lengthTick is pinned (as ResizeClips does), so the clip keeps that length even when the pattern's own content is longer or shorter; lengthTick <= 0 takes the pattern length and follows it."""
         self.invoke("add_pattern_clips", **{"clips": clips})
 
     def resize_clips(self, *, resizes: Sequence[ClipResize]) -> None:

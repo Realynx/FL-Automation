@@ -375,9 +375,13 @@ public sealed partial class FlInjectBridge
     }
 
     /// <summary>Writes the (possibly shrunk) note list back to the store: sort by position so the array
-    /// stays ordered even after a moved note, poke the structs verbatim, set the count, compact, refresh.</summary>
+    /// stays ordered even after a moved note, poke the structs verbatim, set the count, compact, refresh.
+    /// Placed playlist clips of the pattern keep their pre-edit lengths: the refresh re-derives them from the
+    /// new content (deleting the last note shrank every clip of that pattern), which a surgical note edit must
+    /// not do — clip lengths are only changed through the clip operations.</summary>
     private async Task WriteNoteStructsAsync(int patIdx, ulong rec, ulong data, List<byte[]> notes, CancellationToken ct)
     {
+        var placed = await PatternClipLengthsAsync(patIdx, ct);
         notes.Sort((a, b) => NotePos(a).CompareTo(NotePos(b)));
         if (notes.Count > 0 && data != 0)
         {
@@ -388,6 +392,7 @@ public sealed partial class FlInjectBridge
         await PokeAbsAsync(rec + 0x14, BitConverter.GetBytes(notes.Count), ct);   // count (int32)
         await CommitNoteRecorderAsync(rec, ct);
         await RefreshPatternAsync(patIdx, ct);
+        await RestoreClipLengthsAsync(patIdx, placed, ct);
     }
 
     /// <summary>Edit existing notes in place (matched by original channel+key+startTick, optionally lengthTick),

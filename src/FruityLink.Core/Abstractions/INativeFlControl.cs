@@ -31,9 +31,9 @@ public interface INativeFlControl
     Task<int> GetShuffleAsync(CancellationToken ct = default);
 
     // --- mixer (live-verified track volume; same protocol for pan/FX) ---
-    /// <summary>Mixer track volume as a raw native integer, 0..12800 (track 0 = master). No dB conversion is defined.</summary>
+    /// <summary>Mixer track volume as a raw native integer on FL's fader scale 0..16000 (track 0 = master): 12800 (= 0.8, every track's default) is 0 dB, 16000 is the fader top (about +4.05 dB on the render-calibrated curve; FL's own hint says +5.6 dB) and 0 is silence. FL's fader law is not linear in dB: the SDK models it as dB = 20 * 2.09 * log10(raw / 12800), the exponent measured by render calibration 2026-09-14 (so 6400 is about -12.6 dB, measured -12.70, and 3200 about -25 dB); use the Python helpers fruitylink.levels.mixer_volume_from_db / MixerTrack.volume_db for dB values. Values above 16000 are clamped.</summary>
     Task SetMixerVolumeAsync(int track, int value, CancellationToken ct = default);
-    /// <summary>Read a mixer track volume 0..12800 (symmetric with <see cref="SetMixerVolumeAsync"/>).</summary>
+    /// <summary>Read a mixer track volume 0..16000 (12800 = 0 dB; symmetric with <see cref="SetMixerVolumeAsync"/>).</summary>
     Task<long> GetMixerVolumeAsync(int track, CancellationToken ct = default);
     /// <summary>Mixer track pan as a SIGNED native integer, -6400..6400: 0 = center, negative = left, 6400 = hard right. This scale differs from channel pan (0..12800, 6400 = center); a mixer value of 6400 or more is fully right. Live-verified by isolated renders (Ember Tides v006).</summary>
     Task SetMixerPanAsync(int track, int value, CancellationToken ct = default);
@@ -43,11 +43,15 @@ public interface INativeFlControl
     Task SetMixerTrackMutedAsync(int track, bool muted, CancellationToken ct = default);
     /// <summary>Read a mixer track's mute state (symmetric with <see cref="SetMixerTrackMutedAsync"/>).</summary>
     Task<bool> GetMixerTrackMutedAsync(int track, CancellationToken ct = default);
+    /// <summary>Arm or disarm a mixer track's disk recording (the disc button; track 0 = Master). While FL's transport records, every armed track writes one WAV of its post-FX output into FL's recorded-audio folder, which is how live per-insert capture works. Idempotent: FL's own setter (the routine behind its scripting armTrack) is only invoked when the state differs, and the state is re-read afterwards. Requires the verified mixer layout plus the harvested FLmx_SetTrackArmed/MixerTrackArmedOffset symbols; refused otherwise.</summary>
+    Task SetMixerTrackArmedAsync(int track, bool armed, CancellationToken ct = default);
+    /// <summary>Read a mixer track's disk-recording arm state (symmetric with <see cref="SetMixerTrackArmedAsync"/>): the byte FL's own isTrackArmed reads. Refused until the mixer layout and the armed-byte offset resolve on the running build.</summary>
+    Task<bool> GetMixerTrackArmedAsync(int track, CancellationToken ct = default);
     /// <summary>A mixer FX-slot plugin parameter (normalized fixed-point value).</summary>
     Task SetMixerFxParamAsync(int track, int slot, int paramIndex, long value, CancellationToken ct = default);
 
     // --- channel rack (live-verified) ---
-    /// <summary>Channel volume as a raw native integer, 0..12800.</summary>
+    /// <summary>Channel volume as a raw native integer, 0..12800 (FL's default is 10000 = 78 %). The scale is a power curve, not linear dB: the SDK models FL's fader law as dB = 20 * 2.09 * log10(raw / 10240) (10240 = 0 dB, 12800 = about +4.05 dB, 10000 = about -0.4 dB, 6400 = about -8.5 dB, 5000 = about -13 dB, 3200 = about -21 dB), so halving the raw value costs about 12.6 dB (render-measured 12.54). Use fruitylink.levels.channel_volume_from_db / Channel.volume_db for dB values; keep channel volumes near 10000 and trim with plugin gains for large changes.</summary>
     Task SetChannelVolumeAsync(int channel, int value, CancellationToken ct = default);
     /// <summary>Read channel volume 0..12800 (symmetric with <see cref="SetChannelVolumeAsync"/>).</summary>
     Task<long> GetChannelVolumeAsync(int channel, CancellationToken ct = default);
@@ -67,6 +71,10 @@ public interface INativeFlControl
     Task SetChannelFxRouteAsync(int channel, int mixerTrack, CancellationToken ct = default);
     /// <summary>Read a channel's mixer-track route (symmetric with <see cref="SetChannelFxRouteAsync"/>).</summary>
     Task<int> GetChannelFxRouteAsync(int channel, CancellationToken ct = default);
+    /// <summary>Read a built-in channel control by its FL REC_Chan event index (the same command-bus namespace as volume 0, pan 1, pitch 4, mute 7 and mixer route 8, which are live-verified) as a raw native integer. Other entries follow the FL SDK REC_Chan table and are NOT live-verified yet: 2 filter cutoff, 3 filter resonance, 13 Sampler sample start offset, 14 Sampler time-stretch time; every value is FL's raw unit for that control, so read the current value first, write, and confirm in the Channel settings window. Index must be 0..8191 (below the hosted-plugin parameter block, which SetPluginParamAsync covers).</summary>
+    Task<long> GetChannelControlAsync(int channel, int control, CancellationToken ct = default);
+    /// <summary>Write a built-in channel control by REC_Chan event index with a raw native integer (see <see cref="GetChannelControlAsync"/> for the index table and its verification status). Built-in Sampler settings that are not REC events (reverse, fade in/out, trim/sample end, stretch mode) have no command-bus path; pre-process the audio file and ReplaceChannelSampleAsync instead.</summary>
+    Task SetChannelControlAsync(int channel, int control, long value, CancellationToken ct = default);
 
     // --- piano roll (current pattern) ---
     /// <summary>Add a note to a pattern's piano roll for a channel (pattern: 1-based, or &lt;=0 = current).
@@ -130,8 +138,8 @@ public interface INativeFlControl
     Task SetMixerTrackNameAsync(int track, string name, CancellationToken ct = default);
 
     // --- mixer sends / EQ ---
-    /// <summary>Set a mixer send srcTrack-&gt;dstTrack at level (1.0 ≈ unity).</summary>
-    Task SetMixerSendAsync(int srcTrack, int dstTrack, double level, CancellationToken ct = default);
+    /// <summary>Set a mixer send srcTrack-&gt;dstTrack. level uses FL's send scale where 0.8 = unity (0 dB; the level every insert's default Master route reads back), 1.0 = the knob top (about +4.05 dB) and 0 = silent but still connected; the same fader law as mixer volume (native int = level * 16000). With active=false the route is disconnected instead (FL's route-active core with enable 0; FL may show a "Disable routing?" confirmation when the destination is used as a plugin sidechain, so for unattended runs prefer level 0 on a route you cannot confirm). There is no sidechain flag: FL's "Sidechain to this track" is a differently flagged route whose location is not in the verified mixer layout, so a send always sums audio into the destination. Read routes back with IFlStructuredQuery.QueryMixerSendsAsync or the "sends:" line of ListMixerEffectsAsync.</summary>
+    Task SetMixerSendAsync(int srcTrack, int dstTrack, double level, bool active = true, CancellationToken ct = default);
     /// <summary>Mixer track EQ band gain (band 0=low,1=mid,2=high; value 0..0x40000000, ~0x20000000 = 0 dB).</summary>
     Task SetMixerEqGainAsync(int track, int band, int value, CancellationToken ct = default);
 
@@ -178,9 +186,13 @@ public interface INativeFlControl
     // --- plugin state / preset files (live-verified with Serum 2 on FL 26.1.3) ---
     /// <summary>Load a plugin state or preset file into the generator ALREADY hosted by a channel, without
     /// replacing the plugin instance. Uses the wrapper's own state-file loader (dispatcher opcode 0x12).
-    /// Live-verified on FL 26.1.3 with Serum 2: a VST3 <c>.vstpreset</c> whose class id is the plugin's GUID
-    /// string with braces/dashes removed loads and changes the state in place; a plugin's proprietary preset
-    /// file (e.g. <c>.SerumPreset</c>) is silently ignored. Set <paramref name="useChannelLoader"/> to route an
+    /// Live-verified on FL 26.1.3: a VST3 <c>.vstpreset</c> whose class id is the plugin's GUID string with
+    /// braces/dashes removed loads into Serum 2 and changes the state in place, and a native plugin's own
+    /// preset format can load too (GMS <c>.gmsynth</c> from <c>Data/Patches/Plugin presets/Generators/GMS</c>
+    /// applied in place: 226 differing state bytes, the pad became audible), while a third-party proprietary
+    /// preset (<c>.SerumPreset</c>) is silently ignored. Load a factory preset BEFORE authoring a native synth by
+    /// parameter: a fresh GMS has no oscillator waveforms (chosen in the GUI, not parameters) and renders silence.
+    /// Set <paramref name="useChannelLoader"/> to route an
     /// FL <c>.fst</c> through FL's channel file loader instead (the drag-and-drop path), which may swap the
     /// generator, rename the channel and start the transport; that route is refused for other formats because
     /// live it applied no state and renamed the channel. Prefer the default dispatcher route.
@@ -220,14 +232,16 @@ public interface INativeFlControl
     /// shows, optionally narrowed by its current lengthTick, and applies whichever new fields it carries.
     /// FL allows several notes with the same triple (stacked duplicates), so an edit that matches more than
     /// one note is refused before anything is written unless <paramref name="allowMultiple"/> is true, in which
-    /// case every matching note receives the edit. Returns the number of notes changed.</summary>
+    /// case every matching note receives the edit. Returns the number of notes changed. Playlist clips of the
+    /// pattern keep their lengths (FL would otherwise re-derive them from the edited notes).</summary>
     Task<int> EditNotesAsync(int pattern, IReadOnlyList<NoteEdit> edits, bool allowMultiple = false, CancellationToken ct = default);
 
     /// <summary>Delete SPECIFIC existing piano-roll notes (matched by the (channel, key, startTick) triple,
     /// optionally narrowed by lengthTick), leaving the rest of the pattern intact — the surgical counterpart to
     /// <see cref="ClearPatternAsync"/>. A target that matches several stacked duplicates is refused before
     /// anything is deleted unless <paramref name="allowMultiple"/> is true, which deletes all of them.
-    /// Returns the number of notes deleted.</summary>
+    /// Returns the number of notes deleted. Playlist clips of the pattern keep their lengths (FL would
+    /// otherwise shrink them to the remaining notes); resize clips explicitly with ResizeClips.</summary>
     Task<int> DeleteNotesAsync(int pattern, IReadOnlyList<NoteRef> targets, bool allowMultiple = false, CancellationToken ct = default);
 
     // --- patterns (clone) ---
@@ -292,7 +306,10 @@ public interface INativeFlControl
     /// don't reorder the collection, so all indices stay valid within the call.</summary>
     Task MoveClipsAsync(IReadOnlyList<ClipMove> moves, CancellationToken ct = default);
     /// <summary>Place many pattern clips in one pass (each realized + inserted atomically), then one
-    /// refresh/repaint. Clips are addressed by (pattern,track,start), so add-order index shifts don't matter.</summary>
+    /// refresh/repaint. Clips are addressed by (pattern,track,start), so add-order index shifts don't matter.
+    /// A positive lengthTick is pinned (as ResizeClips does), so the clip keeps that length even when the
+    /// pattern's own content is longer or shorter; lengthTick &lt;= 0 takes the pattern length and follows
+    /// it.</summary>
     Task AddPatternClipsAsync(IReadOnlyList<PatternClipSpec> clips, CancellationToken ct = default);
     /// <summary>Resize many playlist clips in one pass (per-clip length poke), then one repaint.</summary>
     Task ResizeClipsAsync(IReadOnlyList<ClipResize> resizes, CancellationToken ct = default);

@@ -285,6 +285,39 @@ void testTransportRangeSymbols()
     }
 }
 
+unsigned char armReference[96]{};
+
+// Both arm symbols share one anchor (FL's armTrack callback tail): the CALL rel32 must decode to the
+// setter thunk and the CMP disp32 must be returned verbatim as the armed-byte offset.
+void testArmTrackSymbols()
+{
+    const auto* setter = sig_findSym("FLmx_SetTrackArmed");
+    const auto* armed = sig_findSym("MixerTrackArmedOffset");
+    expect(setter && setter->kind == SK_DataRef && armed && armed->kind == SK_VtableSlot,
+           "arm setter and armed-byte offset are catalogued with their decode kinds");
+    expect(std::strcmp(setter->pattern, armed->pattern) == 0, "arm symbols share the armTrack callback anchor");
+    const Pattern p = pattern(setter->pattern);
+    expect(p.len == 68 && setter->dispOff == 64 && setter->instrEnd == 68 && armed->dispOff == 52 && armed->dispSize == 4,
+           "arm anchor decodes the trailing CALL and the CMP displacement");
+    memcpy(armReference, p.bytes, p.len);
+    const int32_t relative = static_cast<int32_t>((intptr_t)fixture - (intptr_t)(armReference + setter->instrEnd));
+    memcpy(armReference + setter->dispOff, &relative, sizeof(relative));
+    const int32_t offset = 0x1470;
+    memcpy(armReference + armed->dispOff, &offset, sizeof(offset));
+    const ExecRange range{armReference, armReference + p.len};
+    auto scanner = createFlSignatureScanner({26, 1, 3, 5570});
+    auto setterEntry = *setter;
+    scanner->resolve(setterEntry, {GetModuleHandleW(nullptr), UINT32_MAX, &range, 1});
+    expect(setterEntry.status == RS_Ok && setterEntry.addr == (uint64_t)fixture,
+           "arm setter thunk decodes from the callback's CALL rel32 without fallback");
+    auto armedEntry = *armed;
+    scanner->resolve(armedEntry, {GetModuleHandleW(nullptr), UINT32_MAX, &range, 1});
+    expect(armedEntry.status == RS_Ok && armedEntry.addr == 0x1470,
+           "armed-byte offset decodes from the callback's CMP displacement");
+    expect(armed->ghidra[FLV_2025_25_2_5] == 0 && armed->ghidra[FLV_2026_26_1_0] == 0 && setter->ghidra[FLV_2026_26_1_0] == 0,
+           "offset symbol has no address fallback and the setter never borrows an unverified 2026 address");
+}
+
 class FixtureScanner final : public IFlSignatureScanner {
 public:
     const char* name() const override { return "fixture"; }
@@ -345,6 +378,7 @@ int wmain(int argc, wchar_t** argv)
         testDisplacementChecks();
         testScannerSelection();
         testTransportRangeSymbols();
+        testArmTrackSymbols();
         testInjectedScanner();
         checks += runDelphiClassRefTests();
         std::printf("Native signature resolution: %d checks passed.\n", checks);

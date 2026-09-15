@@ -5,6 +5,7 @@ from .models import (
     AutomationPointInfo,
     ChannelInfo,
     ClipInfo,
+    MixerSendInfo,
     MixerTrackInfo,
     NoteInfo,
     Page,
@@ -49,6 +50,11 @@ class QueryOperations:
     def query_mixer_tracks(self) -> tuple[MixerTrackInfo, ...]:
         """Master and active ordinary inserts; excludes Current and dormant slots."""
         return decode_records(MixerTrackInfo, self._query("query_mixer_tracks"))
+
+    def query_mixer_sends(self, *, track: int) -> tuple[MixerSendInfo, ...]:
+        """Active sends of one track from the native send table (destination, name, level with 0.8 = unity,
+        active). Disconnected destinations are omitted; a level-0 route is listed with level 0."""
+        return decode_records(MixerSendInfo, self._query("query_mixer_sends", track=track))
 
     def query_plugin_parameters(self, *, channel_or_track: int, slot: int = -1, filter: str | None = None,
                                 offset: int = 0, limit: int = 512) -> Page[PluginParameterInfo]:

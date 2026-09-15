@@ -124,6 +124,15 @@ def query_index(
 ) -> tuple[IndexedPreset, ...]:
     """Query Serum 2's descriptive preset index through a read-only connection.
 
+    ``text`` is split into words; every word must occur (case-insensitively, as a substring)
+    somewhere in the preset name, folder location, description, comment, author or tags, so
+    ``"soft"`` finds ``PD - Analog Soft Cotton`` and ``"analog pad"`` finds presets whose name
+    says Analog and whose description says pads. The word test runs in Python on the
+    candidate rows rather than in SQL ``LIKE``, so it does not depend on the embedded runtime's
+    SQLite build (``PRAGMA case_sensitive_like``) - the 2026-09-14 session saw single-word
+    name matches come back empty from FL's embedded interpreter while multi-word description
+    matches worked. ``category`` and ``tags`` still filter in SQL.
+
     This treats the database as optional, undocumented local metadata. Schema or
     access failures are reported to the caller and never trigger a file mutation.
     """
@@ -136,13 +145,7 @@ def query_index(
 
     clauses: list[str] = []
     parameters: list[object] = []
-    if text:
-        clauses.append(
-            "(p.name LIKE ? ESCAPE '\\' OR p.description LIKE ? ESCAPE '\\' "
-            "OR p.comment LIKE ? ESCAPE '\\' OR p.author LIKE ? ESCAPE '\\')"
-        )
-        needle = f"%{_escape_like(text)}%"
-        parameters.extend((needle, needle, needle, needle))
+    words = tuple(dict.fromkeys(word.casefold() for word in (text or "").split() if word))
     if category:
         clauses.append("p.category = ? COLLATE NOCASE")
         parameters.append(category)
@@ -162,15 +165,17 @@ def query_index(
         "FROM Presets p JOIN Locations l ON l.location_id=p.location_id "
         "LEFT JOIN UserData u ON u.hash=p.hash"
         + where
-        + " ORDER BY p.category COLLATE NOCASE,p.name COLLATE NOCASE LIMIT ?"
+        + " ORDER BY p.category COLLATE NOCASE,p.name COLLATE NOCASE"
+        + ("" if words else " LIMIT ?")
     )
-    parameters.append(limit)
+    if not words:
+        parameters.append(limit)
 
     uri = db_path.as_uri() + "?mode=ro"
     with closing(sqlite3.connect(uri, uri=True)) as connection:
         connection.execute("PRAGMA query_only=ON")
         rows = connection.execute(sql, parameters).fetchall()
-    return tuple(
+    presets = (
         IndexedPreset(
             name=row[0],
             location=row[1],
@@ -184,6 +189,27 @@ def query_index(
         )
         for row in rows
     )
+    if words:
+        presets = (preset for preset in presets if _matches_words(preset, words))
+    return tuple(_take(presets, limit))
+
+
+def _matches_words(preset: IndexedPreset, words: tuple[str, ...]) -> bool:
+    haystack = " ".join(
+        str(part) for part in (preset.name, preset.location, preset.description, preset.comment, preset.author,
+                               " ".join(preset.tags))
+        if part
+    ).casefold()
+    return all(word in haystack for word in words)
+
+
+def _take(items: Iterable[IndexedPreset], limit: int) -> list[IndexedPreset]:
+    out: list[IndexedPreset] = []
+    for item in items:
+        out.append(item)
+        if len(out) >= limit:
+            break
+    return out
 
 
 def _escape_like(value: str) -> str:
