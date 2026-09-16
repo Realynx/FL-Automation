@@ -98,7 +98,6 @@ nav:
       - FL version analysis: fl-version-analysis-2026-09-12.md
       - Python validation: python-validation.md
       - IDE validation: python-ide-validation.md
-      - Window validation: native-window-validation.md
       - Reliability review: reliability-review.md
       - API gaps: api-gaps.md
       - Roadmap: roadmap.md

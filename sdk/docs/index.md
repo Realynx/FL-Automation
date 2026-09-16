@@ -29,8 +29,6 @@ The **host** loads plugins inside FL Studio. Plugins build on that foundation:
   connections from external Python programs.
 - **[Hello FL](csharp/index.md)** is a small C# example with a menu action and toolbar toggle.
 
-The FL Automate assistant is a separate, closed-source consumer of the framework.
-
 ## Read the right level of detail
 
 The guides explain everyday use. [C# reference](fl-control-api.md) and

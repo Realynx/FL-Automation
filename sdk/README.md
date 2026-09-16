@@ -36,8 +36,7 @@ before choosing a build.
 The framework includes the [Hello FL C# sample](samples/HelloFl) and supports the
 [Python IDE](src/FruityLink.Plugins.PythonIde/README.md),
 [external Python endpoint](src/FruityLink.Plugins.Python/README.md), and separately
-maintained [FLMCP plugin](https://github.com/Realynx/Fl-MCP). The FL Automate assistant
-is a separate, closed-source consumer.
+maintained [FLMCP plugin](https://github.com/Realynx/Fl-MCP).
 
 [MIT](LICENSE) © Realynx. Separately distributed plugins and dependencies retain
 their own licenses.

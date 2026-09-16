@@ -4,7 +4,7 @@ The SDK provides synchronous project operations. The application hosting Python 
 
 ## Embedded scripts
 
-FLMCP and the optional Python IDE use `EmbeddedPythonRuntime` inside the FL process. The installer supplies private CPython and the SDK package. An execution receives an already connected `fl`, so scripts can start with:
+FLMCP and the optional Python IDE use `EmbeddedPythonRuntime` inside the FL process. The installer supplies an embedded CPython runtime and the SDK package. An execution receives an already connected `fl`, so scripts can start with:
 
 ```python
 print(fl.transport.tempo)
@@ -13,7 +13,9 @@ result = fl.project.info
 
 Each run starts with fresh script globals. Imported modules remain loaded in a shared interpreter, and scripts execute serially. The injected `fl` belongs to that execution: do not retain it for a later run or use it from another Python thread.
 
-The IDE is under active development. Its current editor offers script execution and result/output views, while native window behavior still has [validation limits](../native-window-validation.md). It is optional; the SDK and MCP workflows do not depend on it being complete.
+The IDE is under active development. Its current editor offers script execution and
+result/output views. It is optional; the SDK and MCP workflows do not depend on it
+being complete.
 
 ### Results and output
 

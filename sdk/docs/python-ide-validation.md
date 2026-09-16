@@ -5,9 +5,9 @@ search:
 
 # Python IDE validation — September 12, 2026
 
-Framework installer **0.1.13** installed 463 files successfully into FL Studio **2026 26.1.3.5570**. Fifteen critical host, toolkit, native bridge and plugin files match their build outputs, published installer payload and installed copies. Both installer ZIPs contain the verified payloads. The SDK/plugin version is **0.2.0**; Python is private, embedded **CPython 3.14.6**.
+Framework installer **0.1.13** installed 463 files successfully into FL Studio **2026 26.1.3.5570**. Fifteen critical host, toolkit, native bridge and plugin files match their build outputs, published installer payload and installed copies. Both installer ZIPs contain the verified payloads. The SDK/plugin version is **0.2.0**; Python is bundled as embedded **CPython 3.14.6**.
 
-Validation covered 258 SDK cases, 146 installer tests and 36 published CLI checks. The first SDK run passed 255 cases; three real-interpreter cases failed because `FRUITYLINK_TEST_PYTHON_RUNTIME` was missing. All three passed when rerun with the verified runtime. There were no skipped cases. Shared-host tests and an actual private-load-context render smoke covered both editor-first and FL-Agent-first startup, fresh plugin instances after unload, and current-assembly product resources.
+Validation covered 258 SDK cases, 146 installer tests and 36 published CLI checks. The first SDK run passed 255 cases; three real-interpreter cases failed because `FRUITYLINK_TEST_PYTHON_RUNTIME` was missing. All three passed when rerun with the verified runtime. There were no skipped cases. Shared-host tests and an isolated render smoke covered fresh plugin instances after unload and current-assembly product resources.
 
 Live checks used the installed editor in FL Studio:
 

@@ -7,8 +7,8 @@ provides a shared API for project editing, composition, mixing, automation,
 menus, and windows. C# plugins and Python scripts operate on the same live FL
 Studio project.
 
-The commercial FL-Agent assistant is a separate, closed-source consumer and is
-intentionally not part of this repository.
+This repository contains only the public SDK, its tools, samples, and
+documentation.
 
 ## Get started
 

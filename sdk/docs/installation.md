@@ -85,8 +85,8 @@ does not mean that every function or layout is available. Deploy the managed SDK
 and native bridge from a matching build: newer mixer operations need layout
 metadata that older bridges do not provide.
 
-Read [version policy and evidence](native-bridge.md#fl-version-support) and
-[native window validation](native-window-validation.md) for the detailed boundaries.
+Read [version policy and evidence](native-bridge.md#fl-version-support) for the
+detailed compatibility boundaries.
 
 ## Updating plugins
 
