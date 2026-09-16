@@ -1,0 +1,21 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net9.0-windows</TargetFramework>
+    <IsTestProject>true</IsTestProject>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <PackageReference Include="xunit" />
+    <PackageReference Include="xunit.runner.visualstudio" PrivateAssets="all" />
+    <ProjectReference Include="../../src/FruityLink.Plugins.Host/FruityLink.Plugins.Host.csproj" />
+    <ProjectReference Include="Fixture/Fixture.csproj" ReferenceOutputAssembly="false" />
+    <Compile Remove="Fixture/**/*.cs;Dependency/**/*.cs" />
+  </ItemGroup>
+  <Target Name="CopyPluginFixture" AfterTargets="Build">
+    <ItemGroup>
+      <FixtureFiles Include="$(MSBuildProjectDirectory)/Fixture/bin/$(Configuration)/net9.0/**/*" />
+    </ItemGroup>
+    <Copy SourceFiles="@(FixtureFiles)" DestinationFiles="@(FixtureFiles->'$(OutDir)fixtures/%(RecursiveDir)%(Filename)%(Extension)')" />
+  </Target>
+</Project>

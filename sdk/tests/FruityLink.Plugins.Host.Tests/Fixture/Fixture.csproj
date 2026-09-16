@@ -1,0 +1,12 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net9.0</TargetFramework>
+    <AssemblyName>LifecycleFixture</AssemblyName>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../../../src/FruityLink.Plugins.Abstractions/FruityLink.Plugins.Abstractions.csproj" />
+    <ProjectReference Include="../../../src/FruityLink.Scripting/FruityLink.Scripting.csproj" />
+    <ProjectReference Include="../../../src/FruityLink.Ui.Avalonia.Hosting/FruityLink.Ui.Avalonia.Hosting.csproj" />
+    <ProjectReference Include="../Dependency/Dependency.csproj" />
+  </ItemGroup>
+</Project>

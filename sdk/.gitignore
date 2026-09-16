@@ -1,0 +1,21 @@
+# .NET
+bin/
+obj/
+artifacts/
+.vs/
+*.user
+
+# CMake output (native/bridge/build)
+build/
+
+# Claude Code (AI assistant) local files — never publish
+.claude/
+CLAUDE.md
+CLAUDE.local.md
+packages/
+
+# Documentation build output
+.docs-venv/
+site/
+
+__pycache__/

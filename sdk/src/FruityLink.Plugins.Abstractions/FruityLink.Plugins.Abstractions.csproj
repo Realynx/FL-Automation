@@ -1,0 +1,19 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- The stable plugin contract every FruityLink plugin + the host build against.
+       Deliberately tiny + dependency-light so it never churns. Opted out of central
+       package management so it builds standalone (only a ProjectReference to Core). -->
+  <PropertyGroup>
+    <TargetFramework>net9.0</TargetFramework>
+    <RootNamespace>FruityLink.Plugins.Abstractions</RootNamespace>
+    <ManagePackageVersionsCentrally>false</ManagePackageVersionsCentrally>
+    <IsPackable>true</IsPackable>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <Description>The FruityLink plugin contract for FL Studio. Implement IFlPlugin, receive an IPluginContext (typed FL control surface plus native menu and toolbar registrars), drop the DLL into FL Studio's FruityLink\plugins folder, and your C# plugin runs inside the DAW with hot reload.</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\FruityLink.Core\FruityLink.Core.csproj" />
+  </ItemGroup>
+
+</Project>

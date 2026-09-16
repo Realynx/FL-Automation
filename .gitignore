@@ -26,9 +26,6 @@ FL Studio online manual/
 Thumbs.db
 .DS_Store
 
-# Nested open-source SDK repository (own git history; see sdk/.git — upgrade to a submodule once pushed to GitHub)
-sdk/
-
 # Claude Code (AI assistant) local files
 .claude/
 CLAUDE.md

@@ -1,0 +1,44 @@
+[build-system]
+requires = ["hatchling>=1.27"]
+build-backend = "hatchling.build"
+
+[project]
+name = "fruitylink-python"
+version = "0.2.0"
+description = "Typed Python automation for the FruityLink FL Studio scripting plugin"
+readme = "README.md"
+requires-python = ">=3.11"
+license = "MIT"
+license-files = ["LICENSE"]
+authors = [{name = "Realynx"}]
+dependencies = []
+
+[project.optional-dependencies]
+# numpy switches fruitylink.analysis to its vectorised kernels (same results, minutes -> seconds on a full song).
+# The pure-Python path stays the default; nothing here is required to import the package.
+analysis = ["numpy>=2.3"]
+
+[dependency-groups]
+dev = ["ruff>=0.12", "mypy>=1.15", "pytest>=8", "build>=1.2", "numpy>=2.3"]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/fruitylink"]
+
+[tool.ruff]
+target-version = "py311"
+line-length = 110
+
+[tool.ruff.lint]
+select = ["E4", "E7", "E9", "F", "I", "C90"]
+
+[tool.ruff.lint.mccabe]
+max-complexity = 15
+
+[tool.mypy]
+python_version = "3.11"
+strict = true
+files = ["src", "tests", "tools", "examples"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]

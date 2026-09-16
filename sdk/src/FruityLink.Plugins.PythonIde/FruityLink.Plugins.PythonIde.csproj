@@ -1,0 +1,24 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net9.0-windows</TargetFramework>
+    <ManagePackageVersionsCentrally>false</ManagePackageVersionsCentrally>
+    <CopyLocalLockFileAssemblies>true</CopyLocalLockFileAssemblies>
+    <BuiltInComInteropSupport>true</BuiltInComInteropSupport>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../FruityLink.Plugins.Abstractions/FruityLink.Plugins.Abstractions.csproj" />
+    <ProjectReference Include="../FruityLink.Scripting/FruityLink.Scripting.csproj" />
+    <ProjectReference Include="../FruityLink.Ui.Avalonia.Hosting/FruityLink.Ui.Avalonia.Hosting.csproj" />
+    <PackageReference Include="Avalonia" Version="11.3.18" />
+    <PackageReference Include="Avalonia.Desktop" Version="11.3.18" />
+    <PackageReference Include="Avalonia.Themes.Fluent" Version="11.3.18" />
+    <PackageReference Include="Avalonia.AvaloniaEdit" Version="11.3.0" />
+  </ItemGroup>
+  <ItemGroup>
+    <InternalsVisibleTo Include="FruityLink.Plugins.PythonIde.Ui.Tests" />
+    <InternalsVisibleTo Include="FruityLink.Plugins.PythonIde.Preview" />
+    <EmbeddedResource Include="Ui/Python.xshd" />
+    <None Update="README.md;THIRD-PARTY-NOTICES.md;LICENSE;licenses/**/*" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+  </ItemGroup>
+</Project>

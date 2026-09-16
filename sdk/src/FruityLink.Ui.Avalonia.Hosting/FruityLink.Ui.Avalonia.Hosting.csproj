@@ -1,0 +1,49 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- =========================================================================
+       FruityLink.Ui.Avalonia.Hosting — SDK: generic Avalonia-in-FL hosting.
+
+       The reusable mechanics for running an Avalonia UI IN-PROCESS inside a
+       NON-Avalonia host (FL Studio) and reparenting its window into an FL native
+       host form:
+         • EmbeddedAvaloniaHost — the process-singleton STA Avalonia thread
+           (SetupWithoutStarting + permanent MainLoop, software rendering onto the
+           redirection surface — the reliable presenter for a WS_CHILD of a foreign
+           parent). The application itself is supplied by the product as an
+           AppBuilder factory on the first EnsureStarted call.
+         • EmbeddedAvaloniaView — wraps ANY Avalonia Window with the embed
+           mechanics (PrepareForEmbedding / Handle / ForceRender / ShowExternal /
+           hide-on-close).
+
+       No ProjectReferences on purpose: this layer is UI-toolkit glue only — it
+       neither knows about FL control surfaces nor about the plugin contract.
+       Central Package Management is OFF (like the product Avalonia projects);
+       Avalonia is pinned inline at 11.3.18 to match FruityLink.Ui.Avalonia.
+       Only the packages the moved code needs: Avalonia (AppBuilder, Window,
+       Dispatcher) + Avalonia.Desktop (Win32PlatformOptions / rendering modes).
+       ========================================================================= -->
+  <PropertyGroup>
+    <OutputType>Library</OutputType>
+    <TargetFramework>net9.0</TargetFramework>
+    <RootNamespace>FruityLink.Ui.Avalonia.Hosting</RootNamespace>
+    <AssemblyName>FruityLink.Ui.Avalonia.Hosting</AssemblyName>
+    <ManagePackageVersionsCentrally>false</ManagePackageVersionsCentrally>
+    <BuiltInComInteropSupport>true</BuiltInComInteropSupport>
+    <IsPackable>true</IsPackable>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <Description>Run an Avalonia UI in-process inside FL Studio from a FruityLink plugin — EmbeddedAvaloniaHost (singleton STA Avalonia thread in a non-Avalonia host) and EmbeddedAvaloniaView (reparent any Avalonia Window into an FL native host form).</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../FruityLink.Plugins.Abstractions/FruityLink.Plugins.Abstractions.csproj" />
+    <!-- Pinned inline to match FruityLink.Ui.Avalonia (Directory.Packages.props stays untouched). -->
+    <PackageReference Include="Avalonia" Version="11.3.18" />
+    <PackageReference Include="Avalonia.Desktop" Version="11.3.18" />
+    <!-- Shared UI plugins use the same baseline theme/font assemblies regardless of start order. -->
+    <PackageReference Include="Avalonia.Themes.Fluent" Version="11.3.18" />
+    <PackageReference Include="Avalonia.Fonts.Inter" Version="11.3.18" />
+    <!-- Editor theme assets use Avalonia's process-wide assembly cache; keep their owner stable. -->
+    <PackageReference Include="Avalonia.AvaloniaEdit" Version="11.3.0" />
+  </ItemGroup>
+
+</Project>

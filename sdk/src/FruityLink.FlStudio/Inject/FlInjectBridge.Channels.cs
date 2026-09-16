@@ -1,0 +1,568 @@
+using System.Diagnostics;
+using System.IO;
+using System.IO.Pipes;
+using System.Linq;
+using System.Text;
+using System.Text.Json;
+using FruityLink.Core.Abstractions;
+
+namespace FruityLink.FlStudio.Inject;
+
+// Channel rack: channel list/names, generator plugins, samples, plugin parameters, automation clips.
+// Partial of the FlInjectBridge god-class split; see FlInjectBridge.cs for the class doc.
+public sealed partial class FlInjectBridge
+{
+    // ============================ Channels ============================
+    // Channel list = *(*(0x14A98D8)) (double-deref); count @ +0x10, items @ +0x8.
+
+    private async Task<ulong> ChannelListAsync(CancellationToken ct)
+    {
+        ulong p0 = await GPtrAsync("14a98d8", ct);
+        return p0 == 0 ? 0 : await APtrAsync(p0, ct);
+    }
+
+    public async Task<int> GetChannelCountAsync(CancellationToken ct = default)
+    {
+        ulong list = await ChannelListAsync(ct);
+        return list == 0 ? 0 : await AI32Async(list + 0x10, ct);
+    }
+
+    private async Task<ulong> ChannelObjAsync(int index, CancellationToken ct)
+    {
+        if (index < 0) throw new InvalidOperationException($"Channel index {index} is invalid (must be >= 0).");
+        ulong list = await ChannelListAsync(ct);
+        if (list == 0) return 0;
+        int count = await AI32Async(list + 0x10, ct);
+        if (index >= count) throw new InvalidOperationException($"Channel {index} does not exist (only {count} channel(s)).");
+        return await CallAsync("f00f80", new ulong[] { list, (uint)index }, ct);  // FLcr_ChannelListGetItem
+    }
+
+    /// <summary>Exclusively select a channel so the piano roll edits it. FLcr_SelectOneChannelByIndex.</summary>
+    public async Task SelectChannelAsync(int channel, CancellationToken ct = default)
+    {
+        int count = await GetChannelCountAsync(ct);
+        if (channel < 0 || channel >= count) throw new InvalidOperationException($"Channel {channel} does not exist (only {count} channel(s)).");
+        await CallAsync("10e3eb0", new ulong[] { (uint)channel }, ct);
+    }
+
+    public async Task<string> GetChannelNameAsync(int channel, CancellationToken ct = default)
+    {
+        ulong ch = await ChannelObjAsync(channel, ct);
+        return ch == 0 ? $"Channel {channel}" : await GetChannelNameCoreAsync(ch, channel, ct);
+    }
+
+    private async Task<string> GetChannelNameCoreAsync(ulong ch, int index, CancellationToken ct)
+    {
+        // Delphi `function GetName: string` (vtbl+0x68) returns via a hidden out-param: getName(self, @result).
+        // The result slot must be a valid (zeroed) UnicodeString var, or the assign derefs garbage and faults.
+        using var scratch = await LeaseScratchAsync(ct).ConfigureAwait(false);
+        ulong sc = await ZeroedScratchSlotAsync(0, scratch, ct);
+        await CallVtblAsync(ch, 0x68, "Channel getName", new[] { ch, sc }, ct);
+        ulong strPtr = await APtrAsync(sc, ct);
+        string s = await ReadDelphiStringAsync(strPtr, ct);
+        return string.IsNullOrEmpty(s) ? $"Channel {index}" : s;
+    }
+
+    /// <summary>Rename a channel via its Delphi setName (vtbl+0x70) — symmetric with the getName (vtbl+0x68)
+    /// path above. Uses an FL-OWNED heap string so the setter's UStrAsg-share persists across scratch reuse
+    /// and save/reload.</summary>
+    public async Task SetChannelNameAsync(int channel, string name, CancellationToken ct = default)
+    {
+        ulong ch = await ChannelObjAsync(channel, ct);
+        if (ch == 0) throw new InvalidOperationException($"Channel {channel} not found.");
+        LogOp("SetChannelName", $"channel={channel}");
+        using (var scratch = await LeaseScratchAsync(ct).ConfigureAwait(false))
+        {
+            ulong str = await MakeOwnedDelphiStringAsync(name ?? string.Empty, scratch, ct);
+            await CallVtblAsync(ch, 0x70, "Channel setName", new[] { ch, str }, ct);   // UStrAsg into the name field + notify
+        }
+        await RefreshRackAsync(ct);
+    }
+
+    /// <summary>Toggle exclusive channel solo via FLcr_ApplyChannelSolo (the same op the rack's channel
+    /// solo-click invokes; carries the exclusive-solo bookkeeping + undo step, non-modal). Toggle: solo again
+    /// un-solos. Refreshes the rack so the strip repaints.</summary>
+    public async Task SetChannelSoloAsync(int channel, CancellationToken ct = default)
+    {
+        ulong ch = await ChannelObjAsync(channel, ct);
+        if (ch == 0) throw new InvalidOperationException($"Channel {channel} not found.");
+        LogOp("SetChannelSolo", $"channel={channel}");
+        await CallAsync("e012f0", new ulong[] { ch, 0 }, ct);   // FLcr_ApplyChannelSolo(chObj, mode 0 = toggle)
+        await RefreshRackAsync(ct);
+    }
+
+    /// <summary>Lists channels WITH the working state the model otherwise has to probe one call at a
+    /// time (the "index-only mixer list" failure class): mixer route, mute, non-default vol/pan, and a
+    /// no-generator marker. Defaults are omitted per line so a pristine rack stays one short line per
+    /// channel; the header states the omission rule ONCE so the model can trust what absence means.</summary>
+    public async Task<string> ListChannelsAsync(CancellationToken ct = default)
+    {
+        int n = await GetChannelCountAsync(ct);
+        if (n <= 0 || n > 1000) return "(no channels)";
+        var sb = new System.Text.StringBuilder();
+        for (int i = 0; i < n; i++)
+        {
+            ulong ch = await ChannelObjAsync(i, ct);
+            sb.Append(i).Append(": ").Append(ch == 0 ? $"Channel {i}" : await GetChannelNameCoreAsync(ch, i, ct));
+            if (ch != 0 && await AI32Async(ch + 0x64, ct) < 0) sb.Append(" (automation/bus)");
+            int route = await GetChannelFxRouteAsync(i, ct);
+            if (route > 0) sb.Append(" ->mixer ").Append(route);
+            if (await GetChannelMutedAsync(i, ct)) sb.Append(" MUTED");
+            long vol = await GetChannelVolumeAsync(i, ct);
+            if (vol != 10000) sb.Append(" vol=").Append(vol);
+            int pan = await GetChannelPanAsync(i, ct);
+            if (pan != 6400) sb.Append(" pan=").Append(pan);
+            sb.Append('\n');
+        }
+        return $"{n} channels (vol/pan shown only when non-default; no ->mixer = routed to Master):\n"
+            + sb.ToString().TrimEnd();
+    }
+
+    // ============================ Plugins / inserts ============================
+    // Plugin database = .fst files under the user's "Plugin database\{Generators,Effects}" tree.
+    // Loading a plugin = pass the full .fst path (Delphi string) to the host's load method:
+    //   channel generator: (*(*ch + 0x150))(ch, fstPath, 0, 0x42)
+    //   mixer FX slot:      (*(*slot + 0xF0))(slot, mode, fstPath, 0, 1, 1)  mode -3 insert, -2 clear
+
+    private static string PluginDbDir => Path.Combine(
+        Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments),
+        "Image-Line", "FL Studio", "Presets", "Plugin database");
+
+    /// <summary>Lists installed plugins of a kind (generators or effects) by display name,
+    /// newline-separated: one name per line lets the tool layer filter/cap by line without a
+    /// separator ambiguity (plugin names legitimately contain commas and spaces).</summary>
+    public Task<string> ListAvailablePluginsAsync(bool effects, CancellationToken ct = default)
+    {
+        string dir = Path.Combine(PluginDbDir, effects ? "Effects" : "Generators");
+        if (!Directory.Exists(dir)) return Task.FromResult($"(plugin database not found at {dir})");
+        var names = new SortedSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (string f in Directory.EnumerateFiles(dir, "*.fst", SearchOption.AllDirectories))
+        {
+            string n = Path.GetFileNameWithoutExtension(f);
+            if (!string.IsNullOrEmpty(n)) names.Add(n);
+        }
+        return Task.FromResult(names.Count == 0 ? "(none found)" : string.Join("\n", names));
+    }
+
+    /// <summary>Resolves a plugin name to its .fst path in the plugin database. Matching is tolerant
+    /// (see <see cref="PluginNameResolver"/>): exact file name first, then case/punctuation-insensitive,
+    /// then a unique containment such as a vendor prefix ("FabFilter Pro-R 2" -> "Pro-R 2"). Throws with the
+    /// closest installed names when nothing matches, or with every candidate when the name is ambiguous.
+    /// When the same display name exists in several database folders, the first enumerated file wins
+    /// (unchanged from the exact-match lookup this replaces).</summary>
+    private static string ResolveFstPath(string name, bool effects)
+    {
+        string kind = effects ? "Effect" : "Generator";
+        string dir = Path.Combine(PluginDbDir, effects ? "Effects" : "Generators");
+        if (!Directory.Exists(dir))
+            throw new InvalidOperationException($"{kind} plugin '{name}' not found: the plugin database folder is missing ({dir}).");
+        var files = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        foreach (string f in Directory.EnumerateFiles(dir, "*.fst", SearchOption.AllDirectories))
+        {
+            string n = Path.GetFileNameWithoutExtension(f);
+            if (!string.IsNullOrEmpty(n)) files.TryAdd(n, f);
+        }
+        var match = PluginNameResolver.Match(name, files.Keys);
+        if (match.Name is null) throw new InvalidOperationException(PluginNameResolver.DescribeFailure(kind, name, match));
+        return files[match.Name];
+    }
+
+    private static string? FlInstallDir()
+    {
+        try { return Path.GetDirectoryName(Process.GetProcessesByName("FL64").FirstOrDefault()?.MainModule?.FileName ?? string.Empty); }
+        catch { return null; }
+    }
+
+    /// <summary>Load a file (.fst plugin or audio) into a channel via its host load method:
+    /// (*(*ch+0x150))(ch, path, mode, 0x42). mode 0 = plugin/preset, 1 = load sample.</summary>
+    private async Task LoadIntoChannelAsync(ulong ch, string path, uint mode, CancellationToken ct)
+    {
+        // FL's channel load path (vtbl+0x150) is NOT re-entrant across rapid successive instantiations:
+        // a second load firing within ~10ms of the previous FAULTS (observed 22% on back-to-back Serum
+        // adds; ≥140ms apart always succeeds — tools-20260708.log). Serialize all loads and SPACE them so
+        // the VST scan/instantiate settles first. Static gate: parallel sub-agents share one bridge.
+        await _channelLoadGate.WaitAsync(ct).ConfigureAwait(false);
+        try
+        {
+            long since = Environment.TickCount64 - _lastChannelLoadTicks;
+            if (_lastChannelLoadTicks != 0 && since < MinChannelLoadSpacingMs)
+                await Task.Delay((int)(MinChannelLoadSpacingMs - since), ct).ConfigureAwait(false);
+            using var scratch = await LeaseScratchAsync(ct).ConfigureAwait(false);
+            ulong strPtr = await WriteDelphiStringAsync(path, scratch, ct);
+            // FL's channel generator-load method (vtbl+0x150) takes FL's FULL argument list. The bridge used
+            // to pass only 4 (ch, path, mode, flags=0x42), leaving p5 UNINITIALIZED. On 2025 that stack slot
+            // was benignly 0, but FL 2026 widened the method — its own callers pass
+            // (self, path, mode, flags, p5=0, p6 = double -1.0) — and p5 is consumed early by
+            // UStrAsg(ch+0x340, p5): a garbage p5 gets DEREFERENCED → AV (the add_channel / add_sample_channel
+            // "callabs faulted" on 2026, RE 2026-07-10). Pass the full list: p5=0, p6 = raw bits of double -1.0
+            // (0xBFF0000000000000). The extra trailing arg is ignored by the narrower 2025 method (x64: args
+            // 5+ live on the stack), so this is correct on BOTH versions.
+            await CallVtblAsync(ch, 0x150, "Channel load", new ulong[] { ch, strPtr, mode, 0x42, 0, 0xBFF0000000000000UL }, ct);
+        }
+        finally
+        {
+            _lastChannelLoadTicks = Environment.TickCount64;
+            _channelLoadGate.Release();
+        }
+    }
+
+    // Serializes + spaces FL plugin/sample instantiation (see LoadIntoChannelAsync) — the fix for the
+    // back-to-back VST-load fault. Static because sub-agent kernels share one FlInjectBridge.
+    private static readonly SemaphoreSlim _channelLoadGate = new(1, 1);
+    private static long _lastChannelLoadTicks;
+    private const int MinChannelLoadSpacingMs = 200;
+
+    // ---- channel rack ----
+
+    /// <summary>Describes a channel's loaded generator plugin: the PLUGIN's display name (not just the
+    /// channel name, which the user may have renamed) + its param count, so the model knows what it is
+    /// driving before reaching for param tools.</summary>
+    public async Task<string> GetChannelPluginAsync(int channel, CancellationToken ct = default)
+    {
+        ulong ch = await ChannelObjAsync(channel, ct);
+        if (ch == 0) return $"Channel {channel}: not found.";
+        int gen = await AI32Async(ch + 0x64, ct);
+        string name = await GetChannelNameCoreAsync(ch, channel, ct);
+        // Automation clips register in the target-link registry regardless of their generator id, so
+        // check links FIRST — "automates: Insert 3 volume" beats a generic generator report.
+        string? targets = await DescribeAutomationTargetsAsync(ch, ct);
+        if (!string.IsNullOrEmpty(targets)) return $"{name}: automation clip -> {targets}";
+        if (gen < 0) return $"{name}: no generator (bus/automation)";
+        string plugin = await TryReadPluginHolderNameAsync(ch, ct);
+        int paramCount = await AI32Async(ch + 0x68, ct);
+        string count = paramCount is > 0 and <= 100_000 ? $" ({paramCount} params)" : "";
+        return plugin.Length > 0
+            ? $"{name}: generator '{plugin}'{count}"
+            : $"{name}: has a generator plugin{count}";
+    }
+
+    /// <summary>Best-effort plugin display name off the shared plugin-holder layout: +0x58 is the SAME
+    /// name field <see cref="ListMixerEffectsAsync"/> reads on a mixer FX slot (channels and slots share
+    /// the holder band +0x38..+0x68 — see <see cref="ResolvePluginAsync"/>). Falls back to "" on any
+    /// fault or implausible decode, so an unexpected layout can only OMIT the name, never report a
+    /// wrong one.</summary>
+    private async Task<string> TryReadPluginHolderNameAsync(ulong obj, CancellationToken ct)
+    {
+        try
+        {
+            string s = await ReadDelphiStringAsync(await APtrAsync(obj + 0x58, ct), ct);
+            return s.Length > 0 && !s.Any(char.IsControl) ? s : "";
+        }
+        catch (InvalidOperationException) { return ""; }
+    }
+
+    /// <summary>Adds a new channel-rack channel hosting the named generator plugin; returns its index.</summary>
+    public async Task<int> AddChannelAsync(string pluginName, CancellationToken ct = default)
+    {
+        string path = ResolveFstPath(pluginName, effects: false);
+        int before = await GetChannelCountAsync(ct);
+        ulong ch = await CallAsync("f215e0", new ulong[] { (uint)before, 0, 0 }, ct);  // FLcr_InsertChannel
+        if (ch == 0) throw new InvalidOperationException("Could not insert a channel.");
+        await LoadIntoChannelAsync(ch, path, 0, ct);
+        await RefreshRackAsync(ct);
+        return before;
+    }
+
+    // ---- samples ----
+    private static readonly string[] SampleExts = { ".wav", ".aif", ".aiff", ".mp3", ".ogg", ".flac", ".rx2" };
+
+    /// <summary>The sample search roots with their entry tags: [P] = FL factory packs, [U] = the
+    /// user's Image-Line documents content. Shared by the lister (emits tagged relative paths) and
+    /// the resolver (maps them back to full paths), so the two can never drift apart.</summary>
+    private static (string Root, string Tag)[] SampleRoots()
+    {
+        var roots = new List<(string, string)>();
+        string? install = FlInstallDir();
+        if (install != null) roots.Add((Path.Combine(install, "Data", "Patches", "Packs"), "[P]"));
+        roots.Add((Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "Image-Line", "FL Studio"), "[U]"));
+        return roots.ToArray();
+    }
+
+    /// <summary>Resolve a sample reference back to a full path: accepts a full path, a root-tagged
+    /// relative path from <see cref="ListSamplesAsync"/> ("[P]Drums\Kicks\x.wav"), or a bare relative
+    /// path (tried against every root). Returns the input unchanged when nothing matches so the
+    /// caller's file-not-found error shows exactly what the model passed.</summary>
+    private static string ResolveSamplePath(string samplePath)
+    {
+        if (string.IsNullOrWhiteSpace(samplePath) || File.Exists(samplePath)) return samplePath;
+        string p = samplePath.Trim();
+        foreach (var (root, tag) in SampleRoots())
+        {
+            string rel = p.StartsWith(tag, StringComparison.OrdinalIgnoreCase) ? p[tag.Length..] : p;
+            string full = Path.Combine(root, rel.TrimStart('\\', '/'));
+            if (File.Exists(full)) return full;
+        }
+        return samplePath;
+    }
+
+    /// <summary>Lists audio samples from FL's factory packs + the user's content, optionally filtered
+    /// by name (path substring). Emits ROOT-TAGGED RELATIVE paths ([P]/[U] + path) with a one-line
+    /// root legend instead of full paths: the pack root repeats ~60 identical characters per entry,
+    /// which is pure token waste for the model. Unfiltered output is capped hard at 40 entries (with
+    /// a "(N more — pass a filter)" nudge) because a broad listing is a browse, not a lookup.</summary>
+    public Task<string> ListSamplesAsync(string? filter, CancellationToken ct = default)
+    {
+        var roots = SampleRoots();
+        int cap = string.IsNullOrEmpty(filter) ? 40 : 150;
+        const int scanMax = 2000;  // bound the match count so a huge library can't stall the call
+        var hits = new SortedSet<string>(StringComparer.OrdinalIgnoreCase);
+        int total = 0;
+        bool truncatedScan = false;
+        foreach (var (root, tag) in roots)
+        {
+            if (!Directory.Exists(root)) continue;
+            try
+            {
+                foreach (string f in EnumerateSamples(root, filter))
+                {
+                    if (ct.IsCancellationRequested) break;
+                    total++;
+                    if (hits.Count < cap) hits.Add(tag + Path.GetRelativePath(root, f));
+                    else if (total >= scanMax) { truncatedScan = true; break; }
+                }
+            }
+            catch { /* skip inaccessible trees, keep what we found */ }
+            if (truncatedScan) break;
+        }
+        if (hits.Count == 0) return Task.FromResult(string.IsNullOrEmpty(filter) ? "(no samples found)" : $"(no samples matching '{filter}')");
+        string legend = string.Join(" ", roots.Where(r => Directory.Exists(r.Root)).Select(r => $"{r.Tag}={r.Root}"));
+        string head = $"{hits.Count} of {total}{(truncatedScan ? "+" : "")} samples{(string.IsNullOrEmpty(filter) ? "" : $" matching '{filter}'")}. Roots: {legend}. Pass an entry verbatim to native_add_sample_channel.\n";
+        string more = total > hits.Count ? $"\n({total - hits.Count}{(truncatedScan ? "+" : "")} more — pass a filter)" : "";
+        return Task.FromResult(head + string.Join("\n", hits) + more);
+    }
+
+    private static IEnumerable<string> EnumerateSamples(string root, string? filter) =>
+        Directory.EnumerateFiles(root, "*.*", SearchOption.AllDirectories)
+            .Where(path => Array.IndexOf(SampleExts, Path.GetExtension(path).ToLowerInvariant()) >= 0)
+            .Where(path => string.IsNullOrEmpty(filter) || path.Contains(filter, StringComparison.OrdinalIgnoreCase));
+
+    /// <summary>Adds a new channel that plays the given audio sample file; returns its index.
+    /// Accepts full paths or the root-tagged relative paths <see cref="ListSamplesAsync"/> emits.</summary>
+    public async Task<int> AddSampleChannelAsync(string samplePath, CancellationToken ct = default)
+    {
+        samplePath = ResolveSamplePath(samplePath);
+        if (!File.Exists(samplePath)) throw new InvalidOperationException($"Sample file not found: {samplePath}");
+        int before = await GetChannelCountAsync(ct);
+        ulong ch = await CallAsync("f215e0", new ulong[] { (uint)before, 0, 0 }, ct);  // FLcr_InsertChannel (default Sampler)
+        if (ch == 0) throw new InvalidOperationException("Could not insert a channel.");
+        await LoadIntoChannelAsync(ch, samplePath, 1, ct);  // mode 1 = load sample
+        await RefreshRackAsync(ct);
+        return before;
+    }
+
+    /// <summary>Replaces an existing channel's sample with a new audio file. Accepts full paths or
+    /// the root-tagged relative paths <see cref="ListSamplesAsync"/> emits.</summary>
+    public async Task ReplaceChannelSampleAsync(int channel, string samplePath, CancellationToken ct = default)
+    {
+        samplePath = ResolveSamplePath(samplePath);
+        if (!File.Exists(samplePath)) throw new InvalidOperationException($"Sample file not found: {samplePath}");
+        ulong ch = await ChannelObjAsync(channel, ct);
+        if (ch == 0) throw new InvalidOperationException($"Channel {channel} not found.");
+        await LoadIntoChannelAsync(ch, samplePath, 1, ct);
+        await RefreshRackAsync(ct);
+    }
+
+    // ---- plugin parameters ----
+    // Resolve a plugin instance + its param command base. slot < 0 => channel generator, else mixer FX slot.
+    // Built-in Sampler settings are channel controls, not a hosted-plugin parameter interface.
+    // A missing instance must not be interpreted as an empty sample or an invitation to call another ABI.
+    //   instance = (*(*(*(obj+0x38)+0x48)+0x20))(host);  count = *(int*)(obj+0x68)
+    //   cmd base = channel: *(int*)(obj+0x9c)+0x8000 ; mixer: ((track*0x40+slot)<<16)+0x70008000
+    private async Task<(ulong inst, int count, uint cmdBase)> ResolvePluginAsync(int channelOrTrack, int slot, CancellationToken ct)
+    {
+        ulong obj; uint cmdBase;
+        if (slot < 0)
+        {
+            obj = await ChannelObjAsync(channelOrTrack, ct);
+            if (obj == 0) return (0, 0, 0);
+            int recEvt = await AI32Async(obj + 0x9c, ct);
+            cmdBase = unchecked((uint)(recEvt + 0x8000));
+        }
+        else
+        {
+            obj = await MixerSlotObjAsync(channelOrTrack, slot, ct);
+            cmdBase = unchecked((uint)(((channelOrTrack * 0x40 + slot) << 16) + 0x70008000));
+        }
+        if (obj == 0) return (0, 0, cmdBase);
+        int count = await AI32Async(obj + 0x68, ct);
+        ulong p38 = await APtrAsync(obj + 0x38, ct);
+        if (p38 == 0) return (0, count, cmdBase);
+        ulong host = p38 + 0x48;
+        ulong inst = await CallVtblAsync(host, 0x20, "Plugin getInstance", new[] { host }, ct);
+        return (inst, count, cmdBase);
+    }
+
+    private static string PluginParametersUnavailableMessage(int channelOrTrack, int slot)
+        => slot < 0
+            ? $"Channel {channelOrTrack} has no hosted-plugin parameter interface. " +
+              "The SDK does not expose built-in Sampler envelopes or sample settings through this API. " +
+              "Use channel volume, pan, mute, routing, and sample-loading operations where applicable."
+            : $"Mixer track {channelOrTrack}, effect slot {slot} has no loaded plugin parameter interface (the slot may be empty).";
+
+    /// <summary>Shared plugin-text call: both param NAME (mode 0) and param VALUE DISPLAY (mode 1) go
+    /// through the SAME vtable slot (*(*inst+0x20))(inst, mode, paramIdx, rawValue, buf) on the shared
+    /// TBaseAudioPlugin base, shared by hosted native plugins, VST2 and VST3. Built-in Sampler controls
+    /// do not use this interface.
+    /// NB: no EnsureInModule here — for a hosted VST (e.g. Serum 2) the plugin-instance methods
+    /// legitimately live in the PLUGIN's own DLL, not FLEngine. The native callabs is SEH-guarded,
+    /// so a bad pointer returns ok:0 (a clean exception) rather than crashing FL.</summary>
+    private async Task<string> ReadPluginTextAsync(ulong inst, uint mode, int paramIndex, uint rawValue, string what, CancellationToken ct)
+    {
+        ulong vti = await APtrAsync(inst, ct);
+        ulong fn = await APtrAsync(vti + 0x20, ct);
+        if (fn == 0) throw new InvalidOperationException($"Plugin {what} pointer is null.");
+        using var scratch = await LeaseScratchAsync(ct).ConfigureAwait(false);
+        ulong charBuf = scratch.Address + 0x40;
+        await PokeAbsAsync(charBuf, new byte[64], ct);
+        await CallAbsAsync(fn, new ulong[] { inst, mode, (uint)paramIndex, rawValue, charBuf }, ct);
+        return DecodePluginText(await PeekAbsAsync(charBuf, 64, ct));
+    }
+
+    /// <summary>Decode the NUL-terminated text a plugin wrote into the scratch char buffer, stripping the
+    /// leading FL "^b^a" formatting codes (bytes &lt; 0x20). "" when the plugin supplied nothing.</summary>
+    private static string DecodePluginText(byte[] raw)
+    {
+        int end = Array.IndexOf(raw, (byte)0); if (end < 0) end = raw.Length;
+        int start = 0; while (start < end && raw[start] < 0x20) start++;
+        return end > start ? Encoding.ASCII.GetString(raw, start, end - start) : "";
+    }
+
+    private async Task<string> ReadParamNameAsync(ulong inst, int i, CancellationToken ct)
+    {
+        string s = await ReadPluginTextAsync(inst, 0, i, 0, "getParamName", ct);  // GetParamName(?, i, ?, buf)
+        return s.Length > 0 ? s : $"param {i}";
+    }
+
+    /// <summary>Reads a plugin param's current raw native value: getParamValue = (*(*inst+0x30))(inst,i,0,2) returns it in RAX.</summary>
+    private async Task<int> ReadParamValueAsync(ulong inst, int i, CancellationToken ct)
+    {
+        ulong vti = await APtrAsync(inst, ct);
+        ulong valFn = await APtrAsync(vti + 0x30, ct);
+        if (valFn == 0) throw new InvalidOperationException("Plugin getParamValue pointer is null."); // plugin-module ptr; callabs is SEH-guarded
+        ulong rax = await CallAbsAsync(valFn, new ulong[] { inst, (uint)i, 0, 2 }, ct);
+        return unchecked((int)rax);
+    }
+
+    /// <summary>Reads a param's human-readable display string (with units), the sound-design feedback
+    /// loop — e.g. "1.2 kHz", "-6.0 dB", "62 %". Mode 1 = value display. Returns "" if the plugin supplies none.</summary>
+    private async Task<string> ReadParamValueStringAsync(ulong inst, int i, int raw, CancellationToken ct)
+        => (await ReadPluginTextAsync(inst, 1, i, unchecked((uint)raw), "getParamValueString", ct)).Trim();
+
+    /// <summary>Lists a plugin's parameters as "index: name" (slot &lt; 0 = channel generator). Optional name filter.</summary>
+    public async Task<string> ListPluginParamsAsync(int channelOrTrack, int slot, string? filter, CancellationToken ct = default)
+    {
+        var (inst, count, _) = await ResolvePluginAsync(channelOrTrack, slot, ct);
+        if (inst == 0) return PluginParametersUnavailableMessage(channelOrTrack, slot);
+        if (count <= 0) return "This plugin exposes no parameters.";
+        var sb = new StringBuilder();
+        int shown = 0;
+        for (int i = 0; i < count && shown < 200; i++)
+        {
+            string name = await ReadParamNameAsync(inst, i, ct);
+            if (!string.IsNullOrEmpty(filter) && name.IndexOf(filter, StringComparison.OrdinalIgnoreCase) < 0) continue;
+            int val = await ReadParamValueAsync(inst, i, ct);
+            // Prefer the plugin's own display string (units) so the LLM can reason about real targets
+            // ("Cutoff = 1.2 kHz"). Fallback when a plugin gives none: VST params return their raw value
+            // as normalized float bits, so reinterpret to a 0..1 figure rather than print a huge integer.
+            string disp = await ReadParamValueStringAsync(inst, i, val, ct);
+            if (disp.Length == 0)
+            {
+                float f = BitConverter.Int32BitsToSingle(val);
+                disp = float.IsFinite(f) && Math.Abs(f) <= 1e6f ? f.ToString("0.###") : val.ToString();
+            }
+            sb.Append(i).Append(": ").Append(name).Append(" = ").Append(disp).Append('\n');
+            shown++;
+        }
+        if (shown == 0) return $"No parameters match '{filter}' ({count} total).";
+        string head = string.IsNullOrEmpty(filter)
+            ? $"{count} parameters{(shown < count ? " (showing first 200; use a name filter)" : "")}:\n"
+            : $"{count} parameters, {shown} matching '{filter}':\n";
+        return head + sb.ToString().TrimEnd();
+    }
+
+    /// <summary>Sets a plugin parameter to a normalized value 0..1 (slot &lt; 0 = channel generator).</summary>
+    public async Task SetPluginParamAsync(int channelOrTrack, int slot, int paramIndex, double value, CancellationToken ct = default)
+    {
+        var (inst, count, cmdBase) = await ResolvePluginAsync(channelOrTrack, slot, ct);
+        if (inst == 0) throw new InvalidOperationException(PluginParametersUnavailableMessage(channelOrTrack, slot));
+        if (paramIndex < 0 || paramIndex >= count) throw new InvalidOperationException($"paramIndex out of range (0..{count - 1}).");
+        uint fixedVal = (uint)Math.Round(Math.Clamp(value, 0.0, 1.0) * 1073741824.0);  // norm * 2^30
+        await DispatchCommandAsync(cmdBase + (uint)paramIndex, fixedVal, 0x3fd, ct);
+    }
+
+    // ---- automation target links (what a clip CONTROLS) ----
+    // Both verified creators append entries to the TList at *(AutoLinkRegistryRoot + 8).
+    // The adjacent global is transport state; never probe it as an alternative registry.
+    private async Task<ulong> AutomationLinkRegistryAsync(CancellationToken ct)
+    {
+        ulong root = await GPtrAsync("14a81b8", ct);
+        if (root <= 0x10000) return 0;
+        ulong list = await APtrAsync(root + 8, ct);
+        if (list <= 0x10000) return 0;
+        ulong items = await APtrAsync(list + 8, ct);
+        int count = await AI32Async(list + 0x10, ct);
+        int capacity = await AI32Async(list + 0x14, ct);
+        return count is >= 0 and <= 8192 && capacity >= count && (items > 0x10000 || count == 0) ? list : 0;
+    }
+
+    /// <summary>Target event ids linked to a clip channel (entries whose +0x08 source id equals the
+    /// channel's recEventId +0x9c). Null when the registry couldn't be resolved (unknown ≠ none).</summary>
+    private async Task<List<int>?> AutomationTargetIdsAsync(ulong ch, CancellationToken ct)
+    {
+        ulong reg = await AutomationLinkRegistryAsync(ct);
+        if (reg == 0) return null;
+        int srcId = await AI32Async(ch + 0x9c, ct);
+        ulong items = await APtrAsync(reg + 8, ct);
+        int count = await AI32Async(reg + 0x10, ct);
+        var result = new List<int>();
+        for (int i = 0; i < count; i++)
+        {
+            try
+            {
+                ulong entry = await APtrAsync(items + (ulong)i * 8, ct);
+                if (entry <= 0x10000) continue;
+                if (await AI32Async(entry + 8, ct) != srcId) continue;
+                int tgt = await AI32Async(entry + 0x10, ct);
+                if (!result.Contains(tgt)) result.Add(tgt);
+            }
+            catch (InvalidOperationException) { break; }   // garbage entry chain — stop, keep what matched
+        }
+        return result;
+    }
+
+    /// <summary>Human name for an FL event/param id via FLgl_cmd_GetEventIDName (Delphi hidden-out-param
+    /// call, same recipe as GetArrangementName). "" when FL supplies none or the call faults.</summary>
+    private async Task<string> EventIdNameAsync(int eventId, CancellationToken ct)
+    {
+        try
+        {
+            using var scratch = await LeaseScratchAsync(ct).ConfigureAwait(false);
+            ulong outSlot = await ZeroedScratchSlotAsync(0x380, scratch, ct);
+            await CallAsync("f5ca00", new ulong[] { outSlot, (uint)eventId, 0 }, ct);
+            string s = await ReadDelphiStringAsync(await APtrAsync(outSlot, ct), ct);
+            return s.Any(char.IsControl) ? "" : s;
+        }
+        catch (InvalidOperationException) { return ""; }
+    }
+
+    /// <summary>"name, name" of everything a clip channel automates; "" = registry says no links;
+    /// null = registry unresolved (report nothing rather than a false "no target").</summary>
+    private async Task<string?> DescribeAutomationTargetsAsync(ulong ch, CancellationToken ct)
+    {
+        try
+        {
+            var ids = await AutomationTargetIdsAsync(ch, ct);
+            if (ids is null) return null;
+            if (ids.Count == 0) return "";
+            var names = new List<string>();
+            foreach (int id in ids.Take(8))
+            {
+                string nm = await EventIdNameAsync(id, ct);
+                names.Add(nm.Length > 0 ? nm : $"event 0x{id:x}");
+            }
+            return string.Join(", ", names);
+        }
+        catch (InvalidOperationException) { return null; }
+    }
+
+}

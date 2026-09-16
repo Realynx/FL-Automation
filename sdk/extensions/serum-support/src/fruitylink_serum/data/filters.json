@@ -1,0 +1,682 @@
+{
+ "provenance": {
+  "generated": "2026-09-13",
+  "method": "Derived statistics from decoding the locally installed Serum 2 library (.SerumPreset/.SerumFX/.SerumFXRack) and this project's FL-saved processor states with fruitylink_serum.xfer; no preset payloads are stored.",
+  "files_scanned": 1125,
+  "engine_reference": "Serum 2 (productVersion up to 2.1.4), FL Studio 26.1.3 wrapper displays"
+ },
+ "key": "VoiceFilter{n}/plainParams/kParamType and FXRack{n}/FX[FXFilter]/plainParams/kParamType share this enum",
+ "default": "MgL12 (absent)",
+ "types": [
+  {
+   "state_value": "MgL18",
+   "voice_filter_occurrences": 26,
+   "fx_filter_occurrences": 12,
+   "fl_display_guess": "MG Low 18",
+   "confidence": "pattern",
+   "family": "lowpass"
+  },
+  {
+   "state_value": "MgL24",
+   "voice_filter_occurrences": 23,
+   "fx_filter_occurrences": 12,
+   "fl_display_guess": "MG Low 24",
+   "confidence": "pattern",
+   "family": "lowpass"
+  },
+  {
+   "state_value": "Diffuser",
+   "voice_filter_occurrences": 14,
+   "fx_filter_occurrences": 19,
+   "fl_display_guess": null,
+   "confidence": "unknown",
+   "family": "special"
+  },
+  {
+   "state_value": "LadderMg",
+   "voice_filter_occurrences": 22,
+   "fx_filter_occurrences": 6,
+   "fl_display_guess": null,
+   "confidence": "unknown",
+   "family": "lowpass"
+  },
+  {
+   "state_value": "LadderEMS",
+   "voice_filter_occurrences": 24,
+   "fx_filter_occurrences": 3,
+   "fl_display_guess": null,
+   "confidence": "unknown",
+   "family": "lowpass"
+  },
+  {
+   "state_value": "H24",
+   "voice_filter_occurrences": 16,
+   "fx_filter_occurrences": 10,
+   "fl_display_guess": "High 24",
+   "confidence": "pattern",
+   "family": "highpass"
+  },
+  {
+   "state_value": "H12",
+   "voice_filter_occurrences": 13,
+   "fx_filter_occurrences": 12,
+   "fl_display_guess": "High 12",
+   "confidence": "pattern",
+   "family": "highpass"
+  },
+  {
+   "state_value": "MgL12",
+   "voice_filter_occurrences": 0,
+   "fx_filter_occurrences": 21,
+   "fl_display_guess": "MG Low 12",
+   "confidence": "verified-default",
+   "family": "lowpass",
+   "note": "absent kParamType displayed 'MG Low 12' in FL"
+  },
+  {
+   "state_value": "LadderAcid",
+   "voice_filter_occurrences": 16,
+   "fx_filter_occurrences": 4,
+   "fl_display_guess": null,
+   "confidence": "unknown",
+   "family": "lowpass"
+  },
+  {
+   "state_value": "DirtyMg",
+   "voice_filter_occurrences": 11,
+   "fx_filter_occurrences": 8,
+   "fl_display_guess": null,
+   "confidence": "unknown",
+   "family": "lowpass"
+  },
+  {
+   "state_value": "H18",
+   "voice_filter_occurrences": 11,
+   "fx_filter_occurrences": 6,
+   "fl_display_guess": "High 18",
+   "confidence": "pattern",
+   "family": "highpass"
+  },
+  {
+   "state_value": "CombP",
+   "voice_filter_occurrences": 8,
+   "fx_filter_occurrences": 9,
+   "fl_display_guess": null,
+   "confidence": "unknown",
+   "family": "comb/flange/phase"
+  },
+  {
+   "state_value": "Reverb1",
+   "voice_filter_occurrences": 5,
+   "fx_filter_occurrences": 11,
+   "fl_display_guess": null,
+   "confidence": "unknown",
+   "family": "special"
+  },
+  {
+   "state_value": "L12",
+   "voice_filter_occurrences": 7,
+   "fx_filter_occurrences": 7,
+   "fl_display_guess": "Low 12",
+   "confidence": "pattern",
+   "family": "lowpass"
+  },
+  {
+   "state_value": "Wsp",
+   "voice_filter_occurrences": 9,
+   "fx_filter_occurrences": 2,
+   "fl_display_guess": null,
+   "confidence": "unknown",
+   "family": "special"
+  },
+  {
+   "state_value": "L24",
+   "voice_filter_occurrences": 9,
+   "fx_filter_occurrences": 1,
+   "fl_display_guess": "Low 24",
+   "confidence": "pattern",
+   "family": "lowpass"
+  },
+  {
+   "state_value": "LH12",
+   "voice_filter_occurrences": 8,
+   "fx_filter_occurrences": 2,
+   "fl_display_guess": null,
+   "confidence": "unknown",
+   "family": "multi-mode"
+  },
+  {
+   "state_value": "BandReject",
+   "voice_filter_occurrences": 6,
+   "fx_filter_occurrences": 4,
+   "fl_display_guess": null,
+   "confidence": "unknown",
+   "family": "notch/reject"
+  },
+  {
+   "state_value": "PZ_SVF",
+   "voice_filter_occurrences": 4,
+   "fx_filter_occurrences": 6,
+   "fl_display_guess": null,
+   "confidence": "unknown",
+   "family": "special"
+  },
+  {
+   "state_value": "MgL6",
+   "voice_filter_occurrences": 9,
+   "fx_filter_occurrences": 0,
+   "fl_display_guess": "MG Low 6",
+   "confidence": "pattern",
+   "family": "lowpass"
+  },
+  {
+   "state_value": "B24",
+   "voice_filter_occurrences": 7,
+   "fx_filter_occurrences": 2,
+   "fl_display_guess": "Band 24",
+   "confidence": "pattern",
+   "family": "bandpass"
+  },
+  {
+   "state_value": "Allpasses",
+   "voice_filter_occurrences": 2,
+   "fx_filter_occurrences": 6,
+   "fl_display_guess": null,
+   "confidence": "unknown",
+   "family": "comb/flange/phase"
+  },
+  {
+   "state_value": "Combs",
+   "voice_filter_occurrences": 1,
+   "fx_filter_occurrences": 7,
+   "fl_display_guess": null,
+   "confidence": "unknown",
+   "family": "comb/flange/phase"
+  },
+  {
+   "state_value": "L18",
+   "voice_filter_occurrences": 7,
+   "fx_filter_occurrences": 0,
+   "fl_display_guess": "Low 18",
+   "confidence": "pattern",
+   "family": "lowpass"
+  },
+  {
+   "state_value": "ExpBPF",
+   "voice_filter_occurrences": 6,
+   "fx_filter_occurrences": 1,
+   "fl_display_guess": null,
+   "confidence": "unknown",
+   "family": "special"
+  },
+  {
+   "state_value": "LNH24",
+   "voice_filter_occurrences": 4,
+   "fx_filter_occurrences": 3,
+   "fl_display_guess": null,
+   "confidence": "unknown",
+   "family": "multi-mode"
+  },
+  {
+   "state_value": "DJMixer",
+   "voice_filter_occurrences": 3,
+   "fx_filter_occurrences": 4,
+   "fl_display_guess": null,
+   "confidence": "unknown",
+   "family": "special"
+  },
+  {
+   "state_value": "RM",
+   "voice_filter_occurrences": 2,
+   "fx_filter_occurrences": 5,
+   "fl_display_guess": null,
+   "confidence": "unknown",
+   "family": "special"
+  },
+  {
+   "state_value": "B12",
+   "voice_filter_occurrences": 4,
+   "fx_filter_occurrences": 2,
+   "fl_display_guess": "Band 12",
+   "confidence": "pattern",
+   "family": "bandpass"
+  },
+  {
+   "state_value": "Exp",
+   "voice_filter_occurrences": 4,
+   "fx_filter_occurrences": 2,
+   "fl_display_guess": null,
+   "confidence": "unknown",
+   "family": "special"
+  },
+  {
+   "state_value": "PP12",
+   "voice_filter_occurrences": 2,
+   "fx_filter_occurrences": 4,
+   "fl_display_guess": null,
+   "confidence": "unknown",
+   "family": "multi-mode"
+  },
+  {
+   "state_value": "Comb2",
+   "voice_filter_occurrences": 2,
+   "fx_filter_occurrences": 4,
+   "fl_display_guess": null,
+   "confidence": "unknown",
+   "family": "comb/flange/phase"
+  },
+  {
+   "state_value": "FlangeN",
+   "voice_filter_occurrences": 1,
+   "fx_filter_occurrences": 5,
+   "fl_display_guess": null,
+   "confidence": "unknown",
+   "family": "comb/flange/phase"
+  },
+  {
+   "state_value": "Phase24P",
+   "voice_filter_occurrences": 1,
+   "fx_filter_occurrences": 5,
+   "fl_display_guess": null,
+   "confidence": "unknown",
+   "family": "comb/flange/phase"
+  },
+  {
+   "state_value": "BPN12",
+   "voice_filter_occurrences": 5,
+   "fx_filter_occurrences": 0,
+   "fl_display_guess": null,
+   "confidence": "unknown",
+   "family": "bandpass"
+  },
+  {
+   "state_value": "HP12",
+   "voice_filter_occurrences": 3,
+   "fx_filter_occurrences": 1,
+   "fl_display_guess": null,
+   "confidence": "unknown",
+   "family": "highpass"
+  },
+  {
+   "state_value": "LBH24",
+   "voice_filter_occurrences": 3,
+   "fx_filter_occurrences": 1,
+   "fl_display_guess": null,
+   "confidence": "unknown",
+   "family": "multi-mode"
+  },
+  {
+   "state_value": "FormantONE",
+   "voice_filter_occurrences": 2,
+   "fx_filter_occurrences": 2,
+   "fl_display_guess": null,
+   "confidence": "unknown",
+   "family": "formant/vowel"
+  },
+  {
+   "state_value": "LN12",
+   "voice_filter_occurrences": 1,
+   "fx_filter_occurrences": 3,
+   "fl_display_guess": null,
+   "confidence": "unknown",
+   "family": "multi-mode"
+  },
+  {
+   "state_value": "P12",
+   "voice_filter_occurrences": 0,
+   "fx_filter_occurrences": 4,
+   "fl_display_guess": null,
+   "confidence": "unknown",
+   "family": "special"
+  },
+  {
+   "state_value": "FlangeP",
+   "voice_filter_occurrences": 3,
+   "fx_filter_occurrences": 0,
+   "fl_display_guess": null,
+   "confidence": "unknown",
+   "family": "comb/flange/phase"
+  },
+  {
+   "state_value": "BN12",
+   "voice_filter_occurrences": 2,
+   "fx_filter_occurrences": 1,
+   "fl_display_guess": null,
+   "confidence": "unknown",
+   "family": "bandpass"
+  },
+  {
+   "state_value": "LPH24",
+   "voice_filter_occurrences": 2,
+   "fx_filter_occurrences": 1,
+   "fl_display_guess": null,
+   "confidence": "unknown",
+   "family": "multi-mode"
+  },
+  {
+   "state_value": "LB12",
+   "voice_filter_occurrences": 2,
+   "fx_filter_occurrences": 1,
+   "fl_display_guess": null,
+   "confidence": "unknown",
+   "family": "multi-mode"
+  },
+  {
+   "state_value": "Scream",
+   "voice_filter_occurrences": 2,
+   "fx_filter_occurrences": 1,
+   "fl_display_guess": null,
+   "confidence": "unknown",
+   "family": "special"
+  },
+  {
+   "state_value": "ADD_BASS",
+   "voice_filter_occurrences": 1,
+   "fx_filter_occurrences": 2,
+   "fl_display_guess": null,
+   "confidence": "unknown",
+   "family": "special"
+  },
+  {
+   "state_value": "Phase48P",
+   "voice_filter_occurrences": 1,
+   "fx_filter_occurrences": 2,
+   "fl_display_guess": null,
+   "confidence": "unknown",
+   "family": "comb/flange/phase"
+  },
+  {
+   "state_value": "L6",
+   "voice_filter_occurrences": 0,
+   "fx_filter_occurrences": 3,
+   "fl_display_guess": "Low 6",
+   "confidence": "pattern",
+   "family": "lowpass"
+  },
+  {
+   "state_value": "NN12",
+   "voice_filter_occurrences": 0,
+   "fx_filter_occurrences": 3,
+   "fl_display_guess": null,
+   "confidence": "unknown",
+   "family": "notch/reject"
+  },
+  {
+   "state_value": "SNH1",
+   "voice_filter_occurrences": 0,
+   "fx_filter_occurrences": 3,
+   "fl_display_guess": null,
+   "confidence": "unknown",
+   "family": "special"
+  },
+  {
+   "state_value": "FormantTWO",
+   "voice_filter_occurrences": 2,
+   "fx_filter_occurrences": 0,
+   "fl_display_guess": null,
+   "confidence": "unknown",
+   "family": "formant/vowel"
+  },
+  {
+   "state_value": "DistComb2LP",
+   "voice_filter_occurrences": 2,
+   "fx_filter_occurrences": 0,
+   "fl_display_guess": null,
+   "confidence": "unknown",
+   "family": "comb/flange/phase"
+  },
+  {
+   "state_value": "Scream3LP",
+   "voice_filter_occurrences": 1,
+   "fx_filter_occurrences": 1,
+   "fl_display_guess": null,
+   "confidence": "unknown",
+   "family": "special"
+  },
+  {
+   "state_value": "HEQ12",
+   "voice_filter_occurrences": 1,
+   "fx_filter_occurrences": 1,
+   "fl_display_guess": null,
+   "confidence": "unknown",
+   "family": "multi-mode"
+  },
+  {
+   "state_value": "H6",
+   "voice_filter_occurrences": 1,
+   "fx_filter_occurrences": 1,
+   "fl_display_guess": "High 6",
+   "confidence": "pattern",
+   "family": "highpass"
+  },
+  {
+   "state_value": "CombN",
+   "voice_filter_occurrences": 1,
+   "fx_filter_occurrences": 1,
+   "fl_display_guess": null,
+   "confidence": "unknown",
+   "family": "comb/flange/phase"
+  },
+  {
+   "state_value": "LPH12",
+   "voice_filter_occurrences": 0,
+   "fx_filter_occurrences": 2,
+   "fl_display_guess": null,
+   "confidence": "unknown",
+   "family": "special"
+  },
+  {
+   "state_value": "Phase12N",
+   "voice_filter_occurrences": 0,
+   "fx_filter_occurrences": 2,
+   "fl_display_guess": null,
+   "confidence": "unknown",
+   "family": "comb/flange/phase"
+  },
+  {
+   "state_value": "N12",
+   "voice_filter_occurrences": 0,
+   "fx_filter_occurrences": 2,
+   "fl_display_guess": null,
+   "confidence": "unknown",
+   "family": "notch/reject"
+  },
+  {
+   "state_value": "FormantTWB",
+   "voice_filter_occurrences": 0,
+   "fx_filter_occurrences": 2,
+   "fl_display_guess": null,
+   "confidence": "unknown",
+   "family": "formant/vowel"
+  },
+  {
+   "state_value": "CombHL6P",
+   "voice_filter_occurrences": 1,
+   "fx_filter_occurrences": 0,
+   "fl_display_guess": null,
+   "confidence": "unknown",
+   "family": "comb/flange/phase"
+  },
+  {
+   "state_value": "CombL6N",
+   "voice_filter_occurrences": 1,
+   "fx_filter_occurrences": 0,
+   "fl_display_guess": null,
+   "confidence": "unknown",
+   "family": "comb/flange/phase"
+  },
+  {
+   "state_value": "HB12",
+   "voice_filter_occurrences": 1,
+   "fx_filter_occurrences": 0,
+   "fl_display_guess": null,
+   "confidence": "unknown",
+   "family": "special"
+  },
+  {
+   "state_value": "FlangePhase12HL6P",
+   "voice_filter_occurrences": 1,
+   "fx_filter_occurrences": 0,
+   "fl_display_guess": null,
+   "confidence": "unknown",
+   "family": "comb/flange/phase"
+  },
+  {
+   "state_value": "Phase48H6P",
+   "voice_filter_occurrences": 1,
+   "fx_filter_occurrences": 0,
+   "fl_display_guess": null,
+   "confidence": "unknown",
+   "family": "comb/flange/phase"
+  },
+  {
+   "state_value": "LNH12",
+   "voice_filter_occurrences": 1,
+   "fx_filter_occurrences": 0,
+   "fl_display_guess": null,
+   "confidence": "unknown",
+   "family": "multi-mode"
+  },
+  {
+   "state_value": "Phase48HL6P",
+   "voice_filter_occurrences": 1,
+   "fx_filter_occurrences": 0,
+   "fl_display_guess": null,
+   "confidence": "unknown",
+   "family": "comb/flange/phase"
+  },
+  {
+   "state_value": "Phase24N",
+   "voice_filter_occurrences": 1,
+   "fx_filter_occurrences": 0,
+   "fl_display_guess": null,
+   "confidence": "unknown",
+   "family": "comb/flange/phase"
+  },
+  {
+   "state_value": "CombH6N",
+   "voice_filter_occurrences": 1,
+   "fx_filter_occurrences": 0,
+   "fl_display_guess": null,
+   "confidence": "unknown",
+   "family": "comb/flange/phase"
+  },
+  {
+   "state_value": "HN12",
+   "voice_filter_occurrences": 1,
+   "fx_filter_occurrences": 0,
+   "fl_display_guess": null,
+   "confidence": "unknown",
+   "family": "special"
+  },
+  {
+   "state_value": "DistComb1BP",
+   "voice_filter_occurrences": 1,
+   "fx_filter_occurrences": 0,
+   "fl_display_guess": null,
+   "confidence": "unknown",
+   "family": "comb/flange/phase"
+  },
+  {
+   "state_value": "DistComb1LP",
+   "voice_filter_occurrences": 1,
+   "fx_filter_occurrences": 0,
+   "fl_display_guess": null,
+   "confidence": "unknown",
+   "family": "comb/flange/phase"
+  },
+  {
+   "state_value": "LBH12",
+   "voice_filter_occurrences": 1,
+   "fx_filter_occurrences": 0,
+   "fl_display_guess": null,
+   "confidence": "unknown",
+   "family": "special"
+  },
+  {
+   "state_value": "Scream3BP",
+   "voice_filter_occurrences": 0,
+   "fx_filter_occurrences": 1,
+   "fl_display_guess": null,
+   "confidence": "unknown",
+   "family": "special"
+  },
+  {
+   "state_value": "CombHL6N",
+   "voice_filter_occurrences": 0,
+   "fx_filter_occurrences": 1,
+   "fl_display_guess": null,
+   "confidence": "unknown",
+   "family": "comb/flange/phase"
+  },
+  {
+   "state_value": "PN12",
+   "voice_filter_occurrences": 0,
+   "fx_filter_occurrences": 1,
+   "fl_display_guess": null,
+   "confidence": "unknown",
+   "family": "special"
+  },
+  {
+   "state_value": "FlangeHL6N",
+   "voice_filter_occurrences": 0,
+   "fx_filter_occurrences": 1,
+   "fl_display_guess": null,
+   "confidence": "unknown",
+   "family": "comb/flange/phase"
+  },
+  {
+   "state_value": "Phase12P",
+   "voice_filter_occurrences": 0,
+   "fx_filter_occurrences": 1,
+   "fl_display_guess": null,
+   "confidence": "unknown",
+   "family": "comb/flange/phase"
+  },
+  {
+   "state_value": "Phase36P",
+   "voice_filter_occurrences": 0,
+   "fx_filter_occurrences": 1,
+   "fl_display_guess": null,
+   "confidence": "unknown",
+   "family": "comb/flange/phase"
+  },
+  {
+   "state_value": "FlangeL6P",
+   "voice_filter_occurrences": 0,
+   "fx_filter_occurrences": 1,
+   "fl_display_guess": null,
+   "confidence": "unknown",
+   "family": "comb/flange/phase"
+  },
+  {
+   "state_value": "ZDF_A",
+   "voice_filter_occurrences": 0,
+   "fx_filter_occurrences": 1,
+   "fl_display_guess": null,
+   "confidence": "unknown",
+   "family": "lowpass"
+  },
+  {
+   "state_value": "N24",
+   "voice_filter_occurrences": 0,
+   "fx_filter_occurrences": 1,
+   "fl_display_guess": null,
+   "confidence": "unknown",
+   "family": "notch/reject"
+  },
+  {
+   "state_value": "HEQ6",
+   "voice_filter_occurrences": 0,
+   "fx_filter_occurrences": 1,
+   "fl_display_guess": null,
+   "confidence": "unknown",
+   "family": "special"
+  }
+ ],
+ "confidence_vocabulary": {
+  "verified-default": "absent kParamType displayed 'MG Low 12' live",
+  "pattern": "FL display name guessed from the state value pattern",
+  "unknown": "no display-name guess"
+ }
+}

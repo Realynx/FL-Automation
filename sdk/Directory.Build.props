@@ -1,0 +1,50 @@
+<Project>
+
+  <!-- Common settings shared by every project in the FruityLink SDK. -->
+  <PropertyGroup>
+    <LangVersion>latest</LangVersion>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <TreatWarningsAsErrors>false</TreatWarningsAsErrors>
+    <GenerateDocumentationFile>false</GenerateDocumentationFile>
+    <Deterministic>true</Deterministic>
+    <EnableNETAnalyzers>true</EnableNETAnalyzers>
+    <Authors>FruityLink</Authors>
+    <Product>FruityLink SDK</Product>
+    <!-- The SDK version stamped on every assembly, read from the sdk-root VERSION file:
+         the single source of truth. Never hand-edit a version anywhere else. -->
+    <ProductVersionFile>$(MSBuildThisFileDirectory)VERSION</ProductVersionFile>
+    <Version>$([System.IO.File]::ReadAllText('$(ProductVersionFile)').Trim())</Version>
+    <!-- The SDK is Windows-only by nature (it runs inside FL Studio); some projects target
+         plain net9.0 for testability, so silence the platform-compat analyzer repo-wide. -->
+    <NoWarn>$(NoWarn);CA1416</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <AdditionalFiles Include="$(MSBuildThisFileDirectory)CodeMetricsConfig.txt" />
+  </ItemGroup>
+
+  <!-- NuGet metadata shared by the packable SDK projects. Packing is OPT-IN:
+       developer-facing libraries set IsPackable=true (+ a Description) in their
+       own csproj; host/runtime projects ship via the installer, never NuGet.
+       The CI publish workflow (.github/workflows/nuget.yml) packs exactly the
+       opted-in set on every GitHub release. -->
+  <PropertyGroup>
+    <IsPackable>false</IsPackable>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <PackageProjectUrl>https://github.com/Realynx/FL-Automation</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/Realynx/FL-Automation</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
+    <PackageTags>fl-studio;fruitylink;plugin;daw;music;fl-automate</PackageTags>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <IncludeSymbols>true</IncludeSymbols>
+    <SymbolPackageFormat>snupkg</SymbolPackageFormat>
+  </PropertyGroup>
+
+  <!-- Item conditions are evaluated after ALL properties, so this sees each
+       project's final IsPackable value. -->
+  <ItemGroup Condition="'$(IsPackable)' == 'true'">
+    <None Include="$(MSBuildThisFileDirectory)README.md" Pack="true" PackagePath="\" />
+  </ItemGroup>
+
+</Project>
