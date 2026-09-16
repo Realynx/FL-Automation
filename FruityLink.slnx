@@ -5,37 +5,34 @@
     <Project Path="sdk/src/FruityLink.Host/FruityLink.Host.csproj" />
     <Project Path="sdk/src/FruityLink.Plugins.Abstractions/FruityLink.Plugins.Abstractions.csproj" />
     <Project Path="sdk/src/FruityLink.Plugins.Host/FruityLink.Plugins.Host.csproj" />
-    <Project Path="sdk/src/FruityLink.Scripting/FruityLink.Scripting.csproj" />
-    <Project Path="sdk/src/FruityLink.Ui.Avalonia.Hosting/FruityLink.Ui.Avalonia.Hosting.csproj" />
-  </Folder>
-  <Folder Name="/src/">
-    <Project Path="src/FruityLink.Agent/FruityLink.Agent.csproj" />
-    <Project Path="src/FruityLink.AppCore/FruityLink.AppCore.csproj" />
-    <Project Path="src/FruityLink.Knowledge/FruityLink.Knowledge.csproj" />
-    <Project Path="src/FruityLink.Llm/FruityLink.Llm.csproj" />
-    <Project Path="src/FruityLink.Persistence/FruityLink.Persistence.csproj" />
-    <Project Path="src/FruityLink.Speech/FruityLink.Speech.csproj" />
-    <Project Path="src/FruityLink.Ui.Avalonia/FruityLink.Ui.Avalonia.csproj" />
-  </Folder>
-  <Folder Name="/plugins/">
+    <Project Path="sdk/src/FruityLink.Plugins.Python/FruityLink.Plugins.Python.csproj" />
     <Project Path="sdk/src/FruityLink.Plugins.PythonIde/FruityLink.Plugins.PythonIde.csproj" />
-    <Project Path="src/FruityLink.Plugins.FlAgent/FruityLink.Plugins.FlAgent.csproj" />
+    <Project Path="sdk/src/FruityLink.Scripting/FruityLink.Scripting.csproj" />
+    <Project Path="sdk/src/FruityLink.SessionHost/FruityLink.SessionHost.csproj" />
+    <Project Path="sdk/src/FruityLink.Ui.Avalonia.Hosting/FruityLink.Ui.Avalonia.Hosting.csproj" />
+    <Project Path="sdk/src/FruityLink.Ui.Wpf.Hosting/FruityLink.Ui.Wpf.Hosting.csproj" />
   </Folder>
-  <Folder Name="/installer/">
-    <Project Path="installer/FruityLink.Installer/FruityLink.Installer.csproj" />
-    <Project Path="installer/FruityLink.Installer.Tests/FruityLink.Installer.Tests.csproj" />
+  <Folder Name="/samples/">
+    <Project Path="sdk/samples/HelloFl/HelloFl.csproj" />
   </Folder>
-  <Folder Name="/tests/">
-    <Project Path="tests/FruityLink.Agent.Tests/FruityLink.Agent.Tests.csproj" />
+  <Folder Name="/sdk-tests/">
+    <Project Path="sdk/tests/FruityLink.Plugins.PythonIde.Execution.Tests/FruityLink.Plugins.PythonIde.Execution.Tests.csproj" />
+    <Project Path="sdk/tests/FruityLink.EmbeddedPython.TestHost/FruityLink.EmbeddedPython.TestHost.csproj" />
+    <Project Path="sdk/tests/FruityLink.FlStudio.Tests/FruityLink.FlStudio.Tests.csproj" />
+    <Project Path="sdk/tests/FruityLink.Plugins.PythonIde.Ui.Tests/FruityLink.Plugins.PythonIde.Ui.Tests.csproj" />
+    <Project Path="sdk/tests/FruityLink.Scripting.Tests/FruityLink.Scripting.Tests.csproj" />
+    <Project Path="sdk/tests/FruityLink.Plugins.Python.Tests/FruityLink.Plugins.Python.Tests.csproj" />
+    <Project Path="sdk/tests/FruityLink.Hosting.Tests/FruityLink.Hosting.Tests.csproj" />
+    <Project Path="sdk/tests/FruityLink.Plugins.Host.Tests/FruityLink.Plugins.Host.Tests.csproj" />
+    <Project Path="sdk/tests/FruityLink.Plugins.Host.Tests/Fixture/Fixture.csproj" />
+    <Project Path="sdk/tests/FruityLink.Plugins.Host.Tests/Dependency/Dependency.csproj" />
+  </Folder>
+  <Folder Name="/public-tests/">
     <Project Path="tests/FruityLink.Core.Tests/FruityLink.Core.Tests.csproj" />
     <Project Path="tests/FruityLink.FlStudio.Tests/FruityLink.FlStudio.Tests.csproj" />
-    <Project Path="tests/FruityLink.Knowledge.Tests/FruityLink.Knowledge.Tests.csproj" />
-    <Project Path="tests/FruityLink.Llm.Tests/FruityLink.Llm.Tests.csproj" />
-    <Project Path="tests/FruityLink.Persistence.Tests/FruityLink.Persistence.Tests.csproj" />
-    <Project Path="tests/FruityLink.Ui.Avalonia.Tests/FruityLink.Ui.Avalonia.Tests.csproj" />
   </Folder>
   <Folder Name="/tools/">
-    <Project Path="tools/FruityLink.ManualIngest/FruityLink.ManualIngest.csproj" />
     <Project Path="tools/FruityLink.Probe/FruityLink.Probe.csproj" />
+    <Project Path="tools/SerumProbe/SerumProbe.csproj" />
   </Folder>
 </Solution>

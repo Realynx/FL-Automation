@@ -1,9 +1,0 @@
-{
-	"InstallScripts" : 
-	[
-		"C:/Users/poofi/source/repos/FruityLoopsLLMLink/bootstrap/build/cmake_install.cmake",
-		"C:/Users/poofi/source/repos/FruityLoopsLLMLink/bootstrap/build/VersionProxy/cmake_install.cmake",
-		"C:/Users/poofi/source/repos/FruityLoopsLLMLink/bootstrap/build/CLRHost/cmake_install.cmake"
-	],
-	"Parallel" : false
-}

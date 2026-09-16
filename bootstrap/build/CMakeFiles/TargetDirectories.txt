@@ -1,6 +1,0 @@
-C:/Users/poofi/source/repos/FruityLoopsLLMLink/bootstrap/build/CMakeFiles/ALL_BUILD.dir
-C:/Users/poofi/source/repos/FruityLoopsLLMLink/bootstrap/build/CMakeFiles/ZERO_CHECK.dir
-C:/Users/poofi/source/repos/FruityLoopsLLMLink/bootstrap/build/VersionProxy/CMakeFiles/VersionProxy.dir
-C:/Users/poofi/source/repos/FruityLoopsLLMLink/bootstrap/build/VersionProxy/CMakeFiles/ALL_BUILD.dir
-C:/Users/poofi/source/repos/FruityLoopsLLMLink/bootstrap/build/CLRHost/CMakeFiles/FlClrHost.dir
-C:/Users/poofi/source/repos/FruityLoopsLLMLink/bootstrap/build/CLRHost/CMakeFiles/ALL_BUILD.dir

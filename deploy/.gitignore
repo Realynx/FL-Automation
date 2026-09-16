@@ -1,4 +1,0 @@
-# Holds SSH targets + database passwords — never commit.
-servers.env
-*.env
-!servers.env.example
