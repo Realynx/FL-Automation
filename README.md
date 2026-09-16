@@ -1,6 +1,27 @@
-# FL Automate
+<div align="center">
 
-**Build FL Studio plugins and script FL Studio with C# and Python.**
+<img src="sdk/assets/logo.svg" width="104" alt="FL Automate" />
+
+<h1>FL Automate</h1>
+
+<p><strong>Build plugins and script FL Studio with C# and Python.</strong></p>
+
+<p>
+<img src="https://img.shields.io/badge/license-MIT-8b5cf6?style=flat-square" alt="MIT license" />
+<img src="https://img.shields.io/badge/.NET-9.0-7c3aed?style=flat-square" alt=".NET 9" />
+<img src="https://img.shields.io/badge/platform-Windows%20x64-d946ef?style=flat-square" alt="Windows x64" />
+</p>
+
+<p>
+<a href="https://realynx.github.io/FL-Automation/">Documentation</a> ·
+<a href="https://realynx.github.io/FL-Automation/getting-started/">Getting started</a> ·
+<a href="https://realynx.github.io/FL-Automation/csharp/">C# SDK</a> ·
+<a href="https://realynx.github.io/FL-Automation/python/">Python SDK</a>
+</p>
+
+</div>
+
+---
 
 FL Automate is the open-source FruityLink SDK and its accompanying tools. It
 provides a shared API for project editing, composition, mixing, automation,
