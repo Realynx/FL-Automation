@@ -43,7 +43,7 @@ class Studio:
         self.plugins = Plugins(self.ops)
         self.automation = Automation(self.ops)
         self.analysis = Analysis()
-        self.samples = Samples(_sample_paths(self.ops))
+        self.samples = Samples(self.ops, _sample_paths(self.ops))
         self.audio = Audio(self)
 
     @property

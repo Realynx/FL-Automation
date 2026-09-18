@@ -10,6 +10,21 @@ from .operations import Operations
 from .records import ClipResize, NoteEdit, NoteRef, NoteSpec, Timebase
 
 
+def pattern_length_ticks(ops: Operations, pattern: int) -> int:
+    """The host-reported length of a one-based pattern in ticks (``query_patterns`` ``lengthTick``).
+
+    This is the span a playlist clip of that pattern actually plays: FL does not loop a pattern clip,
+    so it is also the tile width ``fl.playlist.tile_pattern`` uses. Raises ``LookupError`` when the
+    pattern is not in the project or the host reports no usable length for it.
+    """
+    for item in ops.query_patterns():
+        if item.index == pattern:
+            if item.length_tick is None or item.length_tick <= 0:
+                raise LookupError(f"Pattern {pattern} has no host-reported length; pass explicit tick lengths.")
+            return item.length_tick
+    raise LookupError(f"Pattern {pattern} is not in the project.")
+
+
 class Notes:
     def __init__(self, ops: Operations, pattern: int) -> None:
         self._ops = ops
@@ -84,6 +99,15 @@ class Pattern(IndexedObject):
     @property
     def notes(self) -> Notes:
         return Notes(self._ops, self.index)
+
+    @property
+    def length_tick(self) -> int:
+        """Host-reported pattern length in ticks; the span one playlist clip of this pattern plays.
+
+        FL does not loop a pattern clip, so a playlist span longer than this needs one clip per
+        repetition (``fl.playlist.tile_pattern``). Raises ``LookupError`` when the host reports none.
+        """
+        return pattern_length_ticks(self._ops, self.index)
 
     def select(self) -> None:
         self._ops.select_pattern(index=self.index)

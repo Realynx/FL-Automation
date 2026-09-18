@@ -1,3 +1,4 @@
+using System.Linq;
 using FruityLink.Core.Abstractions;
 using System.Text.Json;
 
@@ -25,6 +26,37 @@ internal static class OperationAvailability
     private static readonly HashSet<string> MixerArm = new(StringComparer.Ordinal)
         { "set_mixer_track_armed", "get_mixer_track_armed" };
     private static readonly string[] MixerArmSymbols = { "FLmx_SetTrackArmed", "MixerTrackArmedOffset" };
+    // Recording filter: one signature over FL's own "Recording filter" menu handler yields both the pointer
+    // to the live bitmask and FL's setter, so the two symbols are refused together on an unmatched build.
+    private static readonly HashSet<string> RecordingFilter = new(StringComparer.Ordinal)
+        { "get_recording_filter", "set_recording_filter" };
+    private static readonly string[] RecordingFilterSymbols = { "RecordingFilterPtr", "FLrec_SetRecordingFilter" };
+    // The record button's pressed state: form pointer plus the two field offsets decode from one signature
+    // over FL's own ui.isRecording callback.
+    // Transport toggles: each name maps to the two symbols its own Action signature yields, plus the shared
+    // options manager slot/field the setters are reached through.
+    private static readonly Dictionary<string, string[]> TransportToggleSymbols = new(StringComparer.Ordinal)
+    {
+        ["metronome"] = new[] { "MetronomeStatePtr", "MetronomeSetterSlot" },
+        ["countdown"] = new[] { "PrecountStatePtr", "PrecountSetterSlot" },
+        ["wait_for_input"] = new[] { "WaitForInputStatePtr", "WaitForInputSetterSlot" },
+        ["loop_record"] = new[] { "LoopRecordStatePtr", "LoopRecordSetterSlot" },
+        ["blend_recorded_notes"] = new[] { "BlendRecordedStatePtr", "BlendRecordedSetterSlot" },
+    };
+    private static readonly string[] TransportOptionsSymbols = { "TransportOptionsPtr", "TransportOptionsFieldOffset" };
+
+    /// <summary>"get_metronome"/"set_loop_record"/... -> the toggle key, or null when it is not a toggle op.</summary>
+    private static string? ToggleKey(string operation)
+    {
+        foreach (string prefix in new[] { "get_", "set_" })
+            if (operation.StartsWith(prefix, StringComparison.Ordinal) &&
+                TransportToggleSymbols.ContainsKey(operation[prefix.Length..]))
+                return operation[prefix.Length..];
+        return null;
+    }
+
+    private static readonly string[] RecordButtonSymbols =
+        { "RecordButtonFormPtr", "RecordButtonOffset", "RecordButtonPressedOffset" };
     private static readonly HashSet<string> ProjectSave = new(StringComparer.Ordinal)
         { "save_project", "save_project_as", "save_copy", "save_new_version" };
     private static readonly HashSet<string> Automation = new(StringComparer.Ordinal)
@@ -40,6 +72,10 @@ internal static class OperationAvailability
         if (ConditionalMixer.Contains(operation)) return new[] { "mixer_layout_for_effect_slot" };
         if (Timeline.Contains(operation)) return new[] { "timeline_layout" };
         if (MixerArm.Contains(operation)) return new[] { "mixer_arm_symbols" };
+        if (RecordingFilter.Contains(operation)) return new[] { "recording_filter_symbols" };
+        if (operation == "get_record_pressed") return new[] { "record_button_symbols" };
+        if (operation == "get_recording_active") return new[] { "recording_state_symbols" };
+        if (ToggleKey(operation) is not null) return new[] { "transport_toggle_symbols" };
         if (Automation.Contains(operation)) return new[] { "automation_clips" };
         if (ProjectSave.Contains(operation) || StateSnapshot.Contains(operation)) return new[] { "project_note_validation" };
         return Array.Empty<string>();
@@ -69,6 +105,15 @@ internal static class OperationAvailability
             return "This operation requires a verified timeline layout for the running FL Studio build.";
         if (MixerArm.Contains(operation) && (status.MixerLayout is null || MixerArmSymbols.Any(status.Unresolved.Contains)))
             return "The native mixer record-arm symbols (FLmx_SetTrackArmed/MixerTrackArmedOffset) or the mixer layout are not resolved for the running FL Studio build; live per-insert capture is unavailable.";
+        if (ToggleKey(operation) is { } toggle &&
+            TransportToggleSymbols[toggle].Concat(TransportOptionsSymbols).Any(status.Unresolved.Contains))
+            return $"The native symbols for FL's {toggle.Replace('_', ' ')} toggle are not resolved for the running FL Studio build.";
+        if (operation == "get_recording_active" && status.Unresolved.Contains("RecordingActiveCountPtr"))
+            return "The native recording-state symbol (RecordingActiveCountPtr) is not resolved for the running FL Studio build.";
+        if (operation == "get_record_pressed" && RecordButtonSymbols.Any(status.Unresolved.Contains))
+            return "The native record-button symbols (RecordButtonFormPtr/RecordButtonOffset/RecordButtonPressedOffset) are not resolved for the running FL Studio build; the transport record state cannot be read there.";
+        if (RecordingFilter.Contains(operation) && RecordingFilterSymbols.Any(status.Unresolved.Contains))
+            return "The native recording-filter symbols (RecordingFilterPtr/FLrec_SetRecordingFilter) are not resolved for the running FL Studio build; the record button's Recording filter has to be set by hand there.";
         return null;
     }
 

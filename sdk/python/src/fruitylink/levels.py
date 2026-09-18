@@ -54,6 +54,10 @@ FADER_MAX_DB = 20 * FADER_EXPONENT * math.log10(1 / FADER_UNITY)
 
 MIXER_VOLUME_MAX = 16000
 MIXER_VOLUME_UNITY = 12800
+MIXER_PAN_MAX = 6400
+"""Mixer pan is SIGNED -6400..6400 with 0 = center, so an automation value is (raw + 6400) / 12800."""
+CHANNEL_PAN_MAX = 12800
+"""Channel pan is 0..12800 with 6400 = center, so an automation value is raw / 12800."""
 CHANNEL_VOLUME_MAX = 12800
 CHANNEL_VOLUME_UNITY = 10240
 CHANNEL_VOLUME_DEFAULT = 10000

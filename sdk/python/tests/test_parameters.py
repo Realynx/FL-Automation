@@ -209,19 +209,26 @@ def test_set_verified_writes_once_and_stops_at_the_first_matching_readback(
                                    result.normalized_after, True)
     assert result.normalized_after == pytest.approx(0.6)
     assert slept == [0.01]
-    operations = [call[1]["operation"] for call in transport.calls]
+    operations = [str(call[1]["operation"]) for call in transport.calls]
+    # The first guarded write probes the automation link index once per connection
+    # (see fruitylink.automation_links); this transport cannot answer it, so the guard
+    # gives up quietly instead of failing the write.
+    assert operations.count("query_clips") == 1
+    operations = [name for name in operations if name != "query_clips"]
     assert operations == ["query_plugin_parameters", "set_plugin_param", "query_plugin_parameters",
                           "query_plugin_parameters"]
-    assert transport.calls[1] == ("invoke", {"operation": "set_plugin_param", "arguments": {
+    assert transport.calls[2] == ("invoke", {"operation": "set_plugin_param", "arguments": {
         "channelOrTrack": 1, "slot": -1, "paramIndex": 199, "value": 0.6}})
 
 
 def test_set_verified_reports_unverified_after_exhausting_attempts(fl: Studio, transport: RecordingTransport) -> None:
-    transport.responses["query_plugin_parameters"] = _slot(199, "Sub Shape", 7, "Pulse")
+    # A readable normalized value that neither matches the written one nor moves is a genuine failure
+    # (an undecodable raw integer that does not move at all is the "already there" case below instead).
+    transport.responses["query_plugin_parameters"] = _slot(199, "Sub Shape", _bits(0.3), "Pulse")
     result = fl.channels[1].parameters.set_verified(199, 0.0, attempts=3, delay=0, sleep=lambda _: None)
     assert result.verified is False
     assert result.attempts == 3
-    assert result.raw_after == 7
+    assert result.raw_after == _bits(0.3)
     assert [call[1]["operation"] for call in transport.calls].count("set_plugin_param") == 1
 
 
@@ -298,7 +305,12 @@ def test_set_verified_reports_an_exactly_equal_slot_as_verified_and_unchanged(
     assert result.verified is True and result.unchanged is True
     assert result.attempts == 1 and result.display_changed is False
     assert result.raw_before == result.raw_after and result.normalized_after == 1.0
-    operations = [call[1]["operation"] for call in transport.calls]
+    operations = [str(call[1]["operation"]) for call in transport.calls]
+    # The first guarded write probes the automation link index once per connection
+    # (see fruitylink.automation_links); this transport cannot answer it, so the guard
+    # gives up quietly instead of failing the write.
+    assert operations.count("query_clips") == 1
+    operations = [name for name in operations if name != "query_clips"]
     assert operations == ["query_plugin_parameters", "set_plugin_param", "query_plugin_parameters"]
 
 
@@ -359,3 +371,48 @@ def test_set_verified_flips_a_native_switch_off_and_sees_the_integer_move(
     assert (result.verified, result.unchanged, result.display_changed) == (True, False, True)
     assert (result.raw_before, result.raw_after, result.attempts) == (1, 0, 1)
     assert result.normalized_after == 0.0
+
+
+def test_set_verified_on_an_undecodable_scale_that_already_holds_the_value(
+        fl: Studio, transport: RecordingTransport) -> None:
+    # Live 2026-09-17: Fruity Limiter "Gain" at rawValue 1000, display "0.0dB", normalized null.
+    # set_verified(0, 0.5) returned verified=False, attempts=6 twice in a row because the `unchanged`
+    # short-circuit only fired when the normalized readback was available. Nothing moved after an
+    # accepted write, so the slot already held the value: one readback, verified and unchanged.
+    transport.responses["query_plugin_parameters"] = _slot(0, "Gain", 1000, "0.0dB")
+    result = fl.mixer[0].effects[0].parameters.set_verified(0, 0.5, attempts=6, delay=0.05, sleep=lambda _: None)
+    assert (result.verified, result.unchanged, result.attempts) == (True, True, 1)
+    assert (result.raw_before, result.raw_after) == (1000, 1000)
+    assert result.normalized_after is None and result.display_changed is False
+    assert result.display_after == "0.0dB"
+    operations = [str(call[1]["operation"]) for call in transport.calls]
+    # The first guarded write probes the automation link index once per connection
+    # (see fruitylink.automation_links); this transport cannot answer it, so the guard
+    # gives up quietly instead of failing the write.
+    assert operations.count("query_clips") == 1
+    operations = [name for name in operations if name != "query_clips"]
+    assert operations == ["query_plugin_parameters", "set_plugin_param", "query_plugin_parameters"]
+
+
+def test_set_verified_on_an_undecodable_scale_that_moves_is_unaffected(
+        fl: Studio, transport: RecordingTransport) -> None:
+    # The same slot, a moving write: raw 1000 -> 1400, "0.0dB" -> "7.5dB" (live 2026-09-17, verified in two).
+    reads = iter([_slot(0, "Gain", 1000, "0.0dB"), _slot(0, "Gain", 1400, "7.5dB")])
+    transport.handler = lambda method, params: (
+        next(reads) if params["operation"] == "query_plugin_parameters" else None)
+    result = fl.mixer[0].effects[0].parameters.set_verified(0, 0.7, attempts=6, delay=0, sleep=lambda _: None)
+    assert (result.verified, result.unchanged, result.display_changed) == (True, False, True)
+    assert (result.raw_before, result.raw_after, result.attempts) == (1000, 1400, 1)
+    assert result.normalized_after is None
+
+
+def test_set_verified_still_reports_unverified_when_only_the_display_moves(
+        fl: Studio, transport: RecordingTransport) -> None:
+    # An undecodable raw value that stands still while the display moves is not "nothing had to change":
+    # something in the plugin did move, so the raw oracle cannot confirm the write and says so.
+    reads = iter([_slot(0, "Gain", 1000, "0.0dB")] + [_slot(0, "Gain", 1000, "7.5dB")] * 3)
+    transport.handler = lambda method, params: (
+        next(reads) if params["operation"] == "query_plugin_parameters" else None)
+    result = fl.mixer[0].effects[0].parameters.set_verified(0, 0.7, attempts=3, delay=0, sleep=lambda _: None)
+    assert (result.verified, result.unchanged, result.attempts) == (False, False, 3)
+    assert result.display_changed is True

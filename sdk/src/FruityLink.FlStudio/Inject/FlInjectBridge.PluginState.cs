@@ -32,23 +32,31 @@ public sealed partial class FlInjectBridge
         EnsureStateFileTargetsPlugin(full, pluginName);
         byte[]? before = await TryReadChannelStateRecordAsync(channel, ct);
 
-        if (useChannelLoader)
+        // Live (FL 26.1.3, Serum 2): the channel loader applied no state for .vstpreset/.SerumPreset files
+        // but RENAMED the channel to the file's base name. Only FL's own .fst goes through this route.
+        if (useChannelLoader && !full.EndsWith(".fst", StringComparison.OrdinalIgnoreCase))
+            throw new InvalidOperationException(
+                "useChannelLoader only accepts FL .fst files: for other formats FL's channel loader applies no state and renames the channel to the file name.");
+        string route;
+        if (useChannelLoader || RequiresChannelLoader(full, pluginName))
         {
-            // Live (FL 26.1.3, Serum 2): the channel loader applied no state for .vstpreset/.SerumPreset files
-            // but RENAMED the channel to the file's base name. Only FL's own .fst goes through this route.
-            if (!full.EndsWith(".fst", StringComparison.OrdinalIgnoreCase))
-                throw new InvalidOperationException(
-                    "useChannelLoader only accepts FL .fst files: for other formats FL's channel loader applies no state and renames the channel to the file name.");
-            await LoadIntoChannelAsync(obj, full, 0, ct);
+            string why = useChannelLoader
+                ? "requested"
+                : "automatic for an FL-native generator .fst: the wrapper dispatcher is a no-op for these";
+            string restored = await LoadThroughChannelLoaderAsync(channel, obj, full, ct);
+            route = $"FL's channel loader ({why}; {restored})";
         }
         else
+        {
             await DispatchLoadStateFileAsync(inst, full, ct);
+            route = "the wrapper's state-file dispatcher (opcode 0x12)";
+        }
         await RefreshRackAsync(ct);
 
         var (instAfter, countAfter, _) = await ResolvePluginAsync(channel, -1, ct);
         string nameAfter = await TryReadPluginHolderNameAsync(obj, ct);
         byte[]? after = await TryReadChannelStateRecordAsync(channel, ct);
-        return DescribeStateLoad($"channel {channel}", pluginName, nameAfter, inst, instAfter, count, countAfter, before, after, full);
+        return DescribeStateLoad($"channel {channel}", pluginName, nameAfter, inst, instAfter, count, countAfter, before, after, full, route);
     }
 
     /// <summary>Load a plugin state/preset file into the effect already loaded in a mixer FX slot.</summary>
@@ -71,7 +79,68 @@ public sealed partial class FlInjectBridge
         var (instAfter, countAfter, _) = await ResolvePluginAsync(track, slot, ct);
         string nameAfter = await TryReadPluginHolderNameAsync(obj, ct);
         byte[]? after = await TryReadMixerStateRecordAsync(track, slot, ct);
-        return DescribeStateLoad($"mixer track {track} slot {slot}", pluginName, nameAfter, inst, instAfter, count, countAfter, before, after, full);
+        return DescribeStateLoad($"mixer track {track} slot {slot}", pluginName, nameAfter, inst, instAfter, count, countAfter, before, after, full,
+            "the wrapper's state-file dispatcher (opcode 0x12)");
+    }
+
+    // ---- route selection: wrapper dispatcher vs FL's channel loader ----
+
+    /// <summary>FL's own VST/VST3 host: a channel (or FX slot) that hosts a WRAPPED third-party plugin reports this
+    /// as its plugin-holder name — Serum 2 reads "Fruity Wrapper", the same name its FLP plugin-name record carries
+    /// (see <c>FlpPluginStateReader</c>). Any other name is one of FL's own generators (Sytrus, Harmor, GMS, ...).</summary>
+    private const string FlWrapperPluginName = "Fruity Wrapper";
+
+    /// <summary>True when a <c>.fst</c> preset must go through FL's channel file loader instead of the wrapper
+    /// dispatcher, because opcode 0x12 does nothing for it. Live (FL 26.1.3.5570, 2026-09-17): a Sytrus factory
+    /// preset from <c>Data/Patches/Plugin presets/Generators/Sytrus</c> sent through the dispatcher left the state
+    /// record byte-identical ("state record unchanged (1271 bytes ...)"), while the channel loader changed 99% of
+    /// it; Harmor behaved the same way (47.5% changed). Wrapped plugins keep the dispatcher route, which is
+    /// live-verified for them and does not disturb the channel. An unknown holder name ("" — an unexpected layout,
+    /// see <see cref="TryReadPluginHolderNameAsync"/>) also keeps the dispatcher route, so a failed name read can
+    /// never silently change which route a caller gets.</summary>
+    internal static bool RequiresChannelLoader(string fullPath, string pluginName)
+        => fullPath.EndsWith(".fst", StringComparison.OrdinalIgnoreCase)
+           && pluginName.Length > 0
+           && !pluginName.Equals(FlWrapperPluginName, StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>Load a <c>.fst</c> through FL's channel file loader (the drag-and-drop path) with the channel's own
+    /// identity preserved. That loader treats the file as a channel to build, not as state to apply: live
+    /// (FL 26.1.3.5570, 2026-09-17) a Sytrus/Harmor preset load left the channel MUTED and RENAMED to the preset's
+    /// base name ("Sync Lead", "Rhodes"), while the mixer route survived. Name, mute and mixer route are therefore
+    /// snapshotted before the load and written back after it, each only when it actually moved (a redundant SET
+    /// would add an undo step and a bus notification for nothing). Returns the "restored ..." text for the
+    /// verification line. A channel with no name of its own reads back as "Channel N" (the shared
+    /// <see cref="GetChannelNameCoreAsync"/> fallback), so such a channel is restored to that literal name.</summary>
+    private async Task<string> LoadThroughChannelLoaderAsync(int channel, ulong obj, string fullPath, CancellationToken ct)
+    {
+        string nameBefore = await GetChannelNameCoreAsync(obj, channel, ct);
+        bool mutedBefore = await GetChannelMutedAsync(channel, ct);
+        int routeBefore = await GetChannelFxRouteAsync(channel, ct);
+
+        await LoadIntoChannelAsync(obj, fullPath, 0, ct);
+
+        string nameAfter = await GetChannelNameAsync(channel, ct);
+        bool mutedAfter = await GetChannelMutedAsync(channel, ct);
+        int routeAfter = await GetChannelFxRouteAsync(channel, ct);
+        if (!string.Equals(nameAfter, nameBefore, StringComparison.Ordinal)) await SetChannelNameAsync(channel, nameBefore, ct);
+        if (mutedAfter != mutedBefore) await SetChannelMutedAsync(channel, mutedBefore, ct);
+        if (routeAfter != routeBefore) await SetChannelFxRouteAsync(channel, routeBefore, ct);
+        return DescribeRestoredChannelState(nameBefore, nameAfter, mutedBefore, mutedAfter, routeBefore, routeAfter);
+    }
+
+    /// <summary>The "restored ..." half of the verification line: which of the channel's name, mute state and mixer
+    /// route the channel loader changed, and what each was put back to. Says so explicitly when the loader left all
+    /// three alone, so the line never implies a restore that did not happen.</summary>
+    internal static string DescribeRestoredChannelState(string nameBefore, string nameAfter, bool mutedBefore, bool mutedAfter,
+        int routeBefore, int routeAfter)
+    {
+        var restored = new List<string>();
+        if (!string.Equals(nameAfter, nameBefore, StringComparison.Ordinal)) restored.Add($"name '{nameAfter}' -> '{nameBefore}'");
+        if (mutedAfter != mutedBefore) restored.Add($"{(mutedAfter ? "muted" : "unmuted")} -> {(mutedBefore ? "muted" : "unmuted")}");
+        if (routeAfter != routeBefore) restored.Add($"mixer route {routeAfter} -> {routeBefore}");
+        return restored.Count == 0
+            ? "name, mute and mixer route survived the load, nothing to restore"
+            : "restored " + string.Join(", ", restored);
     }
 
     // ---- read state ----
@@ -194,7 +263,9 @@ public sealed partial class FlInjectBridge
         utf8.CopyTo(buf, 0);
         await PokeAbsAsync(pathPtr, buf, ct);
         // Plugin loads can block on file IO and UI refresh; allow more than the default guard timeout.
-        await CallAbsAsync(fn, new ulong[] { inst, PluginDispatchLoadStateFile, 0, pathPtr }, ct, timeoutMs: 20000);
+        // Same budget as generator/effect instantiation (PluginInstantiationTimeoutMs).
+        await CallAbsAsync(fn, new ulong[] { inst, PluginDispatchLoadStateFile, 0, pathPtr }, ct,
+            timeoutMs: PluginInstantiationTimeoutMs);
     }
 
     private static string ResolveStateFile(string path)
@@ -205,15 +276,18 @@ public sealed partial class FlInjectBridge
         return full;
     }
 
-    /// <summary>Identity guard for FL <c>.fst</c> presets: the file embeds the wrapper's plugin display name as
-    /// UTF-16; if the hosted plugin's name is known and absent from the file, the preset targets another plugin.
-    /// Other formats (.vstpreset/.fxp) are validated by the wrapper itself (class id / fxID) and pass through.</summary>
-    private static void EnsureStateFileTargetsPlugin(string fullPath, string pluginName)
+    /// <summary>Identity guard for FL <c>.fst</c> presets: the file embeds the plugin's display name, as UTF-16 for
+    /// wrapped VST/VST3 plugins (Serum 2) and as a single-byte ANSI/UTF-8 string for FL's own generators (Sytrus,
+    /// Harmor, ... store a NUL-terminated "Sytrus" right after the FLdt version tag); if the hosted plugin's name is known and absent
+    /// in BOTH encodings, the preset targets another plugin. Other formats (.vstpreset/.fxp) are validated by the
+    /// wrapper itself (class id / fxID) and pass through.</summary>
+    internal static void EnsureStateFileTargetsPlugin(string fullPath, string pluginName)
     {
         if (pluginName.Length == 0 || !fullPath.EndsWith(".fst", StringComparison.OrdinalIgnoreCase)) return;
         byte[] data = File.ReadAllBytes(fullPath);
-        byte[] needle = Encoding.Unicode.GetBytes(pluginName);
-        if (data.AsSpan().IndexOf(needle) < 0)
+        byte[] utf16 = Encoding.Unicode.GetBytes(pluginName);
+        byte[] ansi = Encoding.UTF8.GetBytes(pluginName);
+        if (data.AsSpan().IndexOf(utf16) < 0 && data.AsSpan().IndexOf(ansi) < 0)
             throw new InvalidOperationException(
                 $"Preset '{Path.GetFileName(fullPath)}' does not name the hosted plugin '{pluginName}'; refusing to load a state file for a different plugin.");
     }
@@ -268,11 +342,11 @@ public sealed partial class FlInjectBridge
         => Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(data), 0, 4).ToLowerInvariant();
 
     private static string DescribeStateLoad(string target, string nameBefore, string nameAfter, ulong instBefore, ulong instAfter,
-        int countBefore, int countAfter, byte[]? before, byte[]? after, string fullPath)
+        int countBefore, int countAfter, byte[]? before, byte[]? after, string fullPath, string route)
     {
         string swap = instBefore == instAfter ? "same instance" : "INSTANCE REPLACED";
         string name = string.Equals(nameBefore, nameAfter, StringComparison.Ordinal) ? $"'{nameBefore}'" : $"'{nameBefore}' -> '{nameAfter}'";
-        return $"{target}: loaded '{Path.GetFileName(fullPath)}' into {name} ({swap}; params {countBefore}->{countAfter}; " +
+        return $"{target}: loaded '{Path.GetFileName(fullPath)}' into {name} via {route} ({swap}; params {countBefore}->{countAfter}; " +
                $"{DescribeStateEvidence(before, after)}). Parameter displays are reliable in a separate request.";
     }
 }

@@ -269,12 +269,15 @@ public sealed partial class FlInjectBridge
     }
 
     /// <summary>Load/clear a plugin through the profile's mixer FX slot load method.
-    /// mode 0xFFFFFFFD = insert, 0xFFFFFFFE = clear.</summary>
+    /// mode 0xFFFFFFFD = insert, 0xFFFFFFFE = clear. Guarded by
+    /// <see cref="PluginInstantiationTimeoutMs"/>, not the ordinary 5 s call budget: this call runs the
+    /// effect's own constructor on FL's UI thread.</summary>
     private async Task LoadIntoMixerSlotAsync(ulong slot, uint mode, string path, FlMixerLayout layout, CancellationToken ct)
     {
         using var scratch = await LeaseScratchAsync(ct).ConfigureAwait(false);
         ulong strPtr = await WriteDelphiStringAsync(path, scratch, ct);
-        await CallVtblAsync(slot, (uint)layout.EffectLoadVtableOffset, "Mixer slot load", new ulong[] { slot, mode, strPtr, 0, 1, 1 }, ct);
+        await CallVtblAsync(slot, (uint)layout.EffectLoadVtableOffset, "Mixer slot load", new ulong[] { slot, mode, strPtr, 0, 1, 1 }, ct,
+            timeoutMs: PluginInstantiationTimeoutMs);
     }
 
     // ---- mixer FX slots ----
@@ -319,15 +322,48 @@ public sealed partial class FlInjectBridge
         return sb.ToString().TrimEnd();
     }
 
-    /// <summary>Loads/replaces the named effect plugin into a mixer track's FX slot (0-9).</summary>
-    public async Task AddMixerEffectAsync(int track, int slot, string pluginName, CancellationToken ct = default)
+    /// <summary>Loads/replaces the named effect plugin into a mixer track's FX slot (0-9) and returns a
+    /// verification line naming the slot and the effect the slot reports afterwards.</summary>
+    public async Task<string> AddMixerEffectAsync(int track, int slot, string pluginName, CancellationToken ct = default)
     {
         var layout = await MixerLayoutAsync(ct);
         string path = ResolveFstPath(pluginName, effects: true);
         ulong so = await MixerSlotObjAsync(track, slot, layout, ct);
         if (so == 0) throw new InvalidOperationException($"Mixer slot {track}/{slot} not found.");
-        await LoadIntoMixerSlotAsync(so, 0xFFFFFFFDu, path, layout, ct);  // mode -3 = insert
-        await RefreshMixerSlotAsync(track, slot, ct);
+        string target = $"mixer track {track} slot {slot}";
+        string note = await LoadPluginWithRecoveryAsync(target, pluginName,
+            () => LoadIntoMixerSlotAsync(so, 0xFFFFFFFDu, path, layout, ct),  // mode -3 = insert
+            () => ReadMixerSlotPluginNameAsync(track, slot, layout, ct),
+            delay => Task.Delay(delay, ct));
+        // After a recovered first load FL may still be catching up; the slot already holds the plugin,
+        // so a refresh that cannot get through must not turn a successful load into a failure.
+        try { await RefreshMixerSlotAsync(track, slot, ct); }
+        catch (TimeoutException) when (note.Length > 0) { }
+        string loaded = await TryReadMixerSlotPluginNameAsync(track, slot, layout, ct);
+        return $"{target}: '{(loaded.Length > 0 ? loaded : pluginName)}' loaded{note}";
+    }
+
+    /// <summary>The effect name a mixer FX slot reports, or "" when the slot is empty or its name field is
+    /// unreadable. Reads the SAME two fields <see cref="ListMixerEffectsAsync"/> uses, off a FRESHLY resolved
+    /// slot object (a load must not be verified through a pointer taken before it). A transport timeout is NOT
+    /// swallowed: the instantiation recovery has to tell "slot is empty" apart from "FL is still wedged".</summary>
+    private async Task<string> ReadMixerSlotPluginNameAsync(int track, int slot, FlMixerLayout layout, CancellationToken ct)
+    {
+        try
+        {
+            ulong slotObj = await MixerSlotObjAsync(track, slot, layout, ct);
+            if (slotObj == 0 || await AI32Async(slotObj + (ulong)layout.EffectIndexOffset, ct) < 0) return "";
+            string name = await ReadDelphiStringAsync(await APtrAsync(slotObj + (ulong)layout.EffectNameOffset, ct), ct);
+            return name.Length > 0 && !name.Any(char.IsControl) ? name : "";
+        }
+        catch (InvalidOperationException) { return ""; }
+    }
+
+    /// <summary>Best-effort variant for the verification line: a readback must never fail a load that worked.</summary>
+    private async Task<string> TryReadMixerSlotPluginNameAsync(int track, int slot, FlMixerLayout layout, CancellationToken ct)
+    {
+        try { return await ReadMixerSlotPluginNameAsync(track, slot, layout, ct); }
+        catch (Exception error) when (error is TimeoutException or IOException) { return ""; }
     }
 
     /// <summary>Refresh a mixer FX slot after loading/clearing its plugin (dispatch id

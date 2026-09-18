@@ -5,6 +5,7 @@ using System.Linq;
 using System.Text;
 using System.Text.Json;
 using FruityLink.Core.Abstractions;
+using FruityLink.Core.Hosting;
 
 namespace FruityLink.FlStudio.Inject;
 
@@ -174,7 +175,9 @@ public sealed partial class FlInjectBridge
     }
 
     /// <summary>Load a file (.fst plugin or audio) into a channel via its host load method:
-    /// (*(*ch+0x150))(ch, path, mode, 0x42). mode 0 = plugin/preset, 1 = load sample.</summary>
+    /// (*(*ch+0x150))(ch, path, mode, 0x42). mode 0 = plugin/preset, 1 = load sample.
+    /// Guarded by <see cref="PluginInstantiationTimeoutMs"/>, not the ordinary 5 s call budget: this call
+    /// runs the plugin's own constructor on FL's UI thread.</summary>
     private async Task LoadIntoChannelAsync(ulong ch, string path, uint mode, CancellationToken ct)
     {
         // FL's channel load path (vtbl+0x150) is NOT re-entrant across rapid successive instantiations:
@@ -197,7 +200,8 @@ public sealed partial class FlInjectBridge
             // "callabs faulted" on 2026, RE 2026-07-10). Pass the full list: p5=0, p6 = raw bits of double -1.0
             // (0xBFF0000000000000). The extra trailing arg is ignored by the narrower 2025 method (x64: args
             // 5+ live on the stack), so this is correct on BOTH versions.
-            await CallVtblAsync(ch, 0x150, "Channel load", new ulong[] { ch, strPtr, mode, 0x42, 0, 0xBFF0000000000000UL }, ct);
+            await CallVtblAsync(ch, 0x150, "Channel load", new ulong[] { ch, strPtr, mode, 0x42, 0, 0xBFF0000000000000UL }, ct,
+                timeoutMs: PluginInstantiationTimeoutMs);
         }
         finally
         {
@@ -251,32 +255,39 @@ public sealed partial class FlInjectBridge
         catch (InvalidOperationException) { return ""; }
     }
 
-    /// <summary>Adds a new channel-rack channel hosting the named generator plugin; returns its index.</summary>
+    /// <summary>Adds a new channel-rack channel hosting the named generator plugin; returns its index.
+    /// The instantiation runs under <see cref="PluginInstantiationTimeoutMs"/>, and a guard expiry is
+    /// re-checked against the channel's plugin name once before it is allowed to fail the call
+    /// (see <see cref="LoadPluginWithRecoveryAsync"/>); the recovery note goes to the op log, because
+    /// this operation's return value is the channel index.</summary>
     public async Task<int> AddChannelAsync(string pluginName, CancellationToken ct = default)
     {
         string path = ResolveFstPath(pluginName, effects: false);
         int before = await GetChannelCountAsync(ct);
         ulong ch = await CallAsync("f215e0", new ulong[] { (uint)before, 0, 0 }, ct);  // FLcr_InsertChannel
         if (ch == 0) throw new InvalidOperationException("Could not insert a channel.");
-        await LoadIntoChannelAsync(ch, path, 0, ct);
-        await RefreshRackAsync(ct);
+        string note = await LoadPluginWithRecoveryAsync($"channel {before}", pluginName,
+            () => LoadIntoChannelAsync(ch, path, 0, ct),
+            () => TryReadPluginHolderNameAsync(ch, ct),
+            delay => Task.Delay(delay, ct));
+        if (note.Length > 0) LogOp("AddChannel", $"channel={before} plugin={pluginName}{note}");
+        // A recovered first load already put the generator in the rack; a rack refresh FL is still too
+        // busy to answer must not fail the call.
+        try { await RefreshRackAsync(ct); }
+        catch (TimeoutException) when (note.Length > 0) { }
         return before;
     }
 
     // ---- samples ----
     private static readonly string[] SampleExts = { ".wav", ".aif", ".aiff", ".mp3", ".ogg", ".flac", ".rx2" };
 
-    /// <summary>The sample search roots with their entry tags: [P] = FL factory packs, [U] = the
-    /// user's Image-Line documents content. Shared by the lister (emits tagged relative paths) and
-    /// the resolver (maps them back to full paths), so the two can never drift apart.</summary>
-    private static (string Root, string Tag)[] SampleRoots()
-    {
-        var roots = new List<(string, string)>();
-        string? install = FlInstallDir();
-        if (install != null) roots.Add((Path.Combine(install, "Data", "Patches", "Packs"), "[P]"));
-        roots.Add((Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "Image-Line", "FL Studio"), "[U]"));
-        return roots.ToArray();
-    }
+    /// <summary>The sample search roots with their entry tags: [B1], [B2], ... = the folders FL's
+    /// browser searches in addition to its own (plus anything FRUITYLINK_SAMPLE_ROOTS adds), [P] = FL
+    /// factory packs, [U] = the user's Image-Line documents content. Shared by the lister (emits tagged
+    /// relative paths) and the resolver (maps them back to full paths), so the two can never drift
+    /// apart, and defined once in <see cref="FlSampleRoots"/> so the MCP staging policy agrees with it.
+    /// The user's own folders come first because the factory packs are huge and a listing is capped.</summary>
+    private static IReadOnlyList<(string Root, string Tag)> SampleRoots() => FlSampleRoots.Discover(FlInstallDir());
 
     /// <summary>Resolve a sample reference back to a full path: accepts a full path, a root-tagged
     /// relative path from <see cref="ListSamplesAsync"/> ("[P]Drums\Kicks\x.wav"), or a bare relative
@@ -295,12 +306,13 @@ public sealed partial class FlInjectBridge
         return samplePath;
     }
 
-    /// <summary>Lists audio samples from FL's factory packs + the user's content, optionally filtered
-    /// by name (path substring). Emits ROOT-TAGGED RELATIVE paths ([P]/[U] + path) with a one-line
+    /// <summary>Lists audio samples from every search root, optionally filtered by name (path
+    /// substring). Emits ROOT-TAGGED RELATIVE paths ([B1]/[B2]/.../[P]/[U] + path) with a one-line
     /// root legend instead of full paths: the pack root repeats ~60 identical characters per entry,
     /// which is pure token waste for the model. Unfiltered output is capped hard at 40 entries (with
-    /// a "(N more — pass a filter)" nudge) because a broad listing is a browse, not a lookup.</summary>
-    public Task<string> ListSamplesAsync(string? filter, CancellationToken ct = default)
+    /// a "(N more — pass a filter)" nudge) because a broad listing is a browse, not a lookup; the
+    /// user's own browser folders are therefore scanned before FL's factory packs.</summary>
+    public Task<string> ListSamplesAsync(string? filter = null, CancellationToken ct = default)
     {
         var roots = SampleRoots();
         int cap = string.IsNullOrEmpty(filter) ? 40 : 150;
@@ -326,7 +338,7 @@ public sealed partial class FlInjectBridge
         }
         if (hits.Count == 0) return Task.FromResult(string.IsNullOrEmpty(filter) ? "(no samples found)" : $"(no samples matching '{filter}')");
         string legend = string.Join(" ", roots.Where(r => Directory.Exists(r.Root)).Select(r => $"{r.Tag}={r.Root}"));
-        string head = $"{hits.Count} of {total}{(truncatedScan ? "+" : "")} samples{(string.IsNullOrEmpty(filter) ? "" : $" matching '{filter}'")}. Roots: {legend}. Pass an entry verbatim to native_add_sample_channel.\n";
+        string head = $"{hits.Count} of {total}{(truncatedScan ? "+" : "")} samples{(string.IsNullOrEmpty(filter) ? "" : $" matching '{filter}'")}. Roots: {legend}. Pass an entry verbatim to add_sample_channel / replace_channel_sample (a managed MCP session copies it into its workspace first).\n";
         string more = total > hits.Count ? $"\n({total - hits.Count}{(truncatedScan ? "+" : "")} more — pass a filter)" : "";
         return Task.FromResult(head + string.Join("\n", hits) + more);
     }

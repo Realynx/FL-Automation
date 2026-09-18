@@ -202,16 +202,83 @@ class AutomationPointSpec:
 
 @dataclass(frozen=True)
 class AutomationClipResult:
+    """A created automation clip: the channel that now OWNS the target, and the playlist clip index.
+
+    The link belongs to ``channel``, not to ``clip_index``: FL writes this clip's initial value into
+    the target every time playback starts, and deleting the playlist clip does not unlink it (FL has
+    no channel delete). Plain writes to that control therefore stop being audible until
+    ``fl.automation.release(channel)`` flattens the curve - see ``link_notice``.
+    """
+
     channel: int
     clip_index: int
+
+    @property
+    def link_notice(self) -> str:
+        """One sentence stating that the target stays linked to ``channel`` until it is released."""
+        return (f"Automation channel {self.channel} now owns this target: FL reapplies this clip's initial "
+                f"value to it every time playback starts, and deleting the clip does not unlink it, so "
+                f"plain writes stay inaudible until fl.automation.release({self.channel}).")
+
+
+class ReleaseResult(float):
+    """The value a released curve now holds, plus the clip placement that makes FL apply it.
+
+    This IS the float ``release`` returns, so ``level = fl.automation.release(channel)`` and any
+    arithmetic on it keep working. The extra fields report the playlist edit: FL only evaluates a
+    curve through a PLACED clip, so ``release`` places one when the channel has none (live evidence
+    2026-09-17: with no clip, releasing to 0.8 and to 0.4 both measured -19.6 dBFS at the master;
+    with a clip, the same two releases measured -19.60 and -32.18 dBFS, the 12.58 dB the fader model
+    predicts). ``placed_clip`` is False when a placement already existed or ``place_clip=False``
+    was passed, and then ``track``/``clip_index`` are -1 and ``length_tick`` is 0.
+    """
+
+    placed_clip: bool
+    track: int
+    start_tick: int
+    length_tick: int
+    clip_index: int
+
+    def __new__(cls, value: float, *, placed_clip: bool = False, track: int = -1, start_tick: int = 0,
+                length_tick: int = 0, clip_index: int = -1) -> "ReleaseResult":
+        result = super().__new__(cls, value)
+        result.placed_clip = placed_clip
+        result.track = track
+        result.start_tick = start_tick
+        result.length_tick = length_tick
+        result.clip_index = clip_index
+        return result
+
+    @property
+    def value(self) -> float:
+        """The released automation value 0..1 (the same number this object already is)."""
+        return float(self)
+
+    def __repr__(self) -> str:
+        where = (f", placed on track {self.track} @ {self.start_tick} len {self.length_tick} "
+                 f"(clip {self.clip_index})" if self.placed_clip else "")
+        return f"ReleaseResult({float(self)!r}{where})"
 
 
 @dataclass(frozen=True)
 class PumpResult:
-    """A placed sidechain-style curve: the created clip and how many envelope points it holds."""
+    """A placed sidechain-style curve: the created clip and how many envelope points it holds.
+
+    ``link_notice`` repeats the ownership rule: the target stays linked until it is released.
+    """
 
     clip: AutomationClipResult
     point_count: int
+
+    @property
+    def channel(self) -> int:
+        """The automation channel that holds the curve and the link."""
+        return self.clip.channel
+
+    @property
+    def link_notice(self) -> str:
+        """``AutomationClipResult.link_notice`` of the created clip."""
+        return self.clip.link_notice
 
 
 @dataclass(frozen=True)

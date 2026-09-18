@@ -66,8 +66,17 @@ def test_record_arguments_keep_camel_case_wire_names(fl: Studio, transport: Reco
 
 
 def test_nullable_without_default_stays_required(fl: Studio) -> None:
-    assert inspect.signature(fl.ops.list_samples).parameters["filter"].default is inspect.Parameter.empty
+    # A nullable parameter the contract gives no default to is still required in the generated signature...
+    assert inspect.signature(fl.ops.add_arrangement).parameters["name"].default is inspect.Parameter.empty
     assert inspect.signature(fl.ops.get_notes).parameters["offset"].default == 0
+
+
+def test_optional_filters_default_to_none(fl: Studio) -> None:
+    """...but a filter must not be: list_samples(filter=...) was a required keyword, so a plain browse
+    raised `Operations.list_samples() missing 1 required keyword-only argument: 'filter'` (live 2026-09-18)."""
+    for operation in (fl.ops.list_samples, fl.ops.list_plugin_params, fl.ops.query_samples,
+                      fl.ops.query_plugin_parameters):
+        assert inspect.signature(operation).parameters["filter"].default is None, operation.__name__
 
 
 @pytest.mark.parametrize("value", [float("nan"), float("inf"), object(), {(1, 2): "bad"},

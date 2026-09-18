@@ -9,6 +9,8 @@ from dataclasses import dataclass, replace
 from typing import Any
 
 from ._collection import checked_index, iter_pages
+from .automation_links import LinkMode, check
+from .automation_records import AutomationTarget
 from .errors import ProtocolError
 from .models import Page, PluginParameterInfo
 from .operations import Operations
@@ -94,10 +96,16 @@ class VerifiedWrite:
     the value before the write (then ``unchanged`` is True: nothing needed to move, the write is in
     place). A native FL switch reports raw 0/1, which decodes to the normalized value, so an
     already-on switch takes the ``unchanged`` path; a wider native integer scale carries no
-    readable value, and only its movement can be checked.
+    readable value (``normalized_after`` is None), so the write is judged by movement alone and a
+    first readback that moved neither the integer nor the display is also ``unchanged``.
     ``display_changed`` reports whether the plugin's display string moved away from
     ``display_before``; False can mean the display still lags the write (see set_verified), that
     the new value shares a label, or simply that the slot was already there (``unchanged``).
+
+    ``automation_linked`` is non-empty when an automation clip channel owns this parameter: the
+    write landed and reads back, but FL reapplies that clip's initial value on every play, so
+    ``verified=True`` does NOT mean the value survives playback (see ``fruitylink.automation_links``
+    and ``fl.automation.release``). It holds the same text the ``AutomationLinkedWarning`` carries.
     """
 
     index: int
@@ -112,6 +120,7 @@ class VerifiedWrite:
     normalized_after: float | None = None
     display_changed: bool = False
     unchanged: bool = False
+    automation_linked: tuple[str, ...] = ()
 
 
 class Parameters:
@@ -163,9 +172,20 @@ class Parameters:
     def list_text(self, filter: str | None = None) -> str:
         return self._ops.list_plugin_params(channel_or_track=self.channel_or_track, slot=self.slot, filter=filter)
 
-    def set(self, index: int, value: float) -> None:
+    def set(self, index: int, value: float, *, linked: LinkMode = "warn") -> None:
+        """Write one parameter as a normalized 0..1 value.
+
+        ``linked`` decides what happens when an automation clip channel owns this parameter:
+        ``"warn"`` (default) emits ``AutomationLinkedWarning``, ``"raise"`` raises it before writing,
+        ``"ignore"`` writes with no lookup. FL reapplies the clip's initial value to a linked
+        parameter every time playback starts, so a warned write is audible only until the next play;
+        ``fl.automation.release()`` flattens the curve instead (see ``fruitylink.automation_links``).
+        """
+        param = checked_index(index)
+        check(self._ops, AutomationTarget("plugin_parameter", self.channel_or_track, self.slot, param),
+              linked=linked)
         self._ops.set_plugin_param(channel_or_track=self.channel_or_track, slot=self.slot,
-                                   param_index=checked_index(index), value=value)
+                                   param_index=param, value=value)
 
     def set_named(self, name: str, value: float) -> int:
         """Set one exact, case-sensitive unique parameter name and return its index.
@@ -207,7 +227,7 @@ class Parameters:
 
     def set_verified(self, parameter: int | str, value: float, *, attempts: int = 6,
                      delay: float = 0.05, sleep: Callable[[float], None] = time.sleep,
-                     settle_display: bool = True) -> VerifiedWrite:
+                     settle_display: bool = True, linked: LinkMode = "warn") -> VerifiedWrite:
         """Write one parameter, then read it back until the host reports the new value.
 
         Why this exists (live evidence, Ember Tides v006/v014, Serum 2 and Pro-L 2): the
@@ -229,12 +249,23 @@ class Parameters:
         FL switches, which report a plain 0/1 rather than float32 bits: writing 1.0 to a
         "Tempo sync" that already reads raw 1 returns after one readback (live evidence
         2026-09-14, Fruity Delay 3; before the 0/1 decode it burned every attempt and reported
-        ``verified=False``). ``verified`` is False only when the raw value neither matched nor
-        moved, which for a wider native integer scale (a 0..65535 knob, whose value the SDK
-        cannot decode) is also what a write onto the value the slot already held looks like.
+        ``verified=False``). A wider native integer scale (a 0..65535 knob, whose value the SDK
+        cannot decode) is treated the same way once the first readback shows that neither the raw
+        integer nor the display moved: the write was accepted and nothing changed, so the slot
+        already held the value and the result is ``verified=True, unchanged=True, attempts=1``
+        with ``normalized_after=None`` (live evidence 2026-09-17, Fruity Limiter "Gain" at raw
+        1000 / "0.0dB": writing 0.5 used to burn all six attempts and report ``verified=False``).
+        ``verified`` is therefore False only when a *readable* normalized value neither matched nor
+        moved, or when the display moved while the raw value did not.
         ``display_changed`` is False when the display did not move in time, the new value
         shares the old label, or nothing had to change - read again in a later request before
         quoting a display.
+
+        A parameter an automation clip channel owns is a different kind of failure, which no
+        readback can see: the write lands and verifies, and FL then reapplies the clip's initial
+        value on every play. ``linked`` ("warn" by default, or "raise" / "ignore") controls the
+        check, and ``VerifiedWrite.automation_linked`` carries its text, so a verified write can
+        still be reported as not surviving playback.
         """
         if isinstance(value, bool) or not isinstance(value, (int, float)) or not 0 <= value <= 1:
             raise ValueError("Plugin parameter value must be a number within 0..1.")
@@ -242,16 +273,28 @@ class Parameters:
         if isinstance(delay, bool) or not isinstance(delay, (int, float)) or not 0 <= delay <= 5:
             raise ValueError("Readback delay must be 0..5 seconds.")
         index = self.find(parameter).index if isinstance(parameter, str) else checked_index(parameter)
+        notices = check(self._ops, AutomationTarget("plugin_parameter", self.channel_or_track, self.slot, index),
+                        linked=linked)
         before = self.read(index)
         target = float(value)
         already = normalized_from_raw(before.raw_value)
         unchanged = already is not None and abs(already - target) <= NORMALIZED_TOLERANCE
         expect_display_change = settle_display and not unchanged
-        self.set(index, target)
+        self.set(index, target, linked="ignore")   # already checked above; never warn twice
         after = before
         used = 0
         for used in range(1, attempts + 1):
             after = self.read(index)
+            if already is None and used == 1 and after.raw_value == before.raw_value \
+                    and after.display_value == before.display_value:
+                # An undecodable native scale that did not move at all after an accepted write: the slot
+                # already held the value. Live evidence 2026-09-17 (Fruity Limiter "Gain" at raw 1000,
+                # display "0.0dB", normalized null): writing 0.5 burned all six attempts and reported
+                # verified=False twice in a row, while a moving write (0.7 -> raw 1400, "7.5dB") verified
+                # in two. The raw value reflects a bus write in the very next request, so a first readback
+                # that moved neither the integer nor the display means nothing had to change.
+                unchanged = True
+                break
             applied = unchanged or _write_applied(before.raw_value, after.raw_value, target)
             if applied and (after.display_value != before.display_value or not expect_display_change):
                 break
@@ -261,7 +304,8 @@ class Parameters:
                              before.display_value, after.display_value,
                              unchanged or _write_applied(before.raw_value, after.raw_value, target), used,
                              normalized_from_raw(after.raw_value),
-                             after.display_value != before.display_value, unchanged)
+                             after.display_value != before.display_value, unchanged,
+                             automation_linked=notices)
 
     def find(self, name: str) -> PluginParameterInfo:
         """Find one exact, case-sensitive name; refuse duplicated names, listing their indices.

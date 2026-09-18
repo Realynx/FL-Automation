@@ -136,6 +136,22 @@ class PluginParameterInfo:
 
 
 @dataclass(frozen=True)
+class SampleInfo:
+    """One installed audio sample as the loaders accept it.
+
+    ``entry`` is the verbatim root-tagged string (``"[P]Drums\\Kicks\\909 Kick.wav"``) to pass straight
+    to ``fl.channels.add_sample`` / ``Channel.replace_sample``; ``root_tag`` is ``"[P]"`` for FL's
+    factory packs and ``"[U]"`` for the user's Image-Line content. ``name`` has no extension.
+    """
+
+    entry: str
+    root_tag: str
+    relative_path: str
+    name: str
+    extension: str
+
+
+@dataclass(frozen=True)
 class ProjectInfo:
     title: str
     path: str

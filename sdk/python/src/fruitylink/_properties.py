@@ -1,5 +1,6 @@
 """A shared descriptor for native scalar properties on indexed DAW objects."""
 
+from collections.abc import Callable
 from typing import Generic, TypeVar, overload
 
 from .errors import ProtocolError
@@ -18,12 +19,22 @@ class IndexedObject:
 
 
 class NativeProperty(Generic[T]):
-    def __init__(self, getter: str, setter: str, index_arg: str, value_arg: str, value_type: type[T]) -> None:
+    """A native scalar property. ``guard`` runs before every assignment through the descriptor.
+
+    A guard is for advice, not validation: it receives the owning object and may warn or raise (see
+    ``fruitylink.automation_links.check``, which warns when an automation clip owns the control).
+    Methods that offer the caller an explicit escape (``MixerTrack.set_volume(..., linked="ignore")``)
+    run the check themselves and write through ``Operations``, bypassing this descriptor.
+    """
+
+    def __init__(self, getter: str, setter: str, index_arg: str, value_arg: str, value_type: type[T],
+                 *, guard: "Callable[[IndexedObject], object] | None" = None) -> None:
         self._getter = getter
         self._setter = setter
         self._index_arg = index_arg
         self._value_arg = value_arg
         self._type: type[T] = value_type
+        self._guard = guard
 
     @overload
     def __get__(self, instance: None, owner: type[IndexedObject]) -> "NativeProperty[T]": ...
@@ -40,4 +51,6 @@ class NativeProperty(Generic[T]):
         return result
 
     def __set__(self, instance: IndexedObject, value: T) -> None:
+        if self._guard is not None:
+            self._guard(instance)
         instance._ops.invoke(self._setter, **{self._index_arg: instance.index, self._value_arg: value})

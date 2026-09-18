@@ -27,7 +27,10 @@ def test_volume_db_reads_and_writes_through_the_channel_model(fl: Studio, transp
     assert fl.channels[3].set_volume(9000) == 9000
     minus_six = channel_volume_from_db(-6.0)
     assert 7300 < minus_six < 7400   # calibrated curve (exponent 2.09), not the old 8062
-    assert operations(transport) == [
+    # The first guarded write probes the automation link index once per connection (query_clips here;
+    # this transport cannot answer it, so the guard gives up quietly instead of failing the write).
+    assert [name for name, _ in operations(transport)].count("query_clips") == 1
+    assert [row for row in operations(transport) if row[0] != "query_clips"] == [
         ("get_channel_volume", {"channel": 3}),
         ("set_channel_volume", {"channel": 3, "value": minus_six}),
         ("set_channel_volume", {"channel": 3, "value": 10240}),

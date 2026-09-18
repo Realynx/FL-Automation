@@ -2,6 +2,8 @@
 
 The shared SDK creates Automation Clip channels, links their initial destination, places them in the playlist, and reads or edits their envelopes. Python and MCP use these same operations; no separate MCP-only creation path exists.
 
+Creation is one-way: the link lives on the channel, FL reapplies the clip's initial value to the target on every play, and there is no unlink or channel delete. [Automation links](automation-links.md) covers what that means for plain writes to an automated control, how to find the owner of a control, and how to release a curve.
+
 ```python
 from fruitylink import AutomationTarget, AutomationPointSpec
 

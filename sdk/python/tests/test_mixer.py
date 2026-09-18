@@ -3,7 +3,7 @@ from typing import Any
 import pytest
 from conftest import RecordingTransport
 
-from fruitylink import ProtocolError, Studio
+from fruitylink import ProtocolError, RemoteError, Studio
 from fruitylink.levels import FADER_MAX_DB, mixer_volume_from_db
 from fruitylink.mixer import MAX_INSERTS, MixerTrack
 from fruitylink.values import JsonValue
@@ -216,9 +216,83 @@ def test_volume_db_uses_the_mixer_scale(fl: Studio, transport: RecordingTranspor
     assert 10800 < minus_three < 10900   # calibrated curve (exponent 2.09), not the old 11358
     assert fl.mixer.master.set_volume(db=-3.0) == minus_three
     assert fl.mixer[2].set_volume(16000) == 16000
-    assert [args for _, args in operations(transport)][1:] == [
+    assert [args for name, args in operations(transport) if name == "set_mixer_volume"] == [
         {"track": 2, "value": 16000}, {"track": 0, "value": minus_three}, {"track": 2, "value": 16000}]
+    # The first guarded write probes the automation link index once per connection; this transport
+    # cannot answer it, so the guard gives up quietly instead of failing the write.
+    assert [name for name, _ in operations(transport)].count("query_clips") == 1
     with pytest.raises(IndexError):
         fl.mixer[2].set_volume(16001)
     with pytest.raises(TypeError):
         fl.mixer[2].set_volume()
+
+
+# ---- effect slot identity -----------------------------------------------------------------------
+
+EFFECT_LISTING = (
+    "Mixer track 64 'Lead Bus': vol=12800\n"
+    "slot 0: Pro-Q 4\n"
+    "slot 3: Fruity Reeverb 2\n"
+    "sends: ->0 'Master' (0.8)"
+)
+
+
+def test_effect_slot_reports_its_plugin_name_in_one_call(fl: Studio, transport: RecordingTransport) -> None:
+    transport.responses["list_mixer_effects"] = EFFECT_LISTING
+
+    slot = fl.mixer[64].effects[0]
+
+    assert slot.plugin_name == "Pro-Q 4"
+    assert slot.is_empty is False
+    assert slot.plugin_name == "Pro-Q 4", "cached: a second read must not call the host again"
+    assert operations(transport) == [("list_mixer_effects", {"track": 64})]
+
+
+def test_effect_slot_repr_names_the_plugin(fl: Studio, transport: RecordingTransport) -> None:
+    transport.responses["list_mixer_effects"] = EFFECT_LISTING
+
+    assert repr(fl.mixer[64].effects[0]) == "EffectSlot(track=64, slot=0, plugin='Pro-Q 4')"
+    assert repr(fl.mixer[64].effects[1]) == "EffectSlot(track=64, slot=1, plugin=None)"
+
+
+def test_empty_slot_reads_as_empty(fl: Studio, transport: RecordingTransport) -> None:
+    transport.responses["list_mixer_effects"] = "Mixer track 7 'Insert 7': vol=12800\nno effects loaded\nsends: none"
+
+    slot = fl.mixer[7].effects[2]
+
+    assert slot.plugin_name is None and slot.is_empty is True
+    assert repr(slot) == "EffectSlot(track=7, slot=2, plugin=None)"
+
+
+def test_effect_slot_repr_survives_a_host_that_cannot_answer(fl: Studio, transport: RecordingTransport) -> None:
+    def handler(method: str, params: dict[str, JsonValue]) -> JsonValue:
+        raise RemoteError("operation_failed", "Mixer layout unresolved on this build.")
+
+    transport.handler = handler
+
+    assert repr(fl.mixer[64].effects[0]) == "EffectSlot(track=64, slot=0)"
+
+
+def test_loading_or_clearing_a_slot_forgets_the_cached_name(fl: Studio, transport: RecordingTransport) -> None:
+    listings = iter([EFFECT_LISTING, "Mixer track 64 'Lead Bus': vol=12800\nslot 0: Fruity Blood Overdrive"])
+    transport.handler = lambda method, params: (next(listings) if params.get("operation") == "list_mixer_effects"
+                                                else "mixer track 64 slot 0: 'Fruity Blood Overdrive' loaded")
+
+    slot = fl.mixer[64].effects[0]
+    assert slot.plugin_name == "Pro-Q 4"
+    slot.load("Fruity Blood Overdrive")
+
+    assert slot.plugin_name == "Fruity Blood Overdrive"
+    assert [name for name, _ in operations(transport)] == ["list_mixer_effects", "add_mixer_effect",
+                                                           "list_mixer_effects"]
+
+
+def test_effects_names_and_loaded_describe_a_chain_in_one_call(fl: Studio, transport: RecordingTransport) -> None:
+    transport.responses["list_mixer_effects"] = EFFECT_LISTING
+
+    assert fl.mixer[64].effects.names() == {0: "Pro-Q 4", 3: "Fruity Reeverb 2"}
+    transport.calls.clear()
+    loaded = fl.mixer[64].effects.loaded()
+
+    assert [(item.index, item.plugin_name) for item in loaded] == [(0, "Pro-Q 4"), (3, "Fruity Reeverb 2")]
+    assert operations(transport) == [("list_mixer_effects", {"track": 64})], "the names come pre-cached"

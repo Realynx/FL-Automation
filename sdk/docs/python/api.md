@@ -27,28 +27,29 @@ search:
 | Object | Main members |
 | --- | --- |
 | `fl.project` | `info`, `info_text()`, `new()`, `open(path)`, `save(path)`, `save_as(path)`, `save_copy(path)`, `save_new_version()` |
-| `fl.transport` | `tempo`, `song_mode`, `play()`, `stop()`, `toggle_record()`, `seek_beats()`, `seek_ticks(tick, settle=False)`, `seek_settled(tick)`, `position_tick`, `read_at(tick, reader)`, `loop_beats()`, `loop_ticks()`, `clear_loop()`, `markers_text()`, `markers()`, `add_marker_beats()`, `add_marker_ticks()`, `delete_marker(index_or_name)`, `set_song_end(bar=None, tick=None, name="End")` |
+| `fl.transport` | `tempo`, `song_mode`, `play()`, `stop()`, `toggle_record()`, `record_pressed`, `ensure_record_pressed(pressed=True)`, `recording_filter`, `recording_filter_parts`, `ensure_recording_filter(audio=True, automation=None, notes=None, clips=None)`, `metronome`, `countdown`, `wait_for_input`, `loop_record`, `blend_recorded_notes`, `recording_active`, `settings()`, `ensure(**flags)`, `seek_beats()`, `seek_ticks(tick, settle=False)`, `seek_settled(tick)`, `position_tick`, `read_at(tick, reader)`, `loop_beats()`, `loop_ticks()`, `clear_loop()`, `markers_text()`, `markers()`, `add_marker_beats()`, `add_marker_ticks()`, `delete_marker(index_or_name)`, `set_song_end(bar=None, after_bar=None, tick=None, name="End")` |
 | `fl.channels` | `list()`, `find(name)`, `add(plugin, name=None)`, `add_sample(path, name=None)`, `retire(index, name=None)`, `[index]` |
 | Channel | `name`, `volume`, `volume_db`, `set_volume(value=None, db=None)`, `pan`, `pitch`, `muted`, `mixer_track`, `parameters`, `control(index)`, `set_control(index, value)`, `stretch_time`, `sample_offset`, `select()`, `toggle_solo()`, `replace_sample(path)`, `retire(name=None)`, `load_state(path)`, `get_state()` |
 | `fl.patterns` | `list()`, `find(name)`, `current`, `create(name=None)`, `[index]` |
-| Pattern | `name`, `notes`, `select()`, `clear()`, `clone()`, `gaps(channel=None, min_ticks=None, min_beats=1.0)`; clone can return `None` for an empty source |
+| Pattern | `name`, `notes`, `length_tick` (host-reported, the span one clip plays), `select()`, `clear()`, `clone()`, `gaps(channel=None, min_ticks=None, min_beats=1.0)`; clone can return `None` for an empty source |
 | Notes | `list(channel=-1)`, `add(records)`, `add_beats(...)`, `add_ticks(...)`, `edit(edits, allow_multiple=False, preserve_clips=False)`, `delete(refs, allow_multiple=False, preserve_clips=False)` |
-| `fl.playlist` | `list()`, `[track]`, `add_pattern(...)`, `add_pattern_ticks(...)`, `add_patterns(records, enforce_lengths=False)`, `first_free_track(start_tick, end_tick, above=1)`, `gaps(start_bar, end_bar, channel=None, min_beats=1.0)`, `onsets(channel, start_tick, end_tick)` |
+| `fl.playlist` | `list()`, `[track]`, `pattern_length(pattern)`, `tile_pattern(pattern, track=, start_tick=, length_tick=)`, `tile_pattern_beats(...)`, `add_pattern(..., repeat=False)`, `add_pattern_ticks(..., repeat=False)`, `add_patterns(records, enforce_lengths=False, repeat=False)`, `first_free_track(start_tick, end_tick, above=1)`, `gaps(start_bar, end_bar, channel=None, min_beats=1.0)`, `onsets(channel, start_tick, end_tick)`. **Pattern clips do not repeat**: tile a span instead of placing one long clip (see below) |
 | PlaylistTrack | `name`, `color`, `muted`, `collapsed`, `select()`, `toggle_solo()` |
 | `fl.clips` | `list(track=-1)`, `[index]`, bulk `move(records)` / `move(index, start_tick, track)`, `resize(records)` / `resize(index, length_tick)`, `delete(indices_or_index)`, `set_muted(indices_or_index, muted)`; records may be `ClipMove`/`ClipResize` or plain tuples |
 | Clip | `muted`, `move_beats()`, `move_ticks()`, `resize_beats()`, `resize_ticks()`, `slice_beats()`, `slice_ticks()`, `duplicate()`, `delete()` |
 | `fl.arrangements` | `list()`, `current`, `add(name)`, `[index]`; a handle has `name`, `select()`, `clone()`, `delete()` |
 | `fl.mixer` | `[track]`, `master`, `list()`, `insert_count`, `capacity`, `ensure_inserts(count)`, `add(name=None, after=None)`, `find(name)`, `routes()`, `list_text()` |
-| MixerTrack | `name`, `volume` (0..16000, 12800 = 0 dB), `volume_db`, `set_volume(value=None, db=None)`, `pan` (signed, 0 = center), `muted`, `send_to(destination, level=1.0, db=None, active=True)`, `disconnect(destination)`, `sends()`, `send_level(destination)`, `set_eq_gain(band, value)`, `effects[slot]` |
-| EffectSlot | `load(plugin)` (tolerant name: "FabFilter Pro-R 2" loads "Pro-R 2"; ambiguous names are refused with the candidates), `clear()`, `clone_type_to(slot)`, `parameters`, `load_state(path)`, `get_state()` |
+| MixerTrack | `name`, `volume` (0..16000, 12800 = 0 dB), `volume_db`, `set_volume(value=None, db=None)`, `pan` (signed, 0 = center), `muted`, `send_to(destination, level=1.0, db=None, active=True)`, `disconnect(destination)`, `sends()`, `send_level(destination)`, `set_eq_gain(band, value)`, `effects[slot]`, `effects.names()` / `effects.loaded()` (the whole chain in one call) |
+| EffectSlot | `plugin_name` (what is loaded, or `None`; one `list_mixer_effects` call, cached on the handle until `refresh()`), `is_empty`, `refresh()`, `repr` -> `EffectSlot(track=64, slot=0, plugin='Pro-Q 4')`, `load(plugin)` -> verification line (tolerant name: "FabFilter Pro-R 2" loads "Pro-R 2"; ambiguous names are refused with the candidates; a cold first load is guarded for 20 s and reports `loaded after N ms` rather than failing), `clear()`, `clone_type_to(slot)`, `parameters`, `load_state(path)`, `get_state()` |
 | Parameters | `page(filter=None, offset=0, limit=64)`, lazy `iter(filter=None, page_size=64)`, `list(filter=None)`, `read(index)`, `read_at(index, tick, settle=0.3)`, `display_at(index, tick)`, `find(name)`, `set(index, value)`, `set_named(name, value)`, `set_verified(index_or_name, value, attempts=6, delay=0.05, settle_display=True)` |
 | `fl.plugins` | `available_text(effects=False)`, `samples_text()`, `channel_parameters()`, `effect_parameters()` |
-| `fl.automation` | `list(with_points=True)`, `describe()`, `create(target, track, start_tick, length_tick, name=None)`, `pump(target, start_tick, length_tick, track=..., depth=0.5, recovery_beats=0.75, beats_per_hit=1, floor=None, name=None)`, `duck(target, hits_ticks, start_tick, length_tick, track=..., ...)`, `tile(target, shape, start_tick, length_tick, track=..., period_beats=..., offsets_beats=(0,))`, `[channel]` |
+| `fl.automation` | `list(with_points=True)`, `describe()`, `create(target, track, start_tick, length_tick, name=None)`, `pump(target, start_tick, length_tick, track=..., depth=0.5, recovery_beats=0.75, beats_per_hit=1, floor=None, name=None)`, `duck(target, hits_ticks, start_tick, length_tick, track=..., ...)`, `tile(target, shape, start_tick, length_tick, track=..., period_beats=..., offsets_beats=(0,))`, `links_to(target)`, `targets_of(kind, index, slot=-1, parameter=-1)`, `refresh()`, `release(channel, value=None)`, `[channel]` |
 | AutomationCurve | `list()`, `add_beats(time, value, tension=0)`, `add_ticks(tick, value, tension=0)`, `delete(index)`, `set_point(index, value, tension=0)`, `set_points(points)`, `add_clip(track, start_tick, length_tick)` |
 | `fl.analysis` | `wav(path, ...)`, `pcm(channels, sample_rate, ...)`, `describe(source, bpm=None, ppq=None, start_bar=None, beats_per_bar=4, detail="normal")`, `compare(a, b, **options)`, `describe_samples(paths, cache_dir=None, detail="brief", bpm=None)`, `compare_bands(...)`, `masking_report(...)`, `transition(...)`, `note_density(...)`, `tick_range_seconds(...)` |
 | AudioAnalysis | `summary(...)`, `windows(...)`, `spectral(...)`, `spectral_windows(...)`, `scan_bars(bpm, ...)`, `band_energy(...)`, `describe_sections(bpm, sections, ...)`, `pitch_track(...)`, `compare_bands(other, ...)`, `masking_report(other, ...)`, `transition(other, bpm, bar, ...)`, `describe(bpm=None, ppq=None, start_bar=None, detail="normal")` |
 | AudioDescription / AudioComparison / SampleTable | `.text` (hand to a model), `.data` (JSON-safe), `.tags`; a table also has `.rows` and `.descriptions` |
-| `fl.samples` | `describe(channel, path=None, **options)`, `compare(a, b, **options)` (channel indices or paths), `browse(paths, cache_dir=None, detail="brief", bpm=None)`, `register(channel, path)`, `path_of(channel)`, `known()`; paths are remembered from `add_sample`/`replace_sample` because FL exposes no Sampler file query |
+| `fl.audio` | `capture(inserts="master", start_bar, end_bar, tail_beats=0, name=None, arm_refresh=True, ensure_recording_filter=True, restore_recording_filter=True, cleanup=True)`, `plan(...)`, `decide(...)`, `measure_section(...)`, `resolve_recorded_folder()`; live per-insert capture through FL's own disk recording (see [live audio capture](../live-audio-capture.md)) |
+| `fl.samples` | `query(filter=None, offset=0, limit=50)` (structured, paged sample discovery over every [search root](#sample-search-roots): `SampleInfo(entry, root_tag, relative_path, name, extension)`; pass `entry` verbatim to `add_sample`), `describe(channel, path=None, **options)`, `compare(a, b, **options)` (channel indices or paths), `browse(paths, cache_dir=None, detail="brief", bpm=None)`, `register(channel, path)`, `path_of(channel)`, `known()`; paths are remembered from `add_sample`/`replace_sample` because FL exposes no Sampler file query |
 
 The table is a discovery guide; methods can require keyword-only arguments. See [recipes](examples.md) for valid calls and the [typed source](../../python/src/fruitylink/studio.py) for complete signatures.
 
@@ -95,6 +96,7 @@ A retained `Timebase` is a snapshot. Fetch another after opening or changing pro
 | Automation point tension | Belongs to the segment that ENDS at the point. Positive = fast start, slow finish (`TENSION_EASE_OUT`, compressor-like recovery; `pump` uses +0.5). Negative = slow start accelerating into the point (`TENSION_EASE_IN`, a swell landing on a downbeat). Live: +0.3 read 89 % of the travel half-way, -0.3 about a third |
 | Automation clip placements | Every `add_clip` placement replays the same envelope from its own start; there is no loop or offset flag. A pattern that changes per bar needs one long envelope (`fl.automation.duck` from `fl.playlist.onsets`, or `tile`) |
 | Pattern clip length | `PatternClipSpec.length_tick > 0` is pinned: the clip keeps it even when notes overhang the bar; `0` follows the pattern's own length. `add_patterns(..., enforce_lengths=True)` re-checks and resizes drifted clips |
+| Pattern clip repeats | There are none. A pattern clip plays its pattern ONCE from the clip start and is silent for the rest of its length (live 2026-09-18). A span that repeats is one clip per repetition: `fl.playlist.tile_pattern(...)` or `repeat=True`; placing one long clip warns with `PatternClipLongerThanPatternWarning` |
 | Note edits and clips | `notes.delete` / `notes.edit` leave the pattern's playlist clips at their lengths (FL alone re-derives them from the remaining notes); `preserve_clips=True` re-checks from the client. Adding notes past a clip that follows the pattern still grows it |
 | Seek readback | A stopped seek reads 14-20 ticks late for about 100 ms and plugin displays show the previous position's value for up to 300 ms: use `transport.seek_settled`, `transport.read_at` or `parameters.read_at` / `display_at`; verify sub-beat envelopes from the point list |
 | Mixer send levels | No automation target (the send-level event ids are unknown to the bridge); automate the return insert's `mixer_volume` or the send effect's wet parameter, see [Linked automation](#linked-automation-and-complete-envelopes) |
@@ -136,7 +138,7 @@ Use `fl.ops.invoke(operation, **arguments)` for catalogue operations or capabili
 
 Typed queries return records; legacy `*_text` helpers return human-readable text. The SDK does not parse arbitrary names from text when a structured query is unavailable.
 
-`query_notes`, `query_clips` and `query_plugin_parameters` return `Page` objects with `items`, `next_offset` and `total`. Offsets refer to raw collection slots. A filtered page can be empty and still have a continuation. Follow `next_offset` instead of adding the item count yourself. High-level `list()` follows all pages; enumeration is not an atomic snapshot, so avoid concurrent structural edits.
+`query_notes`, `query_clips`, `query_plugin_parameters` and `query_samples` return `Page` objects with `items`, `next_offset` and `total`. Offsets refer to raw collection slots. A filtered page can be empty and still have a continuation. Follow `next_offset` instead of adding the item count yourself. High-level `list()` follows all pages; enumeration is not an atomic snapshot, so avoid concurrent structural edits. `query_samples` is the exception on offsets: it counts MATCHED samples rather than raw slots, because its filter is applied while the sample roots are scanned.
 
 ### Browse large plugin parameter sets
 
@@ -195,7 +197,45 @@ scale_for("Serum 2", "Sub Shape").to_display(0.25)            # "RoundRect"
 
 `fl.channels[n].load_preset(path)` (also `fl.channels.load_preset_file(n, path)`) loads the hosted plugin's own preset file into the generator already on the channel; it is `load_state` under the name the common case needs. Formats seen live on FL 26.1.3: FL `.fst`, VST3 `.vstpreset` (Serum 2; see the Serum guide), and GMS `.gmsynth` from `<FL>\Data\Patches\Plugin presets\Generators\GMS\...`. A raw `.SerumPreset` is ignored. Load a factory preset before authoring a native synth by parameter: a fresh GMS added with `channels.add("GMS")` has no oscillator waveforms (its Synth Waves are chosen in the GUI and are not parameters), its displays are raw fractions (`Filter Cutoff = 0.60 %`), and parameter-only patches render silence until a preset is loaded.
 
+Two routes exist and the SDK picks the working one. A wrapped plugin's preset goes through the wrapper's own state-file loader, which changes the state in place. An **FL-native generator `.fst`** (`<FL>\Data\Patches\Plugin presets\Generators\Sytrus|Harmor|...`) goes through **FL's channel loader** instead, chosen automatically, because that loader is the only route FL honours for those files (FL 26.1.3.5570: a Sytrus factory preset sent to the wrapper loader left the channel's state record byte-identical; the channel loader changed 99% of it, Harmor 47.5%). FL's channel loader treats the file as a channel to build, so it also **mutes the channel and renames it to the preset's base name** — the SDK snapshots the channel's name, mute state and mixer route before the load and restores all three after it, and the returned verification line names the route and what was restored:
+
+```python
+fl.channels[3].load_preset(r"C:\Program Files\Image-Line\FL Studio 2026\Data\Patches\Plugin presets\Generators\Sytrus\Lead\Sync Lead.fst")
+# channel 3: loaded 'Sync Lead.fst' into 'Sytrus' via FL's channel loader (automatic for an FL-native
+# generator .fst: the wrapper dispatcher is a no-op for these; restored name 'Sync Lead' -> 'Sytrus',
+# mute -> unmuted) (same instance; params 0->0; state record changed (...)). ...
+assert not fl.channels[3].muted and fl.channels[3].name == "Sytrus"
+```
+
+`load_state(path, use_channel_loader=True)` forces the channel-loader route for a wrapped plugin's `.fst` as well (state is still preserved); it stays refused for other formats, where that loader applies no state and only renames the channel. The `.fst` identity guard matches the plugin name in both spellings a preset can use — UTF-16 for wrapped plugins, a single-byte string for FL's own generators — so a native preset is no longer refused with `does not name the hosted plugin 'Sytrus'`.
+
 `get_state()` / `load_state()` on a Sampler channel now say so: `Cannot read the plugin state of channel 8: it is a built-in Sampler channel (or an audio clip / layer) ...` and point at the channel controls, `replace_sample` and the sample operations; automation clips are named with their targets. If a state read reports that the project snapshot could not be framed (FL wrote an event the reader does not know), the message names the event, offset and FL build: save the project or close it to a new version and reopen, then retry (the FL 26.1.3.5570 tagged event 0xAC is already handled).
+
+## Sample search roots
+
+`fl.samples.query(...)` and `fl.plugins.samples_text(...)` search, in this order:
+
+| Tag | Folder |
+| --- | --- |
+| `[B1]`, `[B2]`, ... | Every folder named by `FRUITYLINK_SAMPLE_ROOTS` (semicolon-separated absolute paths), then **FL's browser extra search folders** |
+| `[P]` | FL's factory packs, `<FL install>\Data\Patches\Packs` |
+| `[U]` | The user's Image-Line content, `Documents\Image-Line\FL Studio` |
+
+Every entry is `<tag><relative path>` and goes back verbatim to `fl.channels.add_sample`,
+`Channel.replace_sample` and the MCP `fl_sample_add` tool, which resolve the tag against the same list (a
+managed MCP session first copies the file into `<workspace>\staged-samples\<tag>\`, one subfolder per tag).
+
+A user's own library usually lives under neither FL root and reaches FL's browser as an **extra search
+folder**. FL 2026 keeps those in the registry, not in a settings file:
+`HKCU\Software\Image-Line\FL Studio <major>\Search paths`, one `REG_SZ` per folder named `0`, `1`, ...,
+whose value is `<absolute folder>,<display name>`. Every `FL Studio <major>` key is read, newest first, and
+duplicates are dropped. Live 2026-09-18: an agent asked to use the user's own drums found `[U]` empty, because
+those two roots were all the SDK ever searched.
+
+The user's folders are searched FIRST because a listing is capped (40 entries unfiltered, 150 filtered) and
+FL's factory packs are enormous — the user's own samples would otherwise never make the cut. A folder that
+does not exist, repeats, or lies inside a root already in the list is dropped, so one file is never listed
+twice under two tags. Set `FRUITYLINK_SAMPLE_ROOTS` for a library that is not in FL's browser at all.
 
 ## Add a mixer insert
 
@@ -215,6 +255,27 @@ fl.mixer.ensure_inserts(len(names) + 12)          # 18 inserts, no error at 17
 for offset, name in enumerate(names, start=13):
     fl.mixer[offset].name = name
 ```
+
+### Confirm what an effect slot holds
+
+`EffectSlot.load(...)` returns a verification line, but the handle itself said nothing afterwards: its repr was
+`<fruitylink.mixer.EffectSlot object at 0x...>`, so an agent could not confirm what it had loaded (live
+2026-09-18). A slot now describes itself:
+
+```python
+slot = fl.mixer[64].effects[0]
+slot.load("Pro-Q 4")
+slot.plugin_name          # 'Pro-Q 4'  (None when the slot is empty)
+slot.is_empty             # False
+repr(slot)                # "EffectSlot(track=64, slot=0, plugin='Pro-Q 4')"
+fl.mixer[64].effects.names()    # {0: 'Pro-Q 4', 3: 'Fruity Reeverb 2'} - the whole chain in ONE call
+fl.mixer[64].effects.loaded()   # the non-empty slots, each with its name already cached
+```
+
+`plugin_name` costs one `list_mixer_effects` call and is then remembered on that handle; `load`, `load_state`
+and `clear` forget it, `refresh()` forgets it on demand, and a fresh `fl.mixer[t].effects[s]` always reads the
+live slot. The name is FL's plugin database name, the same string `load` takes, so it round-trips. `repr`
+never fails: a host that cannot answer prints `EffectSlot(track=64, slot=0)` rather than a guess.
 
 ## Verify sends and bus routing
 
@@ -284,6 +345,8 @@ Apply fades by scaling samples (the Parking Lot Moon records carry a pure-Python
 
 FL exposes channel deletion only through the channel-rack context menu; there is no engine call the bridge can make, so `fl.channels` has no `delete`. `fl.channels[0].retire()` (or `fl.channels.retire(0)`) parks a channel instead: muted, routed to Master (so it holds no bus) and renamed `"(unused) <old name>"` (pass `name=` for another label). Notes and clips are untouched; clear patterns yourself. The template's empty Sampler channel is the usual candidate.
 
+Retiring does **not** clear a sample channel's file reference, and a project saved while a channel points at a file that no longer exists hangs FL's command-line renderer outright (live 26.1.3.5570, 2026-09-17: no render output at a 300 s or 600 s deadline, and no dialog; 7.5 s once the channels were repointed). So when you retire a channel whose sample you are about to delete, point it at a file that exists first: `fl.channels[i].replace_sample(path)`. `fl.audio.capture` does this for every channel it retires, using a tiny silent `fruitylink-retired-placeholder.wav` in FL's recorded-audio folder (`repointed_channels` / `placeholder`).
+
 ## Linked automation and complete envelopes
 
 Use `AutomationTarget.channel_volume`, `channel_pan`, `channel_pitch`, `mixer_volume`, `mixer_pan`, or a plugin parameter target with `fl.automation.create(...)`.
@@ -300,7 +363,62 @@ The first and last points of a curve are protected endpoints: `delete(index)` re
 
 Creation can partially complete before an error. Inspect channels and playlist clips before retrying. `add_clip()` reuses an existing automation generator at another playlist position; each placement plays the same envelope from its own start (automation clips have no loop or offset), so a shape that differs per bar needs one envelope across the range (`duck`, `tile`).
 
+**An automated fader cannot be pinned by a plain write, and deleting the clip is not enough.** While an automation channel targets a control, FL keeps re-applying that channel's value over it: a plain `fl.mixer[t].volume = ...` reads back correctly in the same session but is overwritten at the playhead (live 2026-09-14: 5769 written, 15926 — the clip's last value — after a save and reopen). **Deleting the playlist clip does not break the link** (live 2026-09-17): after `fl.clips.delete(...)` of the only clip of automation channel 12, `fl.mixer[5].volume = 6400` still read back 6400 while the master capture measured the same level as 12800, and routing the audio through insert 10 instead gave the expected -12.44 dB. FL has no channel delete, so the automation channel itself survives the clip and keeps pinning its target. To free a fader, the **automation channel itself must be retargeted** or the **audio routed through a different insert** (both verified live); deleting or muting its clips is not enough. Otherwise set the value through the envelope (`set_point` / `set_points`) rather than the fader, or write the fader on an insert no automation channel targets.
+
+See [automation links](../automation-links.md) for the SDK side of this: `fl.automation.links_to(target)` / `targets_of(kind, index, slot, parameter)` name the automation channel that owns a control (one cached rack scan per connection; `fl.automation.refresh()` rescans after GUI edits), plain `volume` / `pan` / `pitch` and plugin-parameter writes warn with `AutomationLinkedWarning` unless you pass `linked="raise"` or `linked="ignore"` (`VerifiedWrite.automation_linked` carries the same text), and `fl.automation.release(channel, value=None)` flattens a curve to one held value so the level FL keeps reapplying is the one you asked for. **A curve is only evaluated through a placed clip**, so `release` places one at tick 0 on the first free track when the channel has none (live 2026-09-17: with the clip deleted, releasing to 0.8 and to 0.4 both measured -19.6 dBFS at the master; with a clip, 0.4 measured -32.18 and 0.8 measured -19.60 dBFS — the 12.58 dB the fader model predicts). Its `ReleaseResult` is the released float plus `placed_clip`, `track`, `start_tick`, `length_tick`, `clip_index`; pass `place_clip=False` to leave the playlist alone. Note that a **readback of the target never shows the automation-applied value** (`fl.mixer[1].volume` read 12800 throughout that run): the getters report the project value, not what the engine is playing, so only `links_to` and a render or capture can tell you.
+
 `fl.automation.list()` is the inventory: one `AutomationChannelInfo` per linked automation clip channel with `name`, the host's `targets_text` (`"Insert 24 volume"` or `"event 0x71008030"`), `event_ids`, decoded `targets` (`target` is the first decoded one), `point_count` and the playlist `clips` that play it (`ClipInfo` records). `describe()` renders the same as one line per clip. Both read every channel's plugin description and, unless `with_points=False`, each envelope once.
+
+## Pattern clips do not repeat
+
+**FL plays a pattern clip's pattern ONCE, from the clip start, and the rest of the clip is silent.** There is
+no loop or repeat flag on a playlist clip; a long clip is not four bars of a one-bar pattern, it is one bar of
+music followed by three bars of nothing.
+
+Live measurement (FL 26.1.3.5570, 2026-09-18): a 1-bar pattern placed with
+`fl.playlist.add_patterns([PatternClipSpec(p, 1, 0, 4 * BAR)], enforce_lengths=True)` produced the clip
+`(start 0, length 1536)` — exactly the four bars asked for at PPQ 96 — and a master capture of that span had
+audio in **bar 1 only**; bars 2, 3 and 4 measured silent. An agent that had placed 4-bar patterns as 8- and
+16-bar clips produced, in the user's words, "huge amounts of empty space", and nothing in the SDK warned.
+
+Place one clip per repetition:
+
+```python
+BAR = 4 * fl.ops.get_ppq()
+
+# One clip per pattern length across bars 1-16, the last clip shortened to end exactly on the span.
+placed = fl.playlist.tile_pattern(drums, track=1, start_tick=0, length_tick=16 * BAR)
+print(int(placed), placed.pattern_length_tick)      # 16 1536  (a 1-bar pattern: sixteen clips)
+
+fl.playlist.add_pattern_ticks(drums, track=1, start=16 * BAR, length=8 * BAR, repeat=True)   # same, inline
+fl.playlist.add_patterns([PatternClipSpec(drums, 1, 0, 16 * BAR)], repeat=True)              # same, batched
+```
+
+| Call | Behaviour |
+| --- | --- |
+| `fl.playlist.pattern_length(pattern)` | The host-reported pattern length in ticks (`fl.patterns.list()` `lengthTick`, also `fl.patterns[p].length_tick`): the span one clip actually plays, and the tile width. `LookupError` when the pattern is missing or the host reports no length. |
+| `fl.playlist.tile_pattern(pattern, *, track, start_tick, length_tick)` | Fills `[start_tick, start_tick + length_tick)` with one clip per repetition in ONE native pass; the last clip is shortened to fit, so the run ends exactly where you asked. Returns a `PatternPlacement`, which IS the clip count and also carries `pattern_length_tick`, `repeated` and `notice`. Over `MAX_TILED_CLIPS` (1000) clips is refused before any write. |
+| `fl.playlist.tile_pattern_beats(pattern, *, track, start_beats, length_beats)` | The same in beats at the project PPQ. |
+| `fl.playlist.add_pattern_ticks(pattern, *, track, start, length=0, repeat=False)` | `repeat=True` tiles the span instead of placing one long clip. `repeat=False` with a `length` longer than the pattern places the long clip and warns (below). `length=0` follows the pattern and never needs a lookup. Returns a `PatternPlacement`. |
+| `fl.playlist.add_pattern(pattern, *, track, start_beats, length_beats=0, repeat=False)` | The same in beats. |
+| `fl.playlist.add_patterns(specs, *, enforce_lengths=False, repeat=False)` | `repeat=True` expands every over-long spec into tiles before the single native pass. The result is still the number of clips RESIZED by `enforce_lengths`, and additionally carries `.placed` (clips written), `.repeated` and `.notices`. |
+
+With `repeat=False` a clip longer than its pattern emits `PatternClipLongerThanPatternWarning`, naming the
+pattern, its length, the clip length and how much of the clip will be silent; the same text is in the returned
+`PatternPlacement.notice` (or `PatternPlacementBatch.notices`) for callers that do not watch warnings:
+
+```
+Pattern 12 is 384 ticks long but the clip asks for 1536 ticks (4.00 pattern lengths): FL does not loop a
+pattern clip, so it plays once and the last 1152 ticks of the clip are SILENT. Place one clip per repetition
+instead - repeat=True on this call, or fl.playlist.tile_pattern(12, track=..., start_tick=..., length_tick=1536).
+```
+
+The advice costs ONE shared `query_patterns` per call (none at all when every length is 0), and a host that
+cannot describe its patterns simply gets no advice — the placement is never failed or delayed by the check.
+
+This is also why `fl.playlist.gaps` and `fl.playlist.onsets` count each clip's pattern exactly once: their
+"clips do not loop" assumption is FL's real behaviour, verified above, so the silent tail of an over-long clip
+is correctly reported as a rest rather than as material.
 
 ## Composition helpers
 
@@ -309,13 +427,13 @@ These build on the queries above and compute locally; they issue no new native o
 | Helper | Behaviour |
 | --- | --- |
 | `pattern.gaps(channel=None, min_ticks=None, min_beats=1.0, *, end_tick=None)` | Rest regions from the pattern's note snapshot as `Gap` records (`channel`, `start_tick`, `end_tick`, `length_tick`, `start_beat`, `length_beats`), sorted by time. A note occupies `[start, start + length)`; muted notes are silent. The span ends at the later of the host-reported pattern length and the last note end unless `end_tick` is given. `channel=None` covers every channel with notes; a named channel without notes yields one gap over the whole span. `min_ticks` overrides `min_beats` (converted at the project PPQ). |
-| `fl.playlist.gaps(start_bar, end_bar, channel=None, min_beats=1.0, *, beats_per_bar=4)` | The same over an arrangement range, bars `start_bar..end_bar` inclusive (one-based), in absolute ticks. Reads unmuted pattern clips overlapping the range and each pattern's notes once. A note starting inside its clip sounds for its full length; notes starting after the clip end do not. Clips are treated as starting at their pattern's beginning (sliced clips with an offset cannot be distinguished). Automation and audio clips are ignored. |
+| `fl.playlist.gaps(start_bar, end_bar, channel=None, min_beats=1.0, *, beats_per_bar=4)` | The same over an arrangement range, bars `start_bar..end_bar` inclusive (one-based), in absolute ticks. Reads unmuted pattern clips overlapping the range and each pattern's notes once. A note starting inside its clip sounds for its full length; notes starting after the clip end do not. Clips are treated as starting at their pattern's beginning (sliced clips with an offset cannot be distinguished), and each clip's pattern is counted ONCE because FL does not loop a pattern clip ([verified](#pattern-clips-do-not-repeat)), so the silent tail of an over-long clip is reported as a rest. Automation and audio clips are ignored. |
 | `fl.playlist.first_free_track(start_tick, end_tick, *, above=1)` | Lowest one-based track `>= above` with no clip of any kind (pattern, audio, automation; muted included) overlapping `[start_tick, end_tick)`. Raises `LookupError` when tracks up to 500 are all used. |
 | `fl.automation.pump(target, start_tick, length_tick, *, track, depth=0.5, recovery_beats=0.75, beats_per_hit=1, floor=None, ceiling=1.0, tension=0.5, name=None)` | Sidechain-style curve: creates and places the clip with `create(...)`, then `set_points(...)`. Each hit drops to `floor` (default `ceiling - depth`), recovers to `ceiling` over `recovery_beats` (`tension` shapes that segment), holds, and drops one tick before the next hit; the last point sits at the clip end. Returns `PumpResult(clip, point_count)`. Over 4000 points is refused before any write; split long spans. |
-| `fl.playlist.onsets(channel, start_tick, end_tick)` | Sorted absolute note-on ticks of one channel inside `[start_tick, end_tick)`, read through every unmuted pattern clip with the same rules as `gaps` (muted notes silent, notes past their clip end silent, clips assumed to start at the pattern's beginning). The input for `duck`. |
+| `fl.playlist.onsets(channel, start_tick, end_tick)` | Sorted absolute note-on ticks of one channel inside `[start_tick, end_tick)`, read through every unmuted pattern clip with the same rules as `gaps` (muted notes silent, notes past their clip end silent, clips assumed to start at the pattern's beginning). Each clip contributes its pattern's onsets ONCE — FL does not loop a pattern clip ([verified](#pattern-clips-do-not-repeat)) — so a tiled span yields every repetition and an over-long clip yields only the first. The input for `duck`. |
 | `fl.automation.duck(target, hits_ticks, start_tick, length_tick, *, track, depth=0.5, recovery_beats=0.25, floor=None, ceiling=1.0, tension=0.5, name=None)` | `pump` for an irregular grid: ONE envelope that holds `ceiling` until one tick before each absolute tick in `hits_ticks` inside the clip, drops to the dip (`floor`, default `ceiling - depth`) at the hit and recovers over `recovery_beats` (cut short by a closer hit). Follows alternating kick bars, fills and pre-chorus variants that no repeated 1-bar clip can. Returns `PumpResult`; over 4000 points is refused before any write (split the span). |
 | `fl.automation.tile(target, shape, start_tick, length_tick, *, track, period_beats, offsets_beats=(0,), name=None)` | ONE envelope that repeats a clip-relative `shape` (2+ points from beat 0, fitting one period) every `period_beats`; repeat `i` is shifted by `offsets_beats[i % n]` (`[0, 0.5]` alternates bars). The last value holds between repeats; a partial last repeat is cut at the clip end. |
-| `fl.transport.set_song_end(bar=None, *, tick=None, name="End", beats_per_bar=4)` | Places a single end marker at a one-based bar start or an absolute tick, deleting any marker with the same name first, and returns the `Marker` as the host lists it afterwards. It relies on FL extending the song length, play range and render to the last time marker, so a marker past the final note adds silence or room for tails. |
+| `fl.transport.set_song_end(bar=None, *, after_bar=None, tick=None, name="End", beats_per_bar=4)` | Places a single end marker at a bar start or an absolute tick, deleting any marker with the same name first, and returns the `Marker` as the host lists it afterwards. `bar=N` puts the marker at the start of bar N (the song ends before it, so bar N is NOT played); use `after_bar=N` to keep bar N — the marker then lands at the start of bar N+1, so a 96-bar song wants `after_bar=96` (equivalently `bar=97`) and `bar=96` cuts the last bar. The three arguments are mutually exclusive. It relies on FL extending the song length, play range and render to the last time marker, so a marker past the final note adds silence or room for tails. |
 | `fl.transport.seek_settled(tick, *, attempts=20, delay=0.05)` | Seeks, then polls `position_tick` until two consecutive reads agree; returns `SeekResult(requested_tick, position_tick, settled, reads)`. `seek_ticks(tick, settle=True)` is the same call. |
 | `fl.transport.read_at(tick, reader, *, settle=0.3, attempts=6, delay=0.1)` | Settled seek, `settle` seconds for the host's automation pass, then calls `reader()` until two consecutive values are equal. `parameters.read_at(index, tick)` / `display_at(index, tick)` wrap it for a plugin parameter. |
 
@@ -323,7 +441,7 @@ These build on the queries above and compute locally; they issue no new native o
 
 ## Batches and bulk edits
 
-Use `NoteSpec`, `NoteEdit`, `NoteRef`, `ClipMove`, `ClipResize` and `PatternClipSpec` for native bulk operations. A single bulk operation refreshes FL once. `fl.clips.resize` and `fl.clips.move` also take plain tuples or a single clip (`fl.clips.resize(1, 3072)`, `fl.clips.move(4, 768, 3)`), and `delete` / `set_muted` take one index or a sequence. `PatternClipSpec(pattern, track, start_tick, length_tick=0)`: a positive length is pinned by the host, so an 8-bar clip stays 8 bars even when the pattern's notes overhang; 0 follows the pattern length. `fl.playlist.add_patterns(specs, enforce_lengths=True)` re-lists the clips afterwards and resizes any that still differ (returns how many). `NoteRef` and `NoteEdit` address a note by `(channel, key, start_tick)`; FL allows stacked duplicates sharing that triple, so both carry an optional `length_tick` (the note's current length) to pick one, and `notes.edit(...)` / `notes.delete(...)` refuse a target that still matches several notes unless `allow_multiple=True`, which addresses all of them (nothing is written on a refusal). A general batch sequences multiple independent operations, up to 256:
+Use `NoteSpec`, `NoteEdit`, `NoteRef`, `ClipMove`, `ClipResize` and `PatternClipSpec` for native bulk operations. A single bulk operation refreshes FL once. `fl.clips.resize` and `fl.clips.move` also take plain tuples or a single clip (`fl.clips.resize(1, 3072)`, `fl.clips.move(4, 768, 3)`), and `delete` / `set_muted` take one index or a sequence. `PatternClipSpec(pattern, track, start_tick, length_tick=0)`: a positive length is pinned by the host, so an 8-bar clip stays 8 bars even when the pattern's notes overhang; 0 follows the pattern length. A pinned length is NOT a loop — an 8-bar clip of a 2-bar pattern is silent after bar 2 ([verified](#pattern-clips-do-not-repeat)) — so pass `repeat=True` to expand such specs into one clip per repetition, or accept the `PatternClipLongerThanPatternWarning`. `fl.playlist.add_patterns(specs, enforce_lengths=True)` re-lists the clips afterwards and resizes any that still differ (returns how many). `NoteRef` and `NoteEdit` address a note by `(channel, key, start_tick)`; FL allows stacked duplicates sharing that triple, so both carry an optional `length_tick` (the note's current length) to pick one, and `notes.edit(...)` / `notes.delete(...)` refuse a target that still matches several notes unless `allow_multiple=True`, which addresses all of them (nothing is written on a refusal). A general batch sequences multiple independent operations, up to 256:
 
 ```python
 batch = fl.batch(stop_on_error=True)
@@ -355,6 +473,33 @@ Only the current arrangement changes: clips outside the range are deleted, clips
 Apply it to a disposable copy; the edit is not reversible from Python. `StudioSession.render_range(output, start_tick=..., length_tick=..., cut_clips=False, tail_beats=0, timeout=180)` runs the transform and then `render()`, leaving the working copy on disk untouched. Under FL MCP, `fl_project_render` accepts `startBar`/`endBar`/`tailBeats` and preserves the untrimmed project as `<name>-full.flp` first.
 
 ## Offline measurements
+
+### Recording state
+
+`fl.transport.recording_filter` is FL's global recording filter, the bitmask behind the record button's
+right-click "Recording filter" submenu (1 automation, 2 notes, **4 audio**, 8 clips; FL 2025 has no clips
+item). With the audio bit clear FL arms a mixer insert, records, and writes no file at all, so
+`fl.audio.capture` sets it for itself and hands the previous value back — nothing has to be clicked in
+FL first. Set parts without disturbing the others through
+`fl.transport.ensure_recording_filter(audio=True)`, which returns the bitmask it found; the pure helpers
+`fruitylink.recording_filter_flags(current, **parts)` and `recording_filter_names(flags)` do the same
+arithmetic offline. FL only reads its `RecordingFilter2` registry value at startup and writes it at exit,
+so this is the only way to change it in a running FL.
+
+FL's **global transport toggles** are properties too: `metronome`, `countdown` (the toolbar precount),
+`wait_for_input` ("wait for input to start playing"), `loop_record` and `blend_recorded_notes` (overdub),
+alongside `song_mode`. They are FL-wide settings that FL saves when it exits, so read them, set them, and hand
+them back: `previous = fl.transport.ensure(countdown=False, metronome=False)` ... `fl.transport.ensure(**previous)`.
+`fl.transport.settings()` returns `{name: bool}` for exactly the toggles the running build exposes — a toggle
+whose native symbols did not resolve is left out rather than guessed. Each one is set through the very setter
+FL's own toolbar Action calls, so FL repaints and reacts as it does for a click. `countdown` and
+`wait_for_input` stop an automated record pass from recording anything, `loop_record` turns one recording into
+a pile of takes and `metronome` is mixed into captured audio, which is why `fl.audio.capture` switches all four
+off for itself and restores them (reported as `CaptureResult.toggles`).
+
+`fl.transport.record_pressed` reads whether FL's transport record button is engaged. `toggle_record()`
+merely flips it and FL leaves it engaged after a recording pass, so code that needs recording on should
+use `ensure_record_pressed()` (which returns the previous state) rather than toggling blindly.
 
 `fl.analysis.wav(...)` and `fl.analysis.pcm(...)` return local audio analysis objects; the same API is available without FL through `from fruitylink.analysis import Analysis`. Return `.summary()`, `.windows(...)`, `.spectral()` or `.spectral_windows(...)` from a script.
 

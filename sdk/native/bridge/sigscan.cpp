@@ -181,6 +181,56 @@ static const SymEntry g_symbolDefinitions[] = {
     // on both installed binaries (analysis/verified-symbols-arm-2026-09-14.json).
     { "FLmx_SetTrackArmed", "48 8B 43 20 48 83 F8 FF 75 3C 48 8B 43 18 48 8B 0D ?? ?? ?? ?? 48 8B D0 48 69 D2 ?? ?? ?? ?? 48 8D 0C ?? 48 8B 15 ?? ?? ?? ?? 48 69 C0 ?? ?? ?? ?? 80 BC ?? ?? 14 00 00 00 0F 94 C2 4D 33 C0 E8 ?? ?? ?? ??", SK_DataRef, 64, 68, 0, 0, { 0, 0x11C59D0ULL, 0 }, 0, RS_Unresolved },
     { "MixerTrackArmedOffset", "48 8B 43 20 48 83 F8 FF 75 3C 48 8B 43 18 48 8B 0D ?? ?? ?? ?? 48 8B D0 48 69 D2 ?? ?? ?? ?? 48 8D 0C ?? 48 8B 15 ?? ?? ?? ?? 48 69 C0 ?? ?? ?? ?? 80 BC ?? ?? 14 00 00 00 0F 94 C2 4D 33 C0 E8 ?? ?? ?? ??", SK_VtableSlot, 52, 0, 4, 0, { 0, 0, 0 }, 0, RS_Unresolved },
+    // Global recording filter (the record button's right-click "Recording filter" submenu; bits 1 Automation,
+    // 2 Notes, 4 Audio, 8 Clips). Live audio capture needs bit 4 or FL writes no WAV for an armed insert.
+    // Anchor: TFruityLoopsMainForm.Recfilter1MenuClick, the single OnClick every filter item shares (DFM
+    // TFRUITYLOOPSMAINFORM: Recfilter1Menu Tag 1 "&Automation", Recfilter2Menu Tag 2 "&Notes", Recfilter3Menu
+    // Tag 4 "A&udio", Recfilter4Menu Tag 8 "&Clips"). Its body is `flags = item.Checked ? *filter | item.Tag
+    // : *filter & ~item.Tag; SetRecordingFilter(flags)`, so ONE signature yields both halves: the first
+    // `MOV RAX,[rip+d]` names the .data slot holding a pointer to the int (RecordingFilter2 in the registry,
+    // saved/loaded only at FL start and exit), and the trailing `CALL rel32` names FL's own setter, which
+    // writes the int and refreshes the menu checkmarks. Unique in both installed engines (RE 2026-09-17,
+    // 26.1.3.5570 and 25.2.5.5319). Consumers deref the slot once, then read/write the int32 behind it.
+    // Transport record button (the toolbar toggle). A capture pass must switch recording ON, and FL leaves
+    // the button pressed after a pass, so a blind toggle turns the NEXT pass off again and it records nothing.
+    // Anchor: the callback behind FL's own scripting `ui.isRecording`, which is exactly
+    // `return toolbarForm.RecordBtn.Pressed`: one signature yields the toolbar-form pointer slot, the record
+    // button's field offset (+0x788 on both installed builds; kept literal because the sibling callbacks for
+    // the loop-record and step-edit buttons are byte-identical apart from it) and the button's pressed-state
+    // byte (+0x49e on 26.1.3.5570, +0x492 on 25.2.5.5319). Unique in both installed engines (RE 2026-09-17).
+    // ---- transport / global toggles (metronome, countdown, wait-for-input, loop record, overdub) ----
+    // RE 2026-09-18. Every one of FL's TShortcutsModule toggle Actions is the same seven-instruction shape:
+    //     obj = *(*(<TransportOptionsPtr>)); target = obj[<TransportOptionsFieldOffset>];
+    //     newState = (*<XStatePtr> == 0);  (*target)[<XSetterSlot>](target, newState)
+    // so ONE signature per toggle yields its state pointer AND the vtable slot of FL's own setter, and the
+    // shared manager slot/field offset come from the metronome copy. The state pointers agree exactly with the
+    // globals FL's own ui.isMetronomeEnabled / isPrecountEnabled / isStartOnInputEnabled / isLoopRecEnabled
+    // callbacks read, which is the cross-check that these are the right globals. The vtable indices are
+    // identical on both installed builds (0x28 overdub, 0x30 wait-for-input, 0x38 countdown, 0x40 metronome,
+    // 0x50 loop record); each pattern keeps its index literal, which is what makes it unique. Verified unique
+    // on 26.1.3.5570 and 25.2.5.5319; only the 25.2.5.5319 addresses go in ghidra[] (26.1.3 is not a keyed build).
+    { "TransportOptionsPtr",         "53 48 83 EC 20 48 8B 05 ?? ?? ?? ?? 48 8B 00 48 8B 40 7C 48 89 C1 48 8B 15 ?? ?? ?? ?? 80 3A 00 0F 94 C2 48 8B 18 FF 53 40 48 83 C4 20 5B C3", SK_DataRef,  8, 12, 0, 0, { 0, 0x14ABCA8ULL, 0 }, 0, RS_Unresolved },
+    { "TransportOptionsFieldOffset", "53 48 83 EC 20 48 8B 05 ?? ?? ?? ?? 48 8B 00 48 8B 40 7C 48 89 C1 48 8B 15 ?? ?? ?? ?? 80 3A 00 0F 94 C2 48 8B 18 FF 53 40 48 83 C4 20 5B C3", SK_VtableSlot, 18,  0, 1, 0, { 0, 0, 0 }, 0, RS_Unresolved },
+    { "MetronomeStatePtr",           "53 48 83 EC 20 48 8B 05 ?? ?? ?? ?? 48 8B 00 48 8B 40 7C 48 89 C1 48 8B 15 ?? ?? ?? ?? 80 3A 00 0F 94 C2 48 8B 18 FF 53 40 48 83 C4 20 5B C3", SK_DataRef, 25, 29, 0, 0, { 0, 0x14A8BE8ULL, 0 }, 0, RS_Unresolved },
+    { "MetronomeSetterSlot",         "53 48 83 EC 20 48 8B 05 ?? ?? ?? ?? 48 8B 00 48 8B 40 7C 48 89 C1 48 8B 15 ?? ?? ?? ?? 80 3A 00 0F 94 C2 48 8B 18 FF 53 40 48 83 C4 20 5B C3", SK_VtableSlot, 40,  0, 1, 0, { 0, 0, 0 }, 0, RS_Unresolved },
+    { "PrecountStatePtr",            "53 48 83 EC 20 48 8B 05 ?? ?? ?? ?? 48 8B 00 48 8B 40 7C 48 89 C1 48 8B 15 ?? ?? ?? ?? 80 3A 00 0F 94 C2 48 8B 18 FF 53 38 48 83 C4 20 5B C3", SK_DataRef, 25, 29, 0, 0, { 0, 0x14A83B0ULL, 0 }, 0, RS_Unresolved },
+    { "PrecountSetterSlot",          "53 48 83 EC 20 48 8B 05 ?? ?? ?? ?? 48 8B 00 48 8B 40 7C 48 89 C1 48 8B 15 ?? ?? ?? ?? 80 3A 00 0F 94 C2 48 8B 18 FF 53 38 48 83 C4 20 5B C3", SK_VtableSlot, 40,  0, 1, 0, { 0, 0, 0 }, 0, RS_Unresolved },
+    { "WaitForInputStatePtr",        "53 48 83 EC 20 48 8B 05 ?? ?? ?? ?? 48 8B 00 48 8B 40 7C 48 89 C1 48 8B 15 ?? ?? ?? ?? 80 3A 00 0F 94 C2 48 8B 18 FF 53 30 48 83 C4 20 5B C3", SK_DataRef, 25, 29, 0, 0, { 0, 0x14AC368ULL, 0 }, 0, RS_Unresolved },
+    { "WaitForInputSetterSlot",      "53 48 83 EC 20 48 8B 05 ?? ?? ?? ?? 48 8B 00 48 8B 40 7C 48 89 C1 48 8B 15 ?? ?? ?? ?? 80 3A 00 0F 94 C2 48 8B 18 FF 53 30 48 83 C4 20 5B C3", SK_VtableSlot, 40,  0, 1, 0, { 0, 0, 0 }, 0, RS_Unresolved },
+    { "LoopRecordStatePtr",          "53 48 83 EC 20 48 8B 05 ?? ?? ?? ?? 48 8B 00 48 8B 40 7C 48 89 C1 48 8B 15 ?? ?? ?? ?? 80 3A 00 0F 94 C2 48 8B 18 FF 53 50 48 83 C4 20 5B C3", SK_DataRef, 25, 29, 0, 0, { 0, 0x14A83F8ULL, 0 }, 0, RS_Unresolved },
+    { "LoopRecordSetterSlot",        "53 48 83 EC 20 48 8B 05 ?? ?? ?? ?? 48 8B 00 48 8B 40 7C 48 89 C1 48 8B 15 ?? ?? ?? ?? 80 3A 00 0F 94 C2 48 8B 18 FF 53 50 48 83 C4 20 5B C3", SK_VtableSlot, 40,  0, 1, 0, { 0, 0, 0 }, 0, RS_Unresolved },
+    { "BlendRecordedStatePtr",       "53 48 83 EC 20 48 8B 05 ?? ?? ?? ?? 48 8B 00 48 8B 40 7C 48 89 C1 48 8B 15 ?? ?? ?? ?? 80 3A 00 0F 94 C2 48 8B 18 FF 53 28 48 83 C4 20 5B C3", SK_DataRef, 25, 29, 0, 0, { 0, 0x14A9818ULL, 0 }, 0, RS_Unresolved },
+    { "BlendRecordedSetterSlot",     "53 48 83 EC 20 48 8B 05 ?? ?? ?? ?? 48 8B 00 48 8B 40 7C 48 89 C1 48 8B 15 ?? ?? ?? ?? 80 3A 00 0F 94 C2 48 8B 18 FF 53 28 48 83 C4 20 5B C3", SK_VtableSlot, 40,  0, 1, 0, { 0, 0, 0 }, 0, RS_Unresolved },
+    // Engine-level "a recording pass is running" counter: the first thing FL's own apply-recording-filter
+    // routine checks before it computes the effective filter (0 => it zeroes the filter and returns). Live
+    // 2026-09-17 it read 4 during a disk-recording pass and 0 when stopped, which makes it a verification
+    // signal for recording that does not depend on the toolbar button's paint state.
+    { "RecordingActiveCountPtr", "48 8B 05 ?? ?? ?? ?? 83 38 00 7E 43 48 8B 05 ?? ?? ?? ?? 8B 00 8B C8 F7 C1 04 00 00 00 74 0A", SK_DataRef, 3, 7, 0, 0, { 0, 0x14A93D0ULL, 0 }, 0, RS_Unresolved },
+    { "RecordButtonFormPtr",       "48 83 EC 28 48 8B 05 ?? ?? ?? ?? 48 8B 00 48 8B 80 88 07 00 00 48 0F B6 88 ?? ?? ?? ?? 48 8B 05 ?? ?? ?? ?? FF 10 48 83 C4 28 C3", SK_DataRef,    7, 11, 0, 0, { 0, 0x14AA4C8ULL, 0 }, 0, RS_Unresolved },
+    { "RecordButtonOffset",        "48 83 EC 28 48 8B 05 ?? ?? ?? ?? 48 8B 00 48 8B 80 88 07 00 00 48 0F B6 88 ?? ?? ?? ?? 48 8B 05 ?? ?? ?? ?? FF 10 48 83 C4 28 C3", SK_VtableSlot, 17, 0, 4, 0, { 0, 0, 0 }, 0, RS_Unresolved },
+    { "RecordButtonPressedOffset", "48 83 EC 28 48 8B 05 ?? ?? ?? ?? 48 8B 00 48 8B 80 88 07 00 00 48 0F B6 88 ?? ?? ?? ?? 48 8B 05 ?? ?? ?? ?? FF 10 48 83 C4 28 C3", SK_VtableSlot, 25, 0, 4, 0, { 0, 0, 0 }, 0, RS_Unresolved },
+    { "RecordingFilterPtr",        "48 83 EC 28 80 BA 80 00 00 00 00 74 0E 48 8B 05 ?? ?? ?? ?? 8B 00 0B 42 18 EB 10 48 8B 05 ?? ?? ?? ?? 8B 4A 18 F7 D1 8B 00 23 C1 89 C1 E8 ?? ?? ?? ?? 48 83 C4 28 C3", SK_DataRef, 16, 20, 0, 0, { 0, 0x14AA218ULL, 0 }, 0, RS_Unresolved },
+    { "FLrec_SetRecordingFilter",  "48 83 EC 28 80 BA 80 00 00 00 00 74 0E 48 8B 05 ?? ?? ?? ?? 8B 00 0B 42 18 EB 10 48 8B 05 ?? ?? ?? ?? 8B 4A 18 F7 D1 8B 00 23 C1 89 C1 E8 ?? ?? ?? ?? 48 83 C4 28 C3", SK_DataRef, 46, 50, 0, 0, { 0, 0x10C4900ULL, 0 }, 0, RS_Unresolved },
 };
 static const int g_symCount = (int)(sizeof(g_symbolDefinitions) / sizeof(g_symbolDefinitions[0]));
 static std::vector<SymEntry> g_syms(g_symbolDefinitions, g_symbolDefinitions + g_symCount);

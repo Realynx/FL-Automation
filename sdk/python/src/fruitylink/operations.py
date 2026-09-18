@@ -264,16 +264,16 @@ class Operations(QueryOperations):
         return cast(str, self.invoke("get_channel_plugin", **{"channel": channel}))
 
     def add_channel(self, *, plugin_name: str) -> int:
-        """Add a new channel hosting the named generator plugin; returns its index."""
+        """Add a new channel hosting the named generator plugin; returns its index. Instantiating a plugin runs its constructor on FL's UI thread, so this call is guarded for 20 seconds instead of the ordinary bridge budget (the FIRST plugin load of a session is the slow one: a cold VST scan/instantiate can hold FL's UI thread for many seconds). If even that expires, the channel's plugin name is re-read once after a short settle: when the generator did load the call succeeds and the recovery is recorded in the op log, and only a channel that still reports no generator raises a timeout saying the plugin is still initialising or waiting on a dialog."""
         return cast(int, self.invoke("add_channel", **{"pluginName": plugin_name}))
 
     def list_mixer_effects(self, *, track: int) -> str:
         """List the effects loaded in a mixer track's FX slots."""
         return cast(str, self.invoke("list_mixer_effects", **{"track": track}))
 
-    def add_mixer_effect(self, *, track: int, slot: int, plugin_name: str) -> None:
-        """Load/replace the named effect into a mixer track's FX slot (0-9)."""
-        self.invoke("add_mixer_effect", **{"track": track, "slot": slot, "pluginName": plugin_name})
+    def add_mixer_effect(self, *, track: int, slot: int, plugin_name: str) -> str:
+        """Load/replace the named effect into a mixer track's FX slot (0-9) and return a verification line: the slot plus the effect name the slot reports after the load. Instantiating a plugin runs its constructor on FL's UI thread, so this call is guarded for 20 seconds instead of the ordinary bridge budget (the FIRST plugin load of a session is the slow one: a cold VST scan/instantiate can hold FL's UI thread for many seconds). If even that expires, the slot is re-read once after a short settle: when the effect did load the call succeeds and the verification line carries "loaded after N ms; FL's UI was blocked while the plugin initialised", and only a slot that is still empty raises a timeout saying the plugin is still initialising or waiting on a dialog."""
+        return cast(str, self.invoke("add_mixer_effect", **{"track": track, "slot": slot, "pluginName": plugin_name}))
 
     def remove_mixer_effect(self, *, track: int, slot: int) -> None:
         """Clear a mixer track's FX slot."""
@@ -283,16 +283,16 @@ class Operations(QueryOperations):
         """Copy the effect type from one FX slot to another (type only, not parameter state)."""
         self.invoke("clone_mixer_effect", **{"track": track, "fromSlot": from_slot, "toSlot": to_slot})
 
-    def list_plugin_params(self, *, channel_or_track: int, slot: int, filter: str | None) -> str:
-        """List a plugin's parameters ("index: name"). slot < 0 = channel generator; else mixer track+slot. Optional name filter."""
+    def list_plugin_params(self, *, channel_or_track: int, slot: int, filter: str | None = None) -> str:
+        """List a plugin's parameters ("index: name"). slot < 0 = channel generator; else mixer track+slot. The name filter is OPTIONAL: omit it (or pass null) to list every parameter."""
         return cast(str, self.invoke("list_plugin_params", **{"channelOrTrack": channel_or_track, "slot": slot, "filter": filter}))
 
     def set_plugin_param(self, *, channel_or_track: int, slot: int, param_index: int, value: float) -> None:
         """Set a plugin parameter to a normalized value 0..1. slot < 0 = channel generator; else mixer track+slot."""
         self.invoke("set_plugin_param", **{"channelOrTrack": channel_or_track, "slot": slot, "paramIndex": param_index, "value": value})
 
-    def list_samples(self, *, filter: str | None) -> str:
-        """List available audio samples (factory packs + user content), optionally filtered by name."""
+    def list_samples(self, *, filter: str | None = None) -> str:
+        """List available audio samples from every configured search root, optionally filtered by name (a case-insensitive substring of the path). The filter is OPTIONAL: omit it (or pass null) to browse. Entries are root-tagged relative paths with a legend line: [P] = FL's factory packs, [U] = the user's Image-Line documents content, [B1], [B2], ... = the folders FL's browser searches in addition to those (its "extra search folders"), which is where a user's own sample library normally lives. Pass an entry back verbatim to add_sample_channel / replace_channel_sample."""
         return cast(str, self.invoke("list_samples", **{"filter": filter}))
 
     def add_sample_channel(self, *, sample_path: str) -> int:
@@ -304,7 +304,7 @@ class Operations(QueryOperations):
         self.invoke("replace_channel_sample", **{"channel": channel, "samplePath": sample_path})
 
     def load_channel_plugin_state(self, *, channel: int, path: str, use_channel_loader: bool = False) -> str:
-        """Load a plugin state or preset file into the generator ALREADY hosted by a channel, without replacing the plugin instance. Uses the wrapper's own state-file loader (dispatcher opcode 0x12). Live-verified on FL 26.1.3: a VST3 .vstpreset whose class id is the plugin's GUID string with braces/dashes removed loads into Serum 2 and changes the state in place, and a native plugin's own preset format can load too (GMS .gmsynth from Data/Patches/Plugin presets/Generators/GMS applied in place: 226 differing state bytes, the pad became audible), while a third-party proprietary preset (.SerumPreset) is silently ignored. Load a factory preset BEFORE authoring a native synth by parameter: a fresh GMS has no oscillator waveforms (chosen in the GUI, not parameters) and renders silence. Set useChannelLoader to route an FL .fst through FL's channel file loader instead (the drag-and-drop path), which may swap the generator, rename the channel and start the transport; that route is refused for other formats because live it applied no state and renamed the channel. Prefer the default dispatcher route. Refuses channels without a hosted plugin and, for .fst files, files that do not name the channel's current plugin. Returns a verification line: plugin name, same-instance check, parameter count and a comparison of the plugin's wrapper state record before and after the load (sizes, short hashes and the number of differing bytes), or an explicit "unavailable" note when no snapshot could be taken. Confirm the sound with parameter displays in a separate request or an isolated render."""
+        """Load a plugin state or preset file into the generator ALREADY hosted by a channel, without replacing the plugin instance. Uses the wrapper's own state-file loader (dispatcher opcode 0x12). Live-verified on FL 26.1.3: a VST3 .vstpreset whose class id is the plugin's GUID string with braces/dashes removed loads into Serum 2 and changes the state in place, and a native plugin's own preset format can load too (GMS .gmsynth from Data/Patches/Plugin presets/Generators/GMS applied in place: 226 differing state bytes, the pad became audible), while a third-party proprietary preset (.SerumPreset) is silently ignored. Load a factory preset BEFORE authoring a native synth by parameter: a fresh GMS has no oscillator waveforms (chosen in the GUI, not parameters) and renders silence. An FL .fst preset for one of FL's OWN generators (Sytrus, Harmor, ... — a channel whose plugin is not the "Fruity Wrapper" VST host) is routed through FL's channel file loader automatically, because the dispatcher is a silent no-op for those files (FL 26.1.3.5570: a Sytrus factory preset left the state record byte-identical, the channel loader changed 99% of it). That loader also mutes the channel and renames it to the preset's base name, so the SDK snapshots the channel's name, mute state and mixer route before the load and restores all three after it; the verification line names the route used and what was restored. Set useChannelLoader to force that route for a wrapped plugin's .fst as well; it is refused for other formats because live it applied no state and renamed the channel. Refuses channels without a hosted plugin and, for .fst files, files that do not name the channel's current plugin (the name is matched both as UTF-16, how wrapped plugins store it, and as the single-byte string FL's own generators store). Returns a verification line: plugin name, the route used, same-instance check, parameter count and a comparison of the plugin's wrapper state record before and after the load (sizes, short hashes and the number of differing bytes), or an explicit "unavailable" note when no snapshot could be taken. Confirm the sound with parameter displays in a separate request or an isolated render."""
         return cast(str, self.invoke("load_channel_plugin_state", **{"channel": channel, "path": path, "useChannelLoader": use_channel_loader}))
 
     def load_mixer_effect_state(self, *, track: int, slot: int, path: str) -> str:
@@ -388,7 +388,7 @@ class Operations(QueryOperations):
         return cast(str, self.invoke("list_clips", **{"offset": offset, "track": track}))
 
     def add_pattern_clip(self, *, pattern: int, track: int, start_tick: int, length_tick: int) -> None:
-        """Add a pattern clip (pattern 1-based, matching notes/patterns; 0 or out-of-range throws) to a track at startTick; lengthTick<=0 = pattern length."""
+        """Add a pattern clip (pattern 1-based, matching notes/patterns; 0 or out-of-range throws) to a track at startTick; lengthTick<=0 = pattern length. A PATTERN CLIP DOES NOT LOOP: FL plays the pattern once from the clip start and the rest of the clip is silent (live-verified 2026-09-18, FL 26.1.3.5570: a 1-bar pattern in a 4-bar clip sounded in bar 1 only, bars 2-4 measured silent at the master), so a span that should repeat needs one clip per repetition - keep lengthTick at most the pattern's own length, or use the Python helper fl.playlist.tile_pattern, which places the whole run in one pass."""
         self.invoke("add_pattern_clip", **{"pattern": pattern, "track": track, "startTick": start_tick, "lengthTick": length_tick})
 
     def move_clip(self, *, clip_index: int, start_tick: int, track: int) -> None:
@@ -420,7 +420,7 @@ class Operations(QueryOperations):
         self.invoke("move_clips", **{"moves": moves})
 
     def add_pattern_clips(self, *, clips: Sequence[PatternClipSpec]) -> None:
-        """Place many pattern clips in one pass (each realized + inserted atomically), then one refresh/repaint. Clips are addressed by (pattern,track,start), so add-order index shifts don't matter. A positive lengthTick is pinned (as ResizeClips does), so the clip keeps that length even when the pattern's own content is longer or shorter; lengthTick <= 0 takes the pattern length and follows it."""
+        """Place many pattern clips in one pass (each realized + inserted atomically), then one refresh/repaint. Clips are addressed by (pattern,track,start), so add-order index shifts don't matter. A positive lengthTick is pinned (as ResizeClips does), so the clip keeps that length even when the pattern's own content is longer or shorter; lengthTick <= 0 takes the pattern length and follows it. A pinned length is NOT a loop: FL plays the pattern once from the clip start and the rest of the clip is silent, so a repeating span is one spec per repetition (the Python helper fl.playlist.add_patterns(..., repeat=True) expands them for you)."""
         self.invoke("add_pattern_clips", **{"clips": clips})
 
     def resize_clips(self, *, resizes: Sequence[ClipResize]) -> None:
@@ -454,6 +454,62 @@ class Operations(QueryOperations):
     def set_song_mode(self, *, song: bool) -> None:
         """Select song playback when true, or pattern playback when false."""
         self.invoke("set_song_mode", **{"song": song})
+
+    def get_metronome(self) -> bool:
+        """Read FL's metronome click. It is mixed into what FL plays, so it also lands in a live per-insert capture; capture switches it off for the pass and restores it. Symmetric with SetMetronomeAsync; refused until the toggle's symbols resolve on the running build."""
+        return cast(bool, self.invoke("get_metronome"))
+
+    def set_metronome(self, *, on: bool) -> None:
+        """Set FL's metronome click. It is mixed into what FL plays, so it also lands in a live per-insert capture; capture switches it off for the pass and restores it. The change goes through the very setter FL's own toggle Action calls, on FL's main thread, so FL repaints and reacts exactly as it does for a click; the value is re-read afterwards and a refusal is reported instead of assumed. Refused until the toggle's symbols resolve on the running build."""
+        self.invoke("set_metronome", **{"on": on})
+
+    def get_countdown(self) -> bool:
+        """Read FL's countdown before recording (the "precount" toolbar toggle). With it on, a record+play pass spends a bar counting in before FL records anything, which silently shortens or empties a captured span; capture switches it off for the pass and restores it. Symmetric with SetCountdownAsync; refused until the toggle's symbols resolve on the running build."""
+        return cast(bool, self.invoke("get_countdown"))
+
+    def set_countdown(self, *, on: bool) -> None:
+        """Set FL's countdown before recording (the "precount" toolbar toggle). With it on, a record+play pass spends a bar counting in before FL records anything, which silently shortens or empties a captured span; capture switches it off for the pass and restores it. The change goes through the very setter FL's own toggle Action calls, on FL's main thread, so FL repaints and reacts exactly as it does for a click; the value is re-read afterwards and a refusal is reported instead of assumed. Refused until the toggle's symbols resolve on the running build."""
+        self.invoke("set_countdown", **{"on": on})
+
+    def get_wait_for_input(self) -> bool:
+        """Read FL's "wait for input to start playing" toggle. With it on, play does not start until FL sees note or audio input, so an automated record+play pass hangs until its deadline with nothing recorded; capture switches it off for the pass and restores it. Symmetric with SetWaitForInputAsync; refused until the toggle's symbols resolve on the running build."""
+        return cast(bool, self.invoke("get_wait_for_input"))
+
+    def set_wait_for_input(self, *, on: bool) -> None:
+        """Set FL's "wait for input to start playing" toggle. With it on, play does not start until FL sees note or audio input, so an automated record+play pass hangs until its deadline with nothing recorded; capture switches it off for the pass and restores it. The change goes through the very setter FL's own toggle Action calls, on FL's main thread, so FL repaints and reacts exactly as it does for a click; the value is re-read afterwards and a refusal is reported instead of assumed. Refused until the toggle's symbols resolve on the running build."""
+        self.invoke("set_wait_for_input", **{"on": on})
+
+    def get_loop_record(self) -> bool:
+        """Read FL's loop-recording toggle. With it on, a pass over a looped range keeps every take instead of one recording, which changes what a capture writes and what the project ends up holding; capture switches it off for the pass and restores it. Symmetric with SetLoopRecordAsync; refused until the toggle's symbols resolve on the running build."""
+        return cast(bool, self.invoke("get_loop_record"))
+
+    def set_loop_record(self, *, on: bool) -> None:
+        """Set FL's loop-recording toggle. With it on, a pass over a looped range keeps every take instead of one recording, which changes what a capture writes and what the project ends up holding; capture switches it off for the pass and restores it. The change goes through the very setter FL's own toggle Action calls, on FL's main thread, so FL repaints and reacts exactly as it does for a click; the value is re-read afterwards and a refusal is reported instead of assumed. Refused until the toggle's symbols resolve on the running build."""
+        self.invoke("set_loop_record", **{"on": on})
+
+    def get_blend_recorded_notes(self) -> bool:
+        """Read FL's "blend recorded notes" (overdub) toggle: recorded notes are merged into the existing pattern instead of replacing it. Irrelevant to audio capture, exposed because note recording needs it. Symmetric with SetBlendRecordedNotesAsync; refused until the toggle's symbols resolve on the running build."""
+        return cast(bool, self.invoke("get_blend_recorded_notes"))
+
+    def set_blend_recorded_notes(self, *, on: bool) -> None:
+        """Set FL's "blend recorded notes" (overdub) toggle: recorded notes are merged into the existing pattern instead of replacing it. Irrelevant to audio capture, exposed because note recording needs it. The change goes through the very setter FL's own toggle Action calls, on FL's main thread, so FL repaints and reacts exactly as it does for a click; the value is re-read afterwards and a refusal is reported instead of assumed. Refused until the toggle's symbols resolve on the running build."""
+        self.invoke("set_blend_recorded_notes", **{"on": on})
+
+    def get_recording_active(self) -> bool:
+        """Read whether FL's audio engine currently has a recording pass running, independently of the toolbar record button's paint state. This is the counter FL's own apply-recording-filter routine checks before it computes the effective filter, so it is true while the engine is actually recording and false otherwise; use it to verify that a record+play pass really started when the button byte is in doubt. Refused until the recording-state symbol resolves on the running build."""
+        return cast(bool, self.invoke("get_recording_active"))
+
+    def get_record_pressed(self) -> bool:
+        """Read whether FL's transport record button is engaged (the toolbar toggle FL's own scripting reports as ui.isRecording): true means the next play records. TransportToggleRecordAsync only flips it, and FL leaves the button engaged after a recording pass, so a caller that needs recording ON must read this first and toggle only when it differs -- a blind toggle before a second pass switches recording OFF and that pass records nothing. Refused until the record-button symbols resolve on the running build."""
+        return cast(bool, self.invoke("get_record_pressed"))
+
+    def get_recording_filter(self) -> int:
+        """Read FL's global recording filter — the bitmask behind the record button's right-click "Recording filter" submenu, which decides what a recording pass is allowed to capture. Bits (FL's own menu-item tags): 1 = Automation, 2 = Notes, 4 = Audio, 8 = Clips; FL 2025 has no Clips item, so bit 8 is unused there. Bit 4 must be set or FL silently writes no WAV for an armed mixer insert, which is the single most common reason live audio capture produces nothing. FL keeps this value only in memory while it runs (its registry home, RecordingFilter2 under HKCU > Software > Image-Line > FL Studio 26 > General > FruityLoopsMainForm, is read at startup and written at exit), so it must be read and set through the running engine. Refused until the recording-filter symbols resolve on the running build."""
+        return cast(int, self.invoke("get_recording_filter"))
+
+    def set_recording_filter(self, *, flags: int) -> None:
+        """Set FL's global recording filter bitmask (see GetRecordingFilterAsync for the bits) by invoking the very routine FL's own "Recording filter" menu items call, on FL's main thread, so the menu checkmarks and the record button follow. The value is re-read afterwards and a mismatch is reported instead of assumed. Only the flags given are kept, so read first and combine when preserving the user's other choices; the value is restored to what it was by callers that changed it for one pass. Refused until the recording-filter symbols resolve on the running build."""
+        self.invoke("set_recording_filter", **{"flags": flags})
 
     def seek(self, *, tick: int) -> None:
         """Move the song playhead to an absolute tick (PPQ)."""

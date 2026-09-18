@@ -153,6 +153,43 @@ public sealed class StructuredQueryTests : IDisposable
         replies["peekabs 20008 8"] = Hex(0x30000UL);
     }
 
+    [Fact]
+    public void SampleRecordsKeepTheVerbatimLoaderEntryAndSplitItsFields()
+    {
+        var factory = FlInjectBridge.DescribeSample(@"[P]Drums\Kicks\909 Kick.WAV");
+        Assert.Equal((@"[P]Drums\Kicks\909 Kick.WAV", "[P]", @"Drums\Kicks\909 Kick.WAV", "909 Kick", ".wav"),
+            (factory.Entry, factory.RootTag, factory.RelativePath, factory.Name, factory.Extension));
+
+        var user = FlInjectBridge.DescribeSample(@"[U]Hats\Closed Hat.wav");
+        Assert.Equal(("[U]", @"Hats\Closed Hat.wav"), (user.RootTag, user.RelativePath));
+
+        var untagged = FlInjectBridge.DescribeSample("loose.flac");
+        Assert.Equal(("", "loose.flac", "loose", ".flac"),
+            (untagged.RootTag, untagged.RelativePath, untagged.Name, untagged.Extension));
+    }
+
+    [Fact]
+    public async Task ASampleFilterThatMatchesNothingIsAnEmptyTerminalPageAndNeverTouchesTheBridge()
+    {
+        var page = await new FlInjectBridge().QuerySamplesAsync("zzz-no-such-sample-\u00b6");
+
+        Assert.Empty(page.Items);
+        Assert.Null(page.NextOffset);
+        Assert.Equal(0, page.Total);
+        Assert.Empty(commands);   // sample discovery is a directory scan, not a native call
+    }
+
+    [Theory]
+    [InlineData(-1, 50)]
+    [InlineData(0, 0)]
+    [InlineData(0, 513)]
+    public async Task SamplePagesShareTheQueryPageBoundsAndScanNothingWhenRefused(int offset, int limit)
+    {
+        await Assert.ThrowsAsync<ArgumentOutOfRangeException>(() =>
+            new FlInjectBridge().QuerySamplesAsync(offset: offset, limit: limit));
+        Assert.Empty(commands);
+    }
+
     private void AddString(ulong address, string value)
     {
         replies[$"peekabs {address - 4:x} 4"] = Hex(value.Length);

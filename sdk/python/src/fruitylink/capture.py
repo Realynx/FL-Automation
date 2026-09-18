@@ -16,6 +16,7 @@ from __future__ import annotations
 import math
 import re
 import shutil
+import struct
 import time
 from collections.abc import Callable, Iterator, Mapping, Sequence
 from dataclasses import asdict, dataclass, field
@@ -26,6 +27,7 @@ from .analysis import AudioAnalysis
 from .analysis.audio import load_wav
 from .analysis.bands import DEFAULT_BANDS, Band
 from .errors import FruityLinkError
+from .project import RECORDING_FILTER_AUDIO, recording_filter_names
 from .records import Timebase
 
 if TYPE_CHECKING:
@@ -36,6 +38,15 @@ METHOD_LIVE = "fl_disk_recording"
 METHOD_RENDER = "offline_render"
 ENVELOPE_BANDS: tuple[Band, ...] = ((None, 90.0), (90.0, 250.0), (250.0, 2000.0), (2000.0, None))
 MAX_SECTIONS_PER_CALL = 32
+PLACEHOLDER_NAME = "fruitylink-retired-placeholder.wav"
+"""Name of the tiny silent WAV retired recording channels are repointed at (see ``write_placeholder``)."""
+PLACEHOLDER_RATE = 48000
+PLACEHOLDER_CHANNELS = 2
+PLACEHOLDER_FRAMES = 64
+# The FL-wide toggles a capture pass must have off; see Audio._ensure_toggles.
+CAPTURE_TOGGLES: tuple[str, ...] = ("countdown", "wait_for_input", "loop_record", "metronome")
+# Slack added to the wall-clock stop so the tick readback wins the race on a healthy pass.
+WALL_CLOCK_MARGIN_SECONDS = 0.25
 _STATE = re.compile(r"playing=(?P<playing>yes|no) pos=bar \d+ beat \d+ \(tick (?P<tick>\d+)\).*?"
                     r"playRange=\[(?P<range_start>-?\d+)\.\.(?P<range_end>-?\d+)\]")
 
@@ -478,11 +489,37 @@ def as_measurement(value: object, track: int) -> dict[str, object]:
 
 
 @dataclass(frozen=True)
+class RecordingFilterChange:
+    """What ``capture`` did to FL's global recording filter for one pass.
+
+    ``before`` is the bitmask found on entry, ``used`` the one the pass recorded with, and ``restored``
+    the one left behind (``before`` again unless ``restore=False`` was asked for). ``changed`` is False
+    when Audio was already enabled and nothing was written.
+    """
+
+    before: int
+    used: int
+    restored: int
+
+    @property
+    def changed(self) -> bool:
+        return self.used != self.before
+
+    def to_dict(self) -> dict[str, object]:
+        return {"before": self.before, "before_parts": list(recording_filter_names(self.before)),
+                "used": self.used, "used_parts": list(recording_filter_names(self.used)),
+                "restored": self.restored, "restored_parts": list(recording_filter_names(self.restored)),
+                "changed": self.changed}
+
+
+@dataclass(frozen=True)
 class CaptureResult:
     """Per-insert WAV paths (plain files any descriptor can take), the actual captured range in ticks and
     a ``measurements`` record per insert (always a dict; a failed measurement carries an ``error`` key).
     ``files`` are FL's own recordings, or the named copies when ``name`` was given. ``deleted_clips``,
-    ``retired_channels`` and ``removed_originals`` report the litter cleanup (see the doc's known limitations)."""
+    ``retired_channels`` and ``removed_originals`` report the litter cleanup (see the doc's known limitations),
+    and ``repointed_channels`` / ``placeholder`` the retired channels that were pointed at the silent
+    placeholder WAV so the saved project stays renderable."""
 
     plan: CapturePlan
     files: tuple[CaptureFile, ...]
@@ -495,6 +532,10 @@ class CaptureResult:
     deleted_clips: int = 0
     retired_channels: tuple[int, ...] = field(default_factory=tuple)
     removed_originals: tuple[str, ...] = field(default_factory=tuple)
+    recording_filter: RecordingFilterChange | None = None
+    toggles: dict[str, bool] = field(default_factory=dict)
+    repointed_channels: tuple[int, ...] = field(default_factory=tuple)
+    placeholder: Path | None = None
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "measurements",
@@ -530,7 +571,11 @@ class CaptureResult:
                 "measurements": {str(track): as_measurement(record, track) for track, record in self.measurements.items()},
                 "recorded_folder": str(self.recorded_folder), "warnings": list(self.warnings),
                 "deleted_clips": self.deleted_clips, "retired_channels": list(self.retired_channels),
-                "removed_originals": list(self.removed_originals)}
+                "removed_originals": list(self.removed_originals),
+                "repointed_channels": list(self.repointed_channels),
+                "placeholder": None if self.placeholder is None else str(self.placeholder),
+                "recording_filter": None if self.recording_filter is None else self.recording_filter.to_dict(),
+                "toggles": dict(self.toggles)}
 
 
 @dataclass(frozen=True)
@@ -598,10 +643,58 @@ class _LitterSnapshot:
         return deleted, retired
 
 
+def _preconditions(arm_refresh: bool, filter_change: RecordingFilterChange | None) -> str:
+    """What is left to look at when FL recorded nothing, with everything the SDK already set filtered out.
+
+    Every FL setting this capture depends on and can reach is set by the pass itself: the recording
+    filter's Audio bit (``ensure_recording_filter``), song mode, the loop selection, the per-insert arm and
+    FL's second-arm-change quirk (``arm_refresh``). "Auto-create audio clip" is not a precondition at all --
+    FL adds a sample channel and a playlist clip per recording either way, and the pass cleans both up.
+    What is named below is what genuinely cannot be set through the SDK.
+    """
+    settled = []
+    if filter_change is None:
+        settled.append("the recording filter was NOT touched (ensure_recording_filter=False was passed), so it may "
+                       "still have Audio off, in which case FL records and writes nothing")
+    else:
+        settled.append(f"the recording filter was set to {filter_change.used} "
+                       f"({', '.join(recording_filter_names(filter_change.used))}), which includes Audio")
+    settled.append("the arm-refresh workaround was applied" if arm_refresh else
+                   "arm_refresh=False was passed, so FL may not have registered the recording set; leave it on")
+    return ("The SDK set every FL setting it can reach for this pass: " + "; ".join(settled) + ". "
+            "What remains cannot be set programmatically: FL's audio device must be started and passing audio "
+            "(Options > Audio settings; a device held by another application records nothing), the requested bars "
+            "must contain material routed to those inserts, and FL's recorded-audio folder must be writable.")
+
+
 def default_recorded_folders() -> tuple[Path, ...]:
     """Where FL writes disk recordings by default (user data folder, ``Audio\\Recorded``)."""
     documents = Path.home() / "Documents" / "Image-Line"
     return (documents / "FL Studio" / "Audio" / "Recorded", documents / "Data" / "FL Studio" / "Audio" / "Recorded")
+
+
+def write_placeholder(folder: Path) -> Path:
+    """Create (once) and return the tiny silent WAV that retired recording channels are repointed at.
+
+    A retired sample channel that still references a recording the pass deleted is what hangs FL's
+    command-line renderer: a project saved in that state made ``fl_project_render`` time out at 300 s
+    and at 600 s with no output and no dialog, and the very same snapshot rendered in 7.5 s once every
+    ``"(unused)"`` channel had been pointed at a file that exists (live FL 26.1.3.5570, 2026-09-17). So
+    every channel the pass retires is repointed here before the originals go, and also when the
+    originals are kept, so the project never depends on a recording the user may delete later.
+
+    The file is ``PLACEHOLDER_FRAMES`` frames of 16-bit silence at 48 kHz stereo (a few hundred bytes)
+    in FL's own recorded-audio folder, written only when it is missing and reused by every later pass.
+    """
+    path = folder / PLACEHOLDER_NAME
+    if path.exists():
+        return path
+    payload = PLACEHOLDER_FRAMES * PLACEHOLDER_CHANNELS * 2
+    fmt = struct.pack("<HHIIHH", 1, PLACEHOLDER_CHANNELS, PLACEHOLDER_RATE,
+                      PLACEHOLDER_RATE * PLACEHOLDER_CHANNELS * 2, PLACEHOLDER_CHANNELS * 2, 16)
+    body = b"fmt " + struct.pack("<I", len(fmt)) + fmt + b"data" + struct.pack("<I", payload) + bytes(payload)
+    path.write_bytes(b"RIFF" + struct.pack("<I", len(body) + 4) + b"WAVE" + body)
+    return path
 
 
 def _probe(path: Path) -> tuple[int, int, int]:
@@ -645,7 +738,8 @@ class Audio:
     def capture(self, inserts: Sequence[int] | str = "master", start_bar: int = 1, end_bar: int = 1, *,
                 tail_beats: float = 0, name: str | None = None, beats_per_bar: int = 4, timeout: float | None = None,
                 poll_seconds: float = 0.25, file_timeout: float = 15.0, keep_originals: bool = False,
-                cleanup: bool = True, arm_refresh: bool = True) -> CaptureResult:
+                cleanup: bool = True, arm_refresh: bool = True, ensure_recording_filter: bool = True,
+                restore_recording_filter: bool = True, ensure_toggles: bool = True) -> CaptureResult:
         """Arm ``inserts``, play bars ``start_bar..end_bar`` (one-based, **end inclusive**: 33..36 plays four
         bars) plus ``tail_beats`` once while FL records, then measure the WAV FL wrote for each insert.
 
@@ -655,13 +749,31 @@ class Audio:
         Inserts armed by this call are disarmed afterwards; inserts that were already armed also
         record and their files are ignored.
 
+        Every FL setting this needs is set here, not asked of the user. FL's global recording filter (the
+        record button's right-click "Recording filter") must include Audio or FL arms the insert, records,
+        and writes no file at all; ``ensure_recording_filter`` turns that bit on before arming and
+        ``restore_recording_filter`` puts the whole bitmask back afterwards, on success and on failure
+        alike (reported as ``recording_filter``). Pass ``ensure_recording_filter=False`` only to reproduce
+        the failure. The filter is a global FL setting that FL saves to the registry when it exits, which
+        is why the default is to restore it.
+
+        The same goes for FL's global transport toggles (``ensure_toggles``, on by default): the countdown
+        before recording and "wait for input to start playing" stop a pass from recording at all, loop
+        recording changes what it writes, and the metronome would be mixed into the captured audio, so all
+        four are switched off for the pass and restored afterwards (reported as ``toggles``).
+
         FL quirks handled here (live, FL 26.1.3): FL only registers the recording set after a *second*
         arm-state change, so after arming the requested inserts one non-requested insert (Master unless
         Master is requested) is armed and disarmed again (``arm_refresh``; noted in ``warnings``).
         Every recording also adds a sample channel and a playlist clip even with "Auto-create audio
         clip" off; with ``cleanup`` the new clips are deleted and the new channels retired
         (``Channel.retire``: muted, routed to Master, renamed "(unused) ..."; FL has no channel-delete
-        call), reported as ``deleted_clips`` / ``retired_channels``. With ``name`` the recordings are
+        call), reported as ``deleted_clips`` / ``retired_channels``. A retired channel still references
+        the recording it was created for, and a project saved while a channel points at a file that no
+        longer exists hangs FL's command-line renderer (live 26.1.3.5570), so each retired channel is
+        repointed at a tiny silent WAV in the recorded-audio folder before anything is deleted -- and
+        also when the originals are kept, so the project never depends on a file the user may delete
+        (``repointed_channels`` / ``placeholder``; ``cleanup=False`` skips all of it). With ``name`` the recordings are
         copied next to the originals as ``<name>-<track>.wav`` and, unless ``keep_originals``, FL's
         auto-named originals are deleted once the copies verify (``removed_originals``); with
         ``name=None`` FL's files are kept as they are. See docs/live-audio-capture.md.
@@ -683,23 +795,32 @@ class Audio:
             raise ValueError("timeout must be positive.")
         before = snapshot_folder(folder)
         litter = _LitterSnapshot.take(fl) if cleanup else None
-        stop_tick, warnings = self._record_pass(plan, state, deadline_seconds, poll_seconds, names, arm_refresh)
-        files = self._collect(folder, before, plan, names, file_timeout, poll_seconds, arm_refresh)
+        stop_tick, warnings, filter_change, toggles = self._record_pass(
+            plan, state, deadline_seconds, poll_seconds, names, arm_refresh, ensure_recording_filter,
+            restore_recording_filter, ensure_toggles)
+        files = self._collect(folder, before, plan, names, file_timeout, poll_seconds, arm_refresh, filter_change)
+        # The cleanup runs BEFORE the originals are copied and deleted: a retired channel still pointing at
+        # a recording that is about to go hangs FL's renderer, so it is repointed at the placeholder first.
+        deleted_clips = 0
+        retired: list[int] = []
+        placeholder: Path | None = None
+        repointed: tuple[int, ...] = ()
+        if litter is not None:
+            deleted_clips, retired = litter.clean(fl, warnings)
+            placeholder, repointed = self._repoint(retired, folder, warnings)
         removed: list[str] = []
         if name is not None:
             copies = tuple(self._rename(item, folder, name) for item in files)
             if not keep_originals:
                 removed = self._remove_originals(files, copies, warnings)
             files = copies
-        deleted_clips = 0
-        retired: list[int] = []
-        if litter is not None:
-            deleted_clips, retired = litter.clean(fl, warnings)
         shortest = min(item.seconds for item in files)
         captured_end = plan.start_tick + int(shortest * plan.ticks_per_second)
         measurements = {item.track: _safe_measure(item.path, plan, item.track) for item in files}
         return CaptureResult(plan, files, captured_end, stop_tick, measurements, folder, warnings=tuple(warnings),
-                             deleted_clips=deleted_clips, retired_channels=tuple(retired), removed_originals=tuple(removed))
+                             deleted_clips=deleted_clips, retired_channels=tuple(retired), removed_originals=tuple(removed),
+                             recording_filter=filter_change, toggles=toggles, repointed_channels=repointed,
+                             placeholder=placeholder)
 
     @staticmethod
     def _refresh_candidate(plan: CapturePlan, names: Mapping[int, str], armed: Callable[[int], bool]) -> int | None:
@@ -712,18 +833,58 @@ class Audio:
                 return track
         return None
 
+    def _ensure_filter(self, warnings: list[str]) -> RecordingFilterChange:
+        """Turn Audio on in FL's global recording filter, keeping every other part as the user left it.
+
+        Live finding (FL 26.1.3): with Audio off (the default on this machine was 3 = automation + notes)
+        FL accepts the arm, records, and writes nothing at all, which used to surface as an unexplained
+        "FL wrote no WAV" after the file timeout. The filter only exists in the running engine (FL reads
+        the registry at startup and writes it at exit), so it is read and set through the SDK op, never
+        through the registry.
+        """
+        transport = self._fl.transport
+        before = transport.ensure_recording_filter(audio=True)
+        used = before | RECORDING_FILTER_AUDIO
+        if used != before:
+            warnings.append(f"FL's recording filter had Audio off ({before} = "
+                            f"{', '.join(recording_filter_names(before)) or 'nothing'}); it was set to {used} for this "
+                            "pass because FL writes no WAV without it.")
+        return RecordingFilterChange(before, used, used)
+
+    def _restore_filter(self, change: RecordingFilterChange, warnings: list[str]) -> RecordingFilterChange:
+        """Put the bitmask back the way the pass found it; a refusal is a warning, never a lost capture."""
+        if not change.changed:
+            return change
+        try:
+            self._fl.transport.recording_filter = change.before
+        except FruityLinkError as error:
+            warnings.append(f"FL's recording filter was left at {change.used}; restoring {change.before} failed: {error}")
+            return change
+        return RecordingFilterChange(change.before, change.used, change.before)
+
     def _record_pass(self, plan: CapturePlan, state: TransportState, deadline_seconds: float,
-                     poll_seconds: float, names: Mapping[int, str], arm_refresh: bool) -> tuple[int | None, list[str]]:
-        """Song mode, no loop, arm (+ refresh), seek, record+play, wait, stop; then restore what was changed."""
+                     poll_seconds: float, names: Mapping[int, str], arm_refresh: bool,
+                     ensure_recording_filter: bool = True, restore_recording_filter: bool = True,
+                     ensure_toggles: bool = True,
+                     ) -> tuple[int | None, list[str], RecordingFilterChange | None, dict[str, bool]]:
+        """Filter, song mode, no loop, arm (+ refresh), seek, record+play, wait, stop; then restore what was changed."""
         fl = self._fl
         warnings: list[str] = []
+        filter_change = self._ensure_filter(warnings) if ensure_recording_filter else None
+        toggles = self._ensure_toggles(warnings) if ensure_toggles else {}
         previous_mode = fl.transport.song_mode
         if not previous_mode:
+            # Pattern mode plays the current pattern on a loop, so the playhead never reaches the span's end
+            # and the pass ran to its deadline with minutes of looped audio (live 26.1.3, 2026-09-18).
             fl.transport.song_mode = True
+            warnings.append("FL was in pattern mode, which loops the current pattern instead of playing the "
+                            "requested bars; song mode was selected for this pass and pattern mode restored "
+                            "afterwards.")
         if state.play_range is not None:
             fl.transport.clear_loop()
         armed_here: list[int] = []
         stop_tick: int | None = None
+        record_before: bool | None = None
         try:
             for track in plan.inserts:
                 if not fl.mixer[track].armed:
@@ -732,11 +893,17 @@ class Audio:
             if arm_refresh:
                 self._arm_refresh(plan, names, warnings)
             fl.transport.seek_ticks(plan.start_tick)
-            fl.transport.toggle_record()
+            record_before = self._engage_record(warnings)
             fl.transport.play()
+            self._confirm_recording(plan, poll_seconds, warnings)
             stop_tick = self._wait_for_end(plan, deadline_seconds, poll_seconds, warnings)
             fl.transport.stop()
         finally:
+            if record_before is not None and fl.transport.record_pressed != record_before:
+                try:
+                    fl.transport.toggle_record()
+                except FruityLinkError as error:
+                    warnings.append(f"FL's record button was left engaged; releasing it failed: {error}")
             for track in reversed(armed_here):
                 try:
                     fl.mixer[track].armed = False
@@ -746,7 +913,109 @@ class Audio:
                 fl.transport.loop_ticks(state.play_range[0], state.play_range[1] + 1)
             if not previous_mode:
                 fl.transport.song_mode = False
-        return stop_tick, warnings
+            if filter_change is not None and restore_recording_filter:
+                filter_change = self._restore_filter(filter_change, warnings)
+            if toggles:
+                self._restore_toggles(toggles, warnings)
+        return stop_tick, warnings, filter_change, toggles
+
+    def _ensure_toggles(self, warnings: list[str]) -> dict[str, bool]:
+        """Switch off the FL-wide toggles that would spoil the pass, returning what they were.
+
+        ``countdown`` and ``wait_for_input`` stop FL recording the requested span at all (it counts in, or
+        waits for input that never comes and the pass times out); ``loop_record`` turns one recording into a
+        pile of takes; ``metronome`` is mixed into what FL plays and lands in the captured audio. Toggles the
+        running build cannot report are skipped, and only the ones that were actually on are reported.
+        """
+        try:
+            previous = self._fl.transport.ensure(**{name: False for name in CAPTURE_TOGGLES})
+        except FruityLinkError as error:
+            warnings.append(f"FL's transport toggles could not be set for this pass ({error}); if the capture is "
+                            "empty or has a click in it, check FL's countdown, wait-for-input, loop-record and "
+                            "metronome toggles by hand.")
+            return {}
+        changed = {name: value for name, value in previous.items() if value}
+        if changed:
+            warnings.append("FL's " + ", ".join(sorted(changed)) + " "
+                            + ("was" if len(changed) == 1 else "were")
+                            + " on and would have spoilt the pass; switched off for it and restored afterwards.")
+        return previous
+
+    def _restore_toggles(self, previous: Mapping[str, bool], warnings: list[str]) -> None:
+        """Hand the toggles back exactly as they were; a refusal is a warning, never a lost capture."""
+        try:
+            self._fl.transport.ensure(**dict(previous))
+        except FruityLinkError as error:
+            warnings.append(f"FL's transport toggles were left as this pass set them; restoring {dict(previous)} "
+                            f"failed: {error}")
+
+    def _engage_record(self, warnings: list[str]) -> bool | None:
+        """Switch FL's record button ON and report the state it was in, so the pass can hand it back.
+
+        Live finding (FL 26.1.3): ``toggle_record`` only flips the toolbar button and FL leaves it engaged
+        after a pass, so the old blind toggle turned recording OFF on the very next capture and that pass
+        wrote no file -- back-to-back captures alternated between working and silently failing. Reading the
+        button first makes the pass idempotent. Returns None (and toggles blindly, as before) on a build
+        where the record-state symbols are unavailable, so capture still works there.
+        """
+        fl = self._fl
+        try:
+            before = fl.transport.record_pressed
+        except FruityLinkError as error:
+            warnings.append("FL's record-button state could not be read on this build "
+                            f"({error}); the pass toggled recording blindly.")
+            fl.transport.toggle_record()
+            return None
+        if not before:
+            fl.transport.toggle_record()
+        else:
+            warnings.append("FL's record button read as already engaged before the pass; it was left engaged afterwards.")
+        # The byte is only a hint: FL can decline the click, and the button object a build exposes is not always
+        # the one that is lit. Whether the pass actually records is settled after play() by the engine counter.
+        return before
+
+    def _recording_started(self, poll_seconds: float, budget: float = 2.0) -> bool | None:
+        """Poll FL's engine-level recording counter; None when the build cannot report it."""
+        deadline = self._clock() + budget
+        while True:
+            try:
+                if self._fl.transport.recording_active:
+                    return True
+            except FruityLinkError:
+                return None
+            if self._clock() >= deadline:
+                return False
+            self._sleep(poll_seconds)
+
+    def _confirm_recording(self, plan: CapturePlan, poll_seconds: float, warnings: list[str]) -> None:
+        """After play, make sure the engine really is recording; one more record toggle, then give up.
+
+        The transport record button's pressed byte is a UI hint that FL does not always honour (the click is
+        routed through ``ShortcutsModule.RecordAction``, and the button object a build exposes is not always the
+        one that lights up), so the pass is verified against ``recording_active`` -- the counter FL's own
+        apply-recording-filter routine gates on -- and not against the byte.
+        """
+        fl = self._fl
+        started = self._recording_started(poll_seconds)
+        if started is None:
+            warnings.append("This FL build cannot report the engine recording state; the pass was not verified. "
+                            "If no WAV appears, check FL's record button by hand.")
+            return
+        if started:
+            return
+        warnings.append("FL was playing but not recording after the record toggle (its record button did not take); "
+                        "the pass stopped, toggled record again and restarted.")
+        fl.transport.stop()
+        fl.transport.toggle_record()
+        fl.transport.seek_ticks(plan.start_tick)
+        fl.transport.play()
+        if self._recording_started(poll_seconds) is not False:
+            return
+        raise CaptureError(
+            "FL played without recording even after a second record toggle, so no audio would have been written. "
+            "FL declined to engage recording: its record button is bound to ShortcutsModule.RecordAction, which FL "
+            "keeps disabled until the project can be recorded into (a brand-new untitled project in pattern mode is "
+            "the usual case). Load or create a project with content, or press R in FL once, then retry.")
 
     def _arm_refresh(self, plan: CapturePlan, names: Mapping[int, str], warnings: list[str]) -> None:
         """Live finding (FL 26.1.3): a pass that arms only inserts that are not the mixer's selected track
@@ -768,22 +1037,54 @@ class Audio:
                         "disarmed after the requested inserts so FL registers the recording set (FL 26.1.3 finding).")
 
     def _wait_for_end(self, plan: CapturePlan, deadline_seconds: float, poll_seconds: float, warnings: list[str]) -> int:
-        """Poll the playhead until it passes the record end, FL stops by itself, or the deadline lapses."""
+        """Stop when the span has played, on the wall clock, with the tick readback only as an early stop.
+
+        The position in ``get_song_state`` is **FL's toolbar song-position slider**
+        (``*(*(ToolbarFormPtr)) + 0x7e8`` then ``+ 0x3c0``), not the engine's playhead, and that slider's
+        range is the seek domain -- the song length. Audio recording extends the song, so while a pass
+        records past the old song end the slider value simply stops moving: live 26.1.3 it froze at tick 671
+        of a one-bar song while FL happily recorded 12.16 s, which meant neither "tick passed the end" nor a
+        wrap could ever fire and every pass ran to its deadline.
+
+        So the wall clock is the guarantee: once playback is first seen, the pass ends after the span's own
+        duration (plus a small margin). The tick conditions remain as *early* stops, because they are cheap
+        and more precise when the readback does track: the end tick passed, a wrap (FL looped because the
+        song, pattern or loop range is shorter than the span), or FL stopping by itself.
+        """
         deadline = self._clock() + deadline_seconds
+        budget = plan.seconds + plan.tail_seconds + WALL_CLOCK_MARGIN_SECONDS
+        furthest: int | None = None
+        playing_since: float | None = None
         while True:
             self._sleep(poll_seconds)
             current = parse_state(self._fl.transport.state_text())
+            now = self._clock()
+            if playing_since is None and current.playing:
+                playing_since = now
+            if furthest is not None and current.tick < furthest and current.playing:
+                warnings.append(f"FL's playhead wrapped from tick {furthest} back to {current.tick} before "
+                                f"{plan.record_end_tick}; the song, pattern or loop range is shorter than the "
+                                "requested span, so the pass stopped at the wrap instead of waiting out its deadline.")
+                return furthest
+            furthest = current.tick if furthest is None else max(furthest, current.tick)
             if current.tick >= plan.record_end_tick or not current.playing:
                 if not current.playing and current.tick < plan.record_end_tick:
                     warnings.append(f"FL stopped by itself at tick {current.tick} (song end?) before {plan.record_end_tick}.")
                 return current.tick
-            if self._clock() >= deadline:
+            if playing_since is not None and now - playing_since >= budget:
+                warnings.append(f"The requested span had played for {budget:.2f}s in real time, so the pass stopped on "
+                                f"the clock; FL's toolbar position readback only reached tick {furthest} of "
+                                f"{plan.record_end_tick} (it is the song-position slider, and recording past the song "
+                                "end leaves it behind).")
+                return furthest
+            if now >= deadline:
                 warnings.append(f"Playhead readback did not pass tick {plan.record_end_tick} within {deadline_seconds:.1f}s;"
                                 " stopped on the deadline.")
                 return current.tick
 
     def _collect(self, folder: Path, before: Mapping[str, tuple[int, int]], plan: CapturePlan, names: Mapping[int, str],
-                 file_timeout: float, poll_seconds: float, arm_refresh: bool = True) -> tuple[CaptureFile, ...]:
+                 file_timeout: float, poll_seconds: float, arm_refresh: bool = True,
+                 filter_change: RecordingFilterChange | None = None) -> tuple[CaptureFile, ...]:
         """Wait for one stable new WAV per requested insert, then pair them by track name."""
         expected = len(plan.inserts)
         deadline = self._clock() + file_timeout
@@ -806,14 +1107,8 @@ class Audio:
             if self._clock() >= deadline:
                 if not fresh:
                     raise CaptureError(
-                        f"FL wrote no WAV in {folder} within {file_timeout:.0f}s for inserts {plan.inserts}. Check FL's "
-                        "recording settings: (1) the recording filter must include Audio (right-click the record "
-                        "button > Recording filter > Audio; registry HKCU\\Software\\Image-Line\\FL Studio 26\\General\\"
-                        "FruityLoopsMainForm RecordingFilter2, value 3 means Audio off); (2) mixer menu > Disk "
-                        "recording > 'Auto-create audio clip' should be off; (3) FL registers the recording set only "
-                        "after a second arm-state change"
-                        + (" (the arm-refresh workaround was applied)." if arm_refresh else
-                           " (arm_refresh=False was passed; leave it on or arm/disarm another insert by hand)."))
+                        f"FL wrote no WAV in {folder} within {file_timeout:.0f}s for inserts {plan.inserts}. "
+                        + _preconditions(arm_refresh, filter_change))
                 raise CaptureError(f"FL wrote {len(fresh)} new WAV(s) in {folder} within {file_timeout:.0f}s; expected "
                                    f"{expected} for inserts {plan.inserts}: {[p.name for p in fresh]}.")
             self._sleep(poll_seconds)
@@ -839,6 +1134,42 @@ class Audio:
             raise CaptureError(f"Capture target already exists: {target}")
         shutil.copyfile(item.path, target)
         return CaptureFile(item.track, item.name, target, item.sample_rate, item.channel_count, item.frames)
+
+    def _repoint(self, channels: Sequence[int], folder: Path,
+                 warnings: list[str]) -> tuple[Path | None, tuple[int, ...]]:
+        """Point every retired recording channel at the silent placeholder WAV (``write_placeholder``).
+
+        A channel FL auto-created for a recording references that recording's file. Retiring the channel
+        (muted, routed to Master, renamed) leaves the reference intact, and a project saved while a
+        channel references a *missing* file hangs FL's command-line renderer outright -- no output, no
+        dialog, no timeout of its own (live 26.1.3.5570, 2026-09-17: 300 s and 600 s render deadlines
+        both expired; the same snapshot rendered in 7.5 s after every ``"(unused)"`` channel had been
+        repointed). This runs before the originals are deleted, and also when they are kept, so nothing
+        in the project depends on a file this pass wrote. A refusal is a warning, never a lost capture.
+        """
+        if not channels:
+            return None, ()
+        try:
+            placeholder = write_placeholder(folder)
+        except OSError as error:
+            warnings.append(f"The retired-channel placeholder {folder / PLACEHOLDER_NAME} could not be written "
+                            f"({error}), so the retired channel(s) {list(channels)} still reference this pass's "
+                            "recordings; repoint them with fl.channels[i].replace_sample(<any existing wav>) before "
+                            "saving, because FL's renderer hangs on a project whose channel points at a missing file.")
+            return None, ()
+        repointed: list[int] = []
+        for channel in channels:
+            try:
+                self._fl.channels[channel].replace_sample(str(placeholder))
+                repointed.append(channel)
+            except FruityLinkError as error:
+                warnings.append(f"Retired channel {channel} could not be repointed at {placeholder} ({error}); it "
+                                "still references this pass's recording, and FL's renderer hangs on a project whose "
+                                "channel points at a missing file -- repoint it with replace_sample before saving.")
+        if repointed:
+            warnings.append(f"Retired channel(s) {repointed} were repointed at the silent placeholder "
+                            f"{placeholder} so the project stays renderable once this pass's recordings are gone.")
+        return placeholder, tuple(repointed)
 
     @staticmethod
     def _remove_originals(originals: Sequence[CaptureFile], copies: Sequence[CaptureFile],

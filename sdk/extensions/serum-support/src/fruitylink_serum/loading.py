@@ -181,7 +181,17 @@ def _attribute_event(ops: Any, channel: int, event_id: int, record: dict[str, An
     """Fill ``record`` from a decoded native event id (see ``AutomationTarget.from_event_id``)."""
     from fruitylink.automation_records import AutomationTarget
 
-    decoded = AutomationTarget.from_event_id(event_id)
+    # A host SDK older than the event-id decoder leaves the link unattributed rather than aborting the
+    # whole best-effort scan (live 2026-09-17: a stale installed fruitylink-python 0.2.0 wheel made this
+    # raise AttributeError, which load_preset could only report as "automation links could not be
+    # inspected", losing every warning for every link on the channel).
+    decode = getattr(AutomationTarget, "from_event_id", None)
+    if decode is None:
+        record["attribution"] = "unknown"
+        record["parameter_name"] = ("this host's fruitylink build cannot decode automation event ids; "
+                                    "reinstall the SDK wheel to attribute this link")
+        return
+    decoded = decode(event_id)
     if decoded is None:
         record["attribution"] = "unknown"
         return

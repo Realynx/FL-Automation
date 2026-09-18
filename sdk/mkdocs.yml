@@ -86,6 +86,7 @@ nav:
       - Execution and errors: python/execution.md
       - Embedded runtime: embedded-python.md
       - Automation clips: automation-clips.md
+      - Automation links: automation-links.md
       - Audio analysis: python-audio-analysis.md
       - Spectral analysis: python-spectral-analysis.md
       - Live audio capture: live-audio-capture.md

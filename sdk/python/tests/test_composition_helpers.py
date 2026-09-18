@@ -280,8 +280,27 @@ def test_set_song_end_detects_a_host_that_did_not_list_the_marker(fl: Studio, tr
         fl.transport.set_song_end(9)
 
 
+def test_set_song_end_after_bar_keeps_that_bar(fl: Studio, transport: RecordingTransport) -> None:
+    """bar=N ends the song BEFORE bar N; after_bar=N keeps bar N. A DeepSeek run passed bar=96 for a
+    96-bar song and lost its last bar."""
+    state = install_markers(transport, [])
+
+    assert fl.transport.set_song_end(after_bar=96) == Marker(0, "End", 96 * BAR)
+    assert state == [("End", 96 * BAR)]
+    assert fl.transport.set_song_end(96).tick == 95 * BAR, "bar=96 still means the START of bar 96"
+    assert fl.transport.set_song_end(97).tick == fl.transport.set_song_end(after_bar=96).tick
+
+
+def test_set_song_end_after_bar_respects_beats_per_bar(fl: Studio, transport: RecordingTransport) -> None:
+    install_markers(transport, [])
+    assert fl.transport.set_song_end(after_bar=8, beats_per_bar=3).tick == 24 * PPQ
+
+
 @pytest.mark.parametrize("args,kwargs", [((), {}), ((2,), {"tick": 5}), ((0,), {}), ((), {"tick": -1}),
-                                         ((), {"tick": 1.5}), ((2,), {"name": ""}), ((2,), {"beats_per_bar": 0})])
+                                         ((), {"tick": 1.5}), ((2,), {"name": ""}), ((2,), {"beats_per_bar": 0}),
+                                         ((2,), {"after_bar": 2}), ((), {"after_bar": 2, "tick": 5}),
+                                         ((), {"after_bar": 0}), ((), {"after_bar": -1}),
+                                         ((), {"after_bar": True}), ((), {"after_bar": 2.0})])
 def test_set_song_end_rejects_invalid_arguments_before_any_write(fl: Studio, transport: RecordingTransport,
                                                                  args: Any, kwargs: dict[str, Any]) -> None:
     with pytest.raises(ValueError):

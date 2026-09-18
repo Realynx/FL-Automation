@@ -21,11 +21,34 @@ from .analysis import (
     describe_audio,
     describe_samples,
 )
+from .models import Page, SampleInfo
+from .operations import Operations
+
+PAGE_LIMIT = 512
+"""Largest ``limit`` one ``query_samples`` page accepts (the host's shared query-page cap)."""
 
 
 class Samples:
-    def __init__(self, registry: dict[int, str]) -> None:
+    def __init__(self, ops: Operations, registry: dict[int, str]) -> None:
+        self._ops = ops
         self._registry = registry
+
+    def query(self, filter: str | None = None, *, offset: int = 0, limit: int = 50) -> Page[SampleInfo]:
+        """One structured page of installed samples, instead of parsing the ``list_samples`` text.
+
+        ``filter`` is a case-insensitive substring of the full path (``"kick"``, ``"Clap"``,
+        ``"Hats\\Closed"``). Each ``SampleInfo.entry`` is the verbatim ``[P]``/``[U]`` string to hand to
+        ``fl.channels.add_sample`` or ``Channel.replace_sample``, so finding kick/clap/hat paths is one
+        call rather than three rounds of reading a capped listing.
+
+        Unlike the note and clip pages, ``offset`` and ``Page.total`` count MATCHED samples, not raw
+        slots: filtering happens during the directory scan. Continue with the returned ``next_offset``,
+        keeping the same filter and limit. The host indexes at most 10000 matches per call and every page
+        re-scans the roots, so narrow the filter rather than paging through a whole library.
+        ``fl.plugins.samples_text()`` still returns FL's original free-text listing.
+        """
+        return self._ops.query_samples(filter=filter, offset=checked_index(offset),
+                                       limit=checked_index(limit, minimum=1, maximum=PAGE_LIMIT))
 
     def register(self, channel: int, path: str | Path) -> None:
         """Remember the sample file a channel plays, for channels loaded outside this session."""

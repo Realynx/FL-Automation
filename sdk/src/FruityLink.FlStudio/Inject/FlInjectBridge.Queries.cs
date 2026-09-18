@@ -148,6 +148,57 @@ public sealed partial class FlInjectBridge : IFlStructuredQuery
         return QueryPage(items, offset, take, count);
     }
 
+    /// <summary>Largest number of matching samples one <see cref="QuerySamplesAsync"/> call indexes. A broad
+    /// library must be narrowed by filter, not paged through: every page re-scans the roots, so an unbounded
+    /// index would turn one lookup into minutes of directory walking.</summary>
+    internal const int MaximumSampleIndex = 10_000;
+
+    /// <inheritdoc />
+    public Task<FlQueryPage<FlSampleInfo>> QuerySamplesAsync(string? filter = null, int offset = 0, int limit = 50,
+        CancellationToken ct = default)
+    {
+        ValidateQueryPage(offset, limit);
+        var entries = IndexSamples(filter, ct);
+        int take = Math.Min(Math.Max(entries.Count - offset, 0), limit);
+        var items = new List<FlSampleInfo>(take);
+        for (int i = offset; i < offset + take; i++) items.Add(DescribeSample(entries[i]));
+        return Task.FromResult(QueryPage(items, offset, take, entries.Count));
+    }
+
+    /// <summary>Every matching sample as a root-tagged entry, ordered by a stable case-insensitive sort so the
+    /// same offset means the same record across pages. Inaccessible subtrees are skipped, never fatal.</summary>
+    private static List<string> IndexSamples(string? filter, CancellationToken ct)
+    {
+        var hits = new SortedSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var (root, tag) in SampleRoots())
+        {
+            if (!Directory.Exists(root) || hits.Count >= MaximumSampleIndex) continue;
+            try
+            {
+                foreach (string file in EnumerateSamples(root, filter))
+                {
+                    ct.ThrowIfCancellationRequested();
+                    hits.Add(tag + Path.GetRelativePath(root, file));
+                    if (hits.Count >= MaximumSampleIndex) break;
+                }
+            }
+            catch (IOException) { /* keep what we found */ }
+            catch (UnauthorizedAccessException) { /* keep what we found */ }
+        }
+        return hits.ToList();
+    }
+
+    /// <summary>Split a root-tagged entry into the fields a caller filters on, keeping the entry verbatim so it
+    /// can be handed back to the sample loaders unchanged.</summary>
+    internal static FlSampleInfo DescribeSample(string entry)
+    {
+        int close = entry.StartsWith('[') ? entry.IndexOf(']', StringComparison.Ordinal) : -1;
+        string tag = close > 0 ? entry[..(close + 1)] : "";
+        string relative = entry[tag.Length..];
+        return new(entry, tag, relative, Path.GetFileNameWithoutExtension(relative),
+            Path.GetExtension(relative).ToLowerInvariant());
+    }
+
     /// <inheritdoc />
     public async Task<FlProjectInfo> QueryProjectAsync(CancellationToken ct = default)
     {

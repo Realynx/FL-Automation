@@ -2,12 +2,14 @@
 
 import base64
 import weakref
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from enum import IntEnum
 
 from ._collection import checked_index
 from ._properties import IndexedObject, NativeProperty
-from .levels import CHANNEL_VOLUME_MAX, channel_volume_from_db, channel_volume_to_db
+from .automation_links import LinkMode, check
+from .automation_records import AutomationTarget
+from .levels import CHANNEL_PAN_MAX, CHANNEL_VOLUME_MAX, channel_volume_from_db, channel_volume_to_db
 from .models import ChannelInfo
 from .operations import Operations
 from .plugins import Parameters
@@ -43,16 +45,32 @@ def _sample_paths(ops: Operations) -> dict[int, str]:
     return _registries.setdefault(ops, {})
 
 
+def _link_guard(kind: str) -> "Callable[[IndexedObject], object]":
+    def guard(channel: IndexedObject) -> object:
+        return check(channel._ops, AutomationTarget(kind, channel.index), stacklevel=4)
+    return guard
+
+
 class Channel(IndexedObject):
     """One channel-rack channel. ``pan`` is the native 0..12800 scale with 6400 = center
     (mixer track pan uses a different, signed scale). ``volume`` is raw 0..12800 on FL's power
     curve (10240 = 0 dB, FL's default 10000 = about -0.4 dB, 5000 = about -13 dB); ``volume_db``
-    converts through the SDK's model of that law (see ``fruitylink.levels``)."""
+    converts through the SDK's model of that law (see ``fruitylink.levels``).
+
+    ``volume``, ``pan`` and ``pitch`` warn with ``AutomationLinkedWarning`` when an automation clip
+    channel owns the control: FL reapplies that clip's initial value on every play, so the write is
+    not audible afterwards (see ``fruitylink.automation_links``). ``set_volume`` / ``set_pan`` /
+    ``set_pitch`` take ``linked=`` to raise or skip that check instead, and the raw ``set_control``
+    path is never checked.
+    """
 
     name = NativeProperty("get_channel_name", "set_channel_name", "channel", "name", str)
-    volume = NativeProperty("get_channel_volume", "set_channel_volume", "channel", "value", int)
-    pan = NativeProperty("get_channel_pan", "set_channel_pan", "channel", "value", int)
-    pitch = NativeProperty("get_channel_pitch", "set_channel_pitch", "channel", "cents", int)
+    volume = NativeProperty("get_channel_volume", "set_channel_volume", "channel", "value", int,
+                            guard=_link_guard("channel_volume"))
+    pan = NativeProperty("get_channel_pan", "set_channel_pan", "channel", "value", int,
+                         guard=_link_guard("channel_pan"))
+    pitch = NativeProperty("get_channel_pitch", "set_channel_pitch", "channel", "cents", int,
+                           guard=_link_guard("channel_pitch"))
     muted = NativeProperty("get_channel_muted", "set_channel_muted", "channel", "muted", bool)
     mixer_track = NativeProperty("get_channel_fx_route", "set_channel_fx_route", "channel", "mixerTrack", int)
 
@@ -69,14 +87,38 @@ class Channel(IndexedObject):
     def volume_db(self, db: float) -> None:
         self.volume = channel_volume_from_db(db)
 
-    def set_volume(self, value: int | None = None, *, db: float | None = None) -> int:
-        """Set the raw volume (0..12800) or a modelled dB gain (``db=``, at most +4.05); returns the raw value written."""
+    def set_volume(self, value: int | None = None, *, db: float | None = None,
+                   linked: LinkMode = "warn") -> int:
+        """Set the raw volume (0..12800) or a modelled dB gain (``db=``, at most +4.05); returns the raw value written.
+
+        ``linked`` decides what happens when an automation clip channel owns this channel's volume:
+        ``"warn"`` (default) emits ``AutomationLinkedWarning``, ``"raise"`` raises it before writing,
+        ``"ignore"`` writes without the lookup. FL reapplies the clip's initial value on every play,
+        so a warned write lasts only until playback restarts; release the curve with
+        ``fl.automation.release()`` to move the pinned value instead.
+        """
         if (value is None) == (db is None):
             raise TypeError("Pass exactly one of value= (raw 0..12800) or db=.")
         raw = channel_volume_from_db(db) if db is not None else checked_index(-1 if value is None else value,
                                                                               maximum=CHANNEL_VOLUME_MAX)
-        self.volume = raw
+        check(self._ops, AutomationTarget.channel_volume(self.index), linked=linked)
+        self._ops.set_channel_volume(channel=self.index, value=raw)
         return raw
+
+    def set_pan(self, value: int, *, linked: LinkMode = "warn") -> int:
+        """Set the raw pan 0..12800 (6400 = center); returns the value written. ``linked`` as in ``set_volume``."""
+        checked_index(value, maximum=CHANNEL_PAN_MAX)
+        check(self._ops, AutomationTarget.channel_pan(self.index), linked=linked)
+        self._ops.set_channel_pan(channel=self.index, value=value)
+        return value
+
+    def set_pitch(self, cents: int, *, linked: LinkMode = "warn") -> int:
+        """Set the pitch offset in cents (0 = center); returns the value written. ``linked`` as in ``set_volume``."""
+        if isinstance(cents, bool) or not isinstance(cents, int):
+            raise TypeError("Channel pitch is an integer number of cents.")
+        check(self._ops, AutomationTarget.channel_pitch(self.index), linked=linked)
+        self._ops.set_channel_pitch(channel=self.index, cents=cents)
+        return cents
 
     def control(self, index: int) -> int:
         """Raw value of a built-in channel control by REC_Chan index (``ChannelControl``); see its verification notes."""
@@ -145,22 +187,29 @@ class Channel(IndexedObject):
 
     def load_state(self, path: str, *, use_channel_loader: bool = False) -> str:
         """Load a plugin preset/state file (.fst, or the hosted plugin's native format such as .vstpreset)
-        into the generator already on this channel. Returns the host's verification line; verify the sound
-        through parameter displays or an isolated render, not the return value alone."""
+        into the generator already on this channel. An FL ``.fst`` for one of FL's own generators (Sytrus,
+        Harmor, ...) is routed through FL's channel loader automatically, with the channel's name, mute state
+        and mixer route restored afterwards. Returns the host's verification line (it names the route used);
+        verify the sound through parameter displays or an isolated render, not the return value alone."""
         return self._ops.load_channel_plugin_state(channel=self.index, path=path, use_channel_loader=use_channel_loader)
 
     def load_preset(self, path: str) -> str:
         """Load the hosted plugin's own preset file into the generator already on this channel.
 
-        Same route as ``load_state`` (the wrapper's "load state from file" entry, opcode 0x12, no
-        re-instantiation), named for the common case. Formats known live on FL 26.1.3: FL ``.fst``;
+        Same entry as ``load_state``, named for the common case. Formats known live on FL 26.1.3: FL ``.fst``;
         VST3 ``.vstpreset`` (Serum 2, class id = GUID string without braces/dashes); GMS ``.gmsynth``
         (factory folder ``<FL>\\Data\\Patches\\Plugin presets\\Generators\\GMS``). A raw ``.SerumPreset``
-        is ignored (use ``fruitylink_serum.load_preset``). Do it BEFORE authoring by parameter: a fresh
-        GMS created by ``channels.add`` has no oscillator waveforms loaded (its "Synth Waves" are chosen in
-        the GUI and are not parameters), so parameter-only patches render silence until a preset is loaded.
-        Returns the host's verification line (same instance, differing state bytes); confirm with parameter
-        displays in the next request or an isolated render.
+        is ignored (use ``fruitylink_serum.load_preset``).
+
+        A wrapped plugin's preset goes through the wrapper's "load state from file" entry (opcode 0x12, no
+        re-instantiation). An FL-native generator's ``.fst`` (``Data\\Patches\\Plugin presets\\Generators\\
+        Sytrus|Harmor|...``) goes through FL's channel loader instead, because that dispatcher is a silent
+        no-op for those files; the channel loader mutes the channel and renames it to the preset's base name,
+        so the SDK restores the name, mute state and mixer route and says so in its verification line. Do it
+        BEFORE authoring by parameter: a fresh GMS created by ``channels.add`` has no oscillator waveforms
+        loaded (its "Synth Waves" are chosen in the GUI and are not parameters), so parameter-only patches
+        render silence until a preset is loaded. Returns the host's verification line (route, same instance,
+        differing state bytes); confirm with parameter displays in the next request or an isolated render.
         """
         return self.load_state(path)
 
@@ -191,6 +240,12 @@ class Channels:
         return self._ops.list_channels()
 
     def add(self, plugin: str, *, name: str | None = None) -> Channel:
+        """Add a channel hosting an installed generator.
+
+        Instantiating a plugin is guarded for 20 s (not the ordinary bridge budget) because the first
+        plugin load of a session runs a cold VST scan on FL's UI thread; when even that expires the host
+        re-reads the channel once and only fails if no generator arrived.
+        """
         channel = self[self._ops.add_channel(plugin_name=plugin)]
         if name is not None:
             channel.name = name

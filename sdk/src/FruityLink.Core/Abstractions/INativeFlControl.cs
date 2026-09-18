@@ -159,25 +159,38 @@ public interface INativeFlControl
     Task<string> ListAvailablePluginsAsync(bool effects, CancellationToken ct = default);
     /// <summary>Describe a channel's loaded generator plugin.</summary>
     Task<string> GetChannelPluginAsync(int channel, CancellationToken ct = default);
-    /// <summary>Add a new channel hosting the named generator plugin; returns its index.</summary>
+    /// <summary>Add a new channel hosting the named generator plugin; returns its index. Instantiating a
+    /// plugin runs its constructor on FL's UI thread, so this call is guarded for 20 seconds instead of the
+    /// ordinary bridge budget (the FIRST plugin load of a session is the slow one: a cold VST scan/instantiate
+    /// can hold FL's UI thread for many seconds). If even that expires, the channel's plugin name is re-read
+    /// once after a short settle: when the generator did load the call succeeds and the recovery is recorded in
+    /// the op log, and only a channel that still reports no generator raises a timeout saying the plugin is
+    /// still initialising or waiting on a dialog.</summary>
     Task<int> AddChannelAsync(string pluginName, CancellationToken ct = default);
     /// <summary>List the effects loaded in a mixer track's FX slots.</summary>
     Task<string> ListMixerEffectsAsync(int track, CancellationToken ct = default);
-    /// <summary>Load/replace the named effect into a mixer track's FX slot (0-9).</summary>
-    Task AddMixerEffectAsync(int track, int slot, string pluginName, CancellationToken ct = default);
+    /// <summary>Load/replace the named effect into a mixer track's FX slot (0-9) and return a verification
+    /// line: the slot plus the effect name the slot reports after the load. Instantiating a plugin runs its
+    /// constructor on FL's UI thread, so this call is guarded for 20 seconds instead of the ordinary bridge
+    /// budget (the FIRST plugin load of a session is the slow one: a cold VST scan/instantiate can hold FL's UI
+    /// thread for many seconds). If even that expires, the slot is re-read once after a short settle: when the
+    /// effect did load the call succeeds and the verification line carries "loaded after N ms; FL's UI was
+    /// blocked while the plugin initialised", and only a slot that is still empty raises a timeout saying the
+    /// plugin is still initialising or waiting on a dialog.</summary>
+    Task<string> AddMixerEffectAsync(int track, int slot, string pluginName, CancellationToken ct = default);
     /// <summary>Clear a mixer track's FX slot.</summary>
     Task RemoveMixerEffectAsync(int track, int slot, CancellationToken ct = default);
     /// <summary>Copy the effect type from one FX slot to another (type only, not parameter state).</summary>
     Task CloneMixerEffectAsync(int track, int fromSlot, int toSlot, CancellationToken ct = default);
 
-    /// <summary>List a plugin's parameters ("index: name"). slot &lt; 0 = channel generator; else mixer track+slot. Optional name filter.</summary>
-    Task<string> ListPluginParamsAsync(int channelOrTrack, int slot, string? filter, CancellationToken ct = default);
+    /// <summary>List a plugin's parameters ("index: name"). slot &lt; 0 = channel generator; else mixer track+slot. The name filter is OPTIONAL: omit it (or pass null) to list every parameter.</summary>
+    Task<string> ListPluginParamsAsync(int channelOrTrack, int slot, string? filter = null, CancellationToken ct = default);
     /// <summary>Set a plugin parameter to a normalized value 0..1. slot &lt; 0 = channel generator; else mixer track+slot.</summary>
     Task SetPluginParamAsync(int channelOrTrack, int slot, int paramIndex, double value, CancellationToken ct = default);
 
     // --- samples ---
-    /// <summary>List available audio samples (factory packs + user content), optionally filtered by name.</summary>
-    Task<string> ListSamplesAsync(string? filter, CancellationToken ct = default);
+    /// <summary>List available audio samples from every configured search root, optionally filtered by name (a case-insensitive substring of the path). The filter is OPTIONAL: omit it (or pass null) to browse. Entries are root-tagged relative paths with a legend line: [P] = FL's factory packs, [U] = the user's Image-Line documents content, [B1], [B2], ... = the folders FL's browser searches in addition to those (its "extra search folders"), which is where a user's own sample library normally lives. Pass an entry back verbatim to add_sample_channel / replace_channel_sample.</summary>
+    Task<string> ListSamplesAsync(string? filter = null, CancellationToken ct = default);
     /// <summary>Add a new channel that plays the given audio sample file (drum/one-shot/loop); returns its index.</summary>
     Task<int> AddSampleChannelAsync(string samplePath, CancellationToken ct = default);
     /// <summary>Replace an existing channel's sample with a new audio file.</summary>
@@ -192,15 +205,20 @@ public interface INativeFlControl
     /// applied in place: 226 differing state bytes, the pad became audible), while a third-party proprietary
     /// preset (<c>.SerumPreset</c>) is silently ignored. Load a factory preset BEFORE authoring a native synth by
     /// parameter: a fresh GMS has no oscillator waveforms (chosen in the GUI, not parameters) and renders silence.
-    /// Set <paramref name="useChannelLoader"/> to route an
-    /// FL <c>.fst</c> through FL's channel file loader instead (the drag-and-drop path), which may swap the
-    /// generator, rename the channel and start the transport; that route is refused for other formats because
-    /// live it applied no state and renamed the channel. Prefer the default dispatcher route.
+    /// An FL <c>.fst</c> preset for one of FL's OWN generators (Sytrus, Harmor, ... — a channel whose plugin is not
+    /// the "Fruity Wrapper" VST host) is routed through FL's channel file loader automatically, because the
+    /// dispatcher is a silent no-op for those files (FL 26.1.3.5570: a Sytrus factory preset left the state record
+    /// byte-identical, the channel loader changed 99% of it). That loader also mutes the channel and renames it to
+    /// the preset's base name, so the SDK snapshots the channel's name, mute state and mixer route before the load
+    /// and restores all three after it; the verification line names the route used and what was restored.
+    /// Set <paramref name="useChannelLoader"/> to force that route for a wrapped plugin's <c>.fst</c> as well; it is
+    /// refused for other formats because live it applied no state and renamed the channel.
     /// Refuses channels without a hosted plugin and, for <c>.fst</c> files, files that do not name the channel's
-    /// current plugin. Returns a verification line: plugin name, same-instance check, parameter count and a
-    /// comparison of the plugin's wrapper state record before and after the load (sizes, short hashes and the
-    /// number of differing bytes), or an explicit "unavailable" note when no snapshot could be taken. Confirm
-    /// the sound with parameter displays in a separate request or an isolated render.</summary>
+    /// current plugin (the name is matched both as UTF-16, how wrapped plugins store it, and as the single-byte
+    /// string FL's own generators store). Returns a verification line: plugin name, the route used, same-instance
+    /// check, parameter count and a comparison of the plugin's wrapper state record before and after the load
+    /// (sizes, short hashes and the number of differing bytes), or an explicit "unavailable" note when no snapshot
+    /// could be taken. Confirm the sound with parameter displays in a separate request or an isolated render.</summary>
     Task<string> LoadChannelPluginStateAsync(int channel, string path, bool useChannelLoader = false, CancellationToken ct = default);
     /// <summary>Load a plugin state or preset file into the effect ALREADY loaded in a mixer FX slot (0-9)
     /// through the wrapper's state-file loader (dispatcher opcode 0x12). Same format and identity rules as
@@ -282,7 +300,7 @@ public interface INativeFlControl
     /// <summary>List active playlist clips, paged: offset skips the first N matching clips;
     /// track&gt;0 filters to one playlist track (&lt;=0 = all).</summary>
     Task<string> ListClipsAsync(int offset = 0, int track = -1, CancellationToken ct = default);
-    /// <summary>Add a pattern clip (pattern 1-based, matching notes/patterns; 0 or out-of-range throws) to a track at startTick; lengthTick&lt;=0 = pattern length.</summary>
+    /// <summary>Add a pattern clip (pattern 1-based, matching notes/patterns; 0 or out-of-range throws) to a track at startTick; lengthTick&lt;=0 = pattern length. A PATTERN CLIP DOES NOT LOOP: FL plays the pattern once from the clip start and the rest of the clip is silent (live-verified 2026-09-18, FL 26.1.3.5570: a 1-bar pattern in a 4-bar clip sounded in bar 1 only, bars 2-4 measured silent at the master), so a span that should repeat needs one clip per repetition - keep lengthTick at most the pattern's own length, or use the Python helper fl.playlist.tile_pattern, which places the whole run in one pass.</summary>
     Task AddPatternClipAsync(int pattern, int track, int startTick, int lengthTick, CancellationToken ct = default);
     /// <summary>Move a playlist clip to a tick position and track.</summary>
     Task MoveClipAsync(int clipIndex, int startTick, int track, CancellationToken ct = default);
@@ -309,7 +327,9 @@ public interface INativeFlControl
     /// refresh/repaint. Clips are addressed by (pattern,track,start), so add-order index shifts don't matter.
     /// A positive lengthTick is pinned (as ResizeClips does), so the clip keeps that length even when the
     /// pattern's own content is longer or shorter; lengthTick &lt;= 0 takes the pattern length and follows
-    /// it.</summary>
+    /// it. A pinned length is NOT a loop: FL plays the pattern once from the clip start and the rest of the
+    /// clip is silent, so a repeating span is one spec per repetition (the Python helper
+    /// fl.playlist.add_patterns(..., repeat=True) expands them for you).</summary>
     Task AddPatternClipsAsync(IReadOnlyList<PatternClipSpec> clips, CancellationToken ct = default);
     /// <summary>Resize many playlist clips in one pass (per-clip length poke), then one repaint.</summary>
     Task ResizeClipsAsync(IReadOnlyList<ClipResize> resizes, CancellationToken ct = default);
@@ -333,6 +353,34 @@ public interface INativeFlControl
     Task<string> GetStatusAsync(CancellationToken ct = default);
     /// <summary>Select song playback when true, or pattern playback when false.</summary>
     Task SetSongModeAsync(bool song, CancellationToken ct = default);
+    /// <summary>Read FL's metronome click. It is mixed into what FL plays, so it also lands in a live per-insert capture; capture switches it off for the pass and restores it. Symmetric with <see cref="SetMetronomeAsync"/>; refused until the toggle's symbols resolve on the running build.</summary>
+    Task<bool> GetMetronomeAsync(CancellationToken ct = default);
+    /// <summary>Set FL's metronome click. It is mixed into what FL plays, so it also lands in a live per-insert capture; capture switches it off for the pass and restores it. The change goes through the very setter FL's own toggle Action calls, on FL's main thread, so FL repaints and reacts exactly as it does for a click; the value is re-read afterwards and a refusal is reported instead of assumed. Refused until the toggle's symbols resolve on the running build.</summary>
+    Task SetMetronomeAsync(bool on, CancellationToken ct = default);
+    /// <summary>Read FL's countdown before recording (the "precount" toolbar toggle). With it on, a record+play pass spends a bar counting in before FL records anything, which silently shortens or empties a captured span; capture switches it off for the pass and restores it. Symmetric with <see cref="SetCountdownAsync"/>; refused until the toggle's symbols resolve on the running build.</summary>
+    Task<bool> GetCountdownAsync(CancellationToken ct = default);
+    /// <summary>Set FL's countdown before recording (the "precount" toolbar toggle). With it on, a record+play pass spends a bar counting in before FL records anything, which silently shortens or empties a captured span; capture switches it off for the pass and restores it. The change goes through the very setter FL's own toggle Action calls, on FL's main thread, so FL repaints and reacts exactly as it does for a click; the value is re-read afterwards and a refusal is reported instead of assumed. Refused until the toggle's symbols resolve on the running build.</summary>
+    Task SetCountdownAsync(bool on, CancellationToken ct = default);
+    /// <summary>Read FL's "wait for input to start playing" toggle. With it on, play does not start until FL sees note or audio input, so an automated record+play pass hangs until its deadline with nothing recorded; capture switches it off for the pass and restores it. Symmetric with <see cref="SetWaitForInputAsync"/>; refused until the toggle's symbols resolve on the running build.</summary>
+    Task<bool> GetWaitForInputAsync(CancellationToken ct = default);
+    /// <summary>Set FL's "wait for input to start playing" toggle. With it on, play does not start until FL sees note or audio input, so an automated record+play pass hangs until its deadline with nothing recorded; capture switches it off for the pass and restores it. The change goes through the very setter FL's own toggle Action calls, on FL's main thread, so FL repaints and reacts exactly as it does for a click; the value is re-read afterwards and a refusal is reported instead of assumed. Refused until the toggle's symbols resolve on the running build.</summary>
+    Task SetWaitForInputAsync(bool on, CancellationToken ct = default);
+    /// <summary>Read FL's loop-recording toggle. With it on, a pass over a looped range keeps every take instead of one recording, which changes what a capture writes and what the project ends up holding; capture switches it off for the pass and restores it. Symmetric with <see cref="SetLoopRecordAsync"/>; refused until the toggle's symbols resolve on the running build.</summary>
+    Task<bool> GetLoopRecordAsync(CancellationToken ct = default);
+    /// <summary>Set FL's loop-recording toggle. With it on, a pass over a looped range keeps every take instead of one recording, which changes what a capture writes and what the project ends up holding; capture switches it off for the pass and restores it. The change goes through the very setter FL's own toggle Action calls, on FL's main thread, so FL repaints and reacts exactly as it does for a click; the value is re-read afterwards and a refusal is reported instead of assumed. Refused until the toggle's symbols resolve on the running build.</summary>
+    Task SetLoopRecordAsync(bool on, CancellationToken ct = default);
+    /// <summary>Read FL's "blend recorded notes" (overdub) toggle: recorded notes are merged into the existing pattern instead of replacing it. Irrelevant to audio capture, exposed because note recording needs it. Symmetric with <see cref="SetBlendRecordedNotesAsync"/>; refused until the toggle's symbols resolve on the running build.</summary>
+    Task<bool> GetBlendRecordedNotesAsync(CancellationToken ct = default);
+    /// <summary>Set FL's "blend recorded notes" (overdub) toggle: recorded notes are merged into the existing pattern instead of replacing it. Irrelevant to audio capture, exposed because note recording needs it. The change goes through the very setter FL's own toggle Action calls, on FL's main thread, so FL repaints and reacts exactly as it does for a click; the value is re-read afterwards and a refusal is reported instead of assumed. Refused until the toggle's symbols resolve on the running build.</summary>
+    Task SetBlendRecordedNotesAsync(bool on, CancellationToken ct = default);
+    /// <summary>Read whether FL's audio engine currently has a recording pass running, independently of the toolbar record button's paint state. This is the counter FL's own apply-recording-filter routine checks before it computes the effective filter, so it is true while the engine is actually recording and false otherwise; use it to verify that a record+play pass really started when the button byte is in doubt. Refused until the recording-state symbol resolves on the running build.</summary>
+    Task<bool> GetRecordingActiveAsync(CancellationToken ct = default);
+    /// <summary>Read whether FL's transport record button is engaged (the toolbar toggle FL's own scripting reports as ui.isRecording): true means the next play records. TransportToggleRecordAsync only flips it, and FL leaves the button engaged after a recording pass, so a caller that needs recording ON must read this first and toggle only when it differs -- a blind toggle before a second pass switches recording OFF and that pass records nothing. Refused until the record-button symbols resolve on the running build.</summary>
+    Task<bool> GetRecordPressedAsync(CancellationToken ct = default);
+    /// <summary>Read FL's global recording filter — the bitmask behind the record button's right-click "Recording filter" submenu, which decides what a recording pass is allowed to capture. Bits (FL's own menu-item tags): 1 = Automation, 2 = Notes, 4 = Audio, 8 = Clips; FL 2025 has no Clips item, so bit 8 is unused there. Bit 4 must be set or FL silently writes no WAV for an armed mixer insert, which is the single most common reason live audio capture produces nothing. FL keeps this value only in memory while it runs (its registry home, RecordingFilter2 under HKCU > Software > Image-Line > FL Studio 26 > General > FruityLoopsMainForm, is read at startup and written at exit), so it must be read and set through the running engine. Refused until the recording-filter symbols resolve on the running build.</summary>
+    Task<int> GetRecordingFilterAsync(CancellationToken ct = default);
+    /// <summary>Set FL's global recording filter bitmask (see <see cref="GetRecordingFilterAsync"/> for the bits) by invoking the very routine FL's own "Recording filter" menu items call, on FL's main thread, so the menu checkmarks and the record button follow. The value is re-read afterwards and a mismatch is reported instead of assumed. Only the flags given are kept, so read first and combine when preserving the user's other choices; the value is restored to what it was by callers that changed it for one pass. Refused until the recording-filter symbols resolve on the running build.</summary>
+    Task SetRecordingFilterAsync(int flags, CancellationToken ct = default);
     /// <summary>Move the song playhead to an absolute tick (PPQ).</summary>
     Task SeekAsync(int tick, CancellationToken ct = default);
     /// <summary>List song time markers.</summary>

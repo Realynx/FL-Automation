@@ -59,16 +59,60 @@ fruitylink.capture  snapshot folder → wait for stable new WAVs → match by tr
 
 Everything the agent receives is a plain WAV path per insert plus JSON-safe dictionaries.
 
-### Prerequisites in FL (live findings, FL 26.1.3)
+### FL settings the capture sets for itself (nothing to configure by hand)
 
-- The **recording filter must include Audio**: right-click the record button > Recording filter >
-  Audio. The setting lives in the registry at
-  `HKCU\Software\Image-Line\FL Studio 26\General\FruityLoopsMainForm`, value `RecordingFilter2`
-  (it read `3` = Audio off on the test machine). With Audio off, FL records nothing and the capture
-  fails with an error naming this setting.
-- Mixer menu > Disk recording > **Auto-create audio clip: off**. Even then FL adds one sample
-  channel (named like `lc-001_2026-09-14 17-53-26_Lead`) and one playlist clip per recording; the
-  capture deletes the clips and retires the channels (below).
+A capture is meant to be callable by an autonomous agent, so every FL setting it depends on and can
+reach is set by the pass and handed back afterwards. None of the following needs a visit to FL's UI.
+
+- **Recording filter, Audio bit.** FL's global recording filter (right-click the record button >
+  Recording filter) decides what a pass may capture; with Audio off FL arms the insert, records, and
+  writes no file at all. `capture(..., ensure_recording_filter=True)` (the default) turns the Audio
+  bit on before arming and `restore_recording_filter=True` puts the whole bitmask back afterwards,
+  on success and on failure alike, reported as `CaptureResult.recording_filter`
+  (`{before, used, restored, changed}` plus the part names). Bits are FL's own menu-item tags:
+  1 Automation, 2 Notes, **4 Audio**, 8 Clips (FL 2025 has no Clips item). The value is a *global* FL
+  setting, not a project one: FL reads `RecordingFilter2` under
+  `HKCU > Software > Image-Line > FL Studio 26 > General > FruityLoopsMainForm` at startup and writes
+  it back at exit, so writing the registry while FL runs does nothing and the SDK goes through the
+  running engine instead (`fl.transport.recording_filter` /
+  `fl.transport.ensure_recording_filter(audio=True)`, the `get_recording_filter` /
+  `set_recording_filter` operations). Live 2026-09-17: a stock machine reads `3`
+  (automation + notes), the pass uses `7` and restores `3`.
+- **Transport record button.** `toggle_record()` only flips FL's toolbar toggle, and FL leaves it
+  engaged after a pass, so a blind toggle switched recording *off* on the very next capture and that
+  pass wrote nothing (back-to-back captures alternated between working and silently failing). The
+  pass now reads `fl.transport.record_pressed` (the `get_record_pressed` operation, the byte FL's own
+  `ui.isRecording` reads), engages the button only when it is not already engaged, and releases it
+  again afterwards only if it engaged it. On a build where the record-state symbols do not resolve it
+  falls back to the old blind toggle with a warning.
+- **Global transport toggles.** FL's countdown before recording and "wait for input to start playing" stop
+  a pass recording the requested span at all; loop recording turns one recording into a pile of takes; the
+  metronome is mixed into what FL plays and lands in the captured audio. `capture(..., ensure_toggles=True)`
+  (the default) switches all four off for the pass and restores exactly what it found, reported as
+  `CaptureResult.toggles` and, when any were on, in `warnings`. They are reachable individually as
+  `fl.transport.metronome` / `.countdown` / `.wait_for_input` / `.loop_record` (plus `.blend_recorded_notes`),
+  and in bulk through `fl.transport.settings()` / `.ensure(**flags)`.
+- **Song mode, loop selection, per-insert arm and the arm-refresh quirk** are set by the pass and
+  restored, as they always were. Pattern mode matters: it loops the current pattern, so the span's end
+  tick is never reached and the pass used to run to its deadline and write minutes of looped audio. Song
+  mode is selected for the pass (reported in `warnings`) and pattern mode restored, and the playhead poll
+  now also treats a **wrap** (the reported tick going backwards) as the end of the pass, so a song or loop
+  range shorter than the requested span stops promptly instead of waiting out the deadline.
+- **Auto-create audio clip is not a prerequisite.** FL adds one sample channel (named like
+  `lc-001_2026-09-14 17-53-26_Lead`) and one playlist clip per recording whether the mixer menu >
+  Disk recording > Auto-create audio clip option is on or off; the capture deletes the clips,
+  retires the channels and repoints them at the silent placeholder either way (below), so the option
+  is left alone.
+
+What is left when FL still writes nothing is genuinely outside the SDK, and the zero-file
+`CaptureError` says so instead of listing settings it already handled: FL's audio device must be
+started and passing audio (Options > Audio settings -- an exclusive ASIO device held by another FL
+instance makes the mixer output digital silence while the engine still clocks and the recorder still
+writes a real-time-length file), the requested bars must contain material routed to those inserts,
+and the recorded-audio folder must be writable.
+
+### Other live findings (FL 26.1.3)
+
 - FL records **32-bit float at the project rate** (48 kHz on the test project); the file starts at
   the seek position (sample 0 = `start_tick`) and runs until the stop, so a 12 s + 1.2 s tail
   request gave a 13.44 s file.
@@ -91,6 +135,8 @@ at 100 bpm). The MCP tools `fl_audio_capture` / `fl_section_measure` use the sam
    tempo is assumed; tempo automation is not read (as for every bar-grid helper).
 3. `resolve_recorded_folder()` and `snapshot_folder()` — name/mtime/size of every WAV already there.
 4. `parse_state(fl.transport.state_text())` — refuses if `playing=yes`; remembers the play range.
+4b. `fl.transport.ensure_recording_filter(audio=True)` — the previous bitmask is remembered for the
+   restore in step 9 (live-verified 2026-09-17: 3 -> 7 -> 3).
 5. Song mode on, loop cleared (both restored afterwards). **needs live check** (a time selection
    makes play start at the selection).
 6. `fl.mixer[t].armed = True` for each insert not already armed (`set_mixer_track_armed` reads the
@@ -99,23 +145,39 @@ at 100 bpm). The MCP tools `fl_audio_capture` / `fl_section_measure` use the sam
    the byte clear and the operation reports it).
 6b. Arm-refresh: arm and disarm Master (or the first unarmed non-requested insert), verifying the
    readback each time, so FL registers the recording set (see prerequisites).
-7. `fl.transport.seek_ticks(start_tick)`; `fl.transport.toggle_record()`; `fl.transport.play()`.
-   **needs live check** (record before play starts a recording; no "recording filter" prompt; the
-   recording starts at the seek position).
-8. Poll `state_text()` every 250 ms until `tick >= end_tick + tail_ticks` or `playing=no` (FL
-   reached its song end) or the deadline (`seconds + tail + 10 s`) lapses, then `stop()`.
-   **needs live check** (record LED off after stop; otherwise a second toggle is needed).
-9. Disarm what was armed here, restore the loop selection and song mode.
+7. `fl.transport.seek_ticks(start_tick)`; engage the record button if `record_pressed` is False;
+   `fl.transport.play()`. (Live-verified: record before play starts a recording, there is no
+   "recording filter" prompt, and the recording starts at the seek position.)
+8. Poll `state_text()` every 250 ms and stop on the **wall clock**: once playback is first seen, the
+   pass ends after the span's own duration (`seconds + tail` plus a 0.25 s margin). The tick readback is
+   only an *early* stop (end tick passed, a wrap, or FL stopping by itself), because **it is not the
+   engine playhead**: `get_song_state` reports FL's toolbar song-position slider
+   (`*(*(ToolbarFormPtr)) + 0x7e8` then `+ 0x3c0`), whose range is the seek domain, i.e. the song length.
+   Audio recording *extends* the song, so while a pass records past the old song end the slider value
+   simply stops moving -- live 26.1.3 it froze at tick 671 of a one-bar song while FL recorded 12.16 s,
+   so neither the end tick nor a wrap could fire and every pass ran to its deadline and wrote ten seconds
+   of tail silence. The `deadline` (`seconds + tail + 10 s`) remains only as a last resort.
+9. Disarm what was armed here, restore the loop selection, song mode, the record button and the
+   recording filter (all of them in a `finally`, so a failed pass leaves FL as it found it).
 10. Wait (up to `file_timeout`, default 15 s) for one *stable* new WAV per insert (size unchanged
     between polls, header parses), pair them with the inserts by the `…_<track name>` suffix, or
     by elimination when exactly one is left. Inserts armed before the call also record; their files
     are ignored by name. **needs live check** (exact auto-name template, 32-bit float format).
-10b. With `name`, copy each recording to `<name>-<track>.wav`, verify the copy's header and delete
+10b. Compare the clip and channel lists with the snapshot taken before the pass: new clips are
+    deleted (`fl.clips.delete`), new channels retired (`Channel.retire`: muted, routed to Master,
+    renamed `(unused) ...`) and reported as `deleted_clips` / `retired_channels`, and every retired
+    channel is then **repointed at a tiny silent placeholder WAV**
+    (`fruitylink-retired-placeholder.wav`, written once into the recorded-audio folder) through
+    `replace_channel_sample`, reported as `repointed_channels` / `placeholder`. A retired channel
+    still references the recording it was created for, and a project saved while a channel points at
+    a file that no longer exists **hangs FL's command-line renderer** (live 26.1.3.5570, 2026-09-17:
+    `fl_project_render` produced nothing at a 300 s and at a 600 s deadline, with no dialog; the same
+    snapshot rendered in 7.5 s once every `(unused)` channel had been repointed). The repointing runs
+    before anything is deleted, and also when the originals are kept, so the project never depends on
+    a file this pass wrote. `cleanup=False` skips all of it.
+10c. With `name`, copy each recording to `<name>-<track>.wav`, verify the copy's header and delete
     FL's auto-named original (`keep_originals=True` keeps it; with `name=None` FL's files are the
-    result). Then compare the clip and channel lists with the snapshot taken before the pass:
-    new clips are deleted (`fl.clips.delete`), new channels retired (`Channel.retire`: muted,
-    routed to Master, renamed `(unused) ...`) and reported as `deleted_clips` / `retired_channels`
-    (`cleanup=False` skips this).
+    result).
 11. `measure_wav()` per file over bars 33..40 (the tail stays in the file but outside the record):
     peak dBFS, RMS dBFS, integrated and short-term LUFS, band levels, and per-bar level / peak /
     crest / centroid / correlation / bands / LUFS. `captured_end_tick` comes from the shortest file.
@@ -151,6 +213,7 @@ lives. Both paths return a `SectionMeasurement` whose `measurements[track]` is t
 result = fl.audio.capture([5, 0], 33, 40, tail_beats=2, name="chorus-a")   # inserts 5 and Master, bars 33..40 inclusive
 result.paths                    # {5: Path(".../chorus-a-5.wav"), 0: Path(".../chorus-a-master.wav")}
 result.deleted_clips, result.retired_channels, result.removed_originals      # FL litter undone (see prerequisites)
+result.repointed_channels, result.placeholder   # retired channels now point at the silent placeholder WAV
 result.captured_start_tick, result.captured_end_tick, result.complete
 result.measurements[5]["rms_dbfs"], result.measurements[5]["bars"][0]["lufs"]
 result.envelope(5, slices_per_bar=8)   # {"rms_db": [...], "peak_db": [...], "bands_per_bar": [...]}
@@ -202,8 +265,8 @@ descriptor such as `analysis.describe_audio(path)` takes.
   `native/bridge/analysis/verified-symbols-arm-2026-09-14.json` records the evidence.
 - `python/src/fruitylink/capture.py` (`fl.audio`): planning, transport-state parsing, folder
   snapshot/diff, name matching, the live driver, `measure_wav`, `envelope`, `CapturePolicy`,
-  `measure_section`, `RenderRequired`; `python/tests/test_capture.py` covers all of it against a
-  fake FL (24 tests).
+  `measure_section`, `RenderRequired`, `write_placeholder`; `python/tests/test_capture.py` covers all
+  of it against a fake FL (63 tests).
 
 ## Live results (FL 26.1.3.5570, disposable copy of Parking Lot Moon, 2026-09-14)
 
@@ -213,7 +276,20 @@ descriptor such as `analysis.describe_audio(path)` takes.
   (-13.8 LUFS, -1.0 dBTP): the live path and the render path agree.
 - Known FL limitation (residual litter): every recording leaves one sample channel in the rack.
   FL has no channel-delete call, so the capture retires it (muted, routed to Master, renamed
-  `(unused) ...`) and reports the indices; delete them by hand from the channel rack when tidying.
+  `(unused) ...`), repoints it at `fruitylink-retired-placeholder.wav` so it never references a
+  recording that has been deleted, and reports the indices (`retired_channels`,
+  `repointed_channels`, `placeholder`); delete them by hand from the channel rack when tidying.
+- **A retired channel pointing at a missing file hangs the renderer** (live 26.1.3.5570,
+  2026-09-17). After a capture with `name=` (which deletes FL's originals) the saved project made
+  `fl_project_render` time out at 300 s *and* at 600 s with no output file and no dialog; the same
+  snapshot rendered in 7.5 s after every `(unused)` channel had been repointed at an existing WAV
+  with `replace_channel_sample`. This is why the capture now writes the placeholder and repoints
+  every channel it retires.
+- **Per-insert disk recording is PRE-fader** (live 26.1.3.5570, 2026-09-17): a stem captured from
+  insert 8 measured the same RMS with the insert at -8 dB and at -14 dB, while the master capture
+  followed the faders. So a stem answers *"does this part sound, and what does it sound like?"* and
+  the **master capture** is what judges balance, gain staging and the effect of a fader or volume
+  automation. Measure a level change on the master (or re-render), never on the insert's own stem.
 
 ## What remains
 

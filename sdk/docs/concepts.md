@@ -35,7 +35,10 @@ Start with this sequence when authoring music:
 
 1. A **channel** holds a generator or sample.
 2. A **pattern** holds notes for one or more channels.
-3. A **playlist clip** places a pattern or other source at a time on a playlist track.
+3. A **playlist clip** places a pattern or other source at a time on a playlist track. It does NOT
+   loop it: FL plays the pattern once from the clip start and the rest of the clip is silent, so a
+   span that repeats is one clip per repetition (`fl.playlist.tile_pattern`). Live-verified
+   2026-09-18: a 1-bar pattern in a 4-bar clip sounded in bar 1 only; bars 2-4 measured silent.
 4. A channel routes audio to a **mixer track**, which has levels, sends, and effects.
 5. An **automation clip** stores a curve linked to a control and can be placed in the playlist.
 
@@ -55,6 +58,7 @@ Adding, removing, or reordering objects can invalidate saved indices.
 | Playlist track | One-based, `1..500` |
 | Mixer track | Master is `0`; query active ordinary inserts instead of assuming a fixed count |
 | Notes and clip placement | PPQ ticks; read the project's PPQ to convert from beats |
+| Clip length vs repeats | A clip's length is how long it OCCUPIES the playlist, not how often it plays: neither pattern clips nor automation clips repeat inside one clip |
 | Automation envelope time | Quarter-note beats |
 | Hosted-plugin parameter value | Normalized `0..1` |
 

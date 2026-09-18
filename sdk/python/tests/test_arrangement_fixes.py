@@ -99,8 +99,16 @@ def test_mixed_clip_forms_are_rejected_before_any_request(fl: Studio, transport:
 
 def test_add_patterns_is_one_native_pass_by_default(fl: Studio, transport: RecordingTransport) -> None:
     assert fl.playlist.add_patterns([PatternClipSpec(36, 9, 0, 3072)]) == 0
+    # One shared query_patterns for the no-loop advice (a host that cannot answer it is silently skipped),
+    # then the single native placement pass.
+    assert operations(transport) == ["query_patterns", "add_pattern_clips"]
+    assert arguments(transport, 1) == {"clips": [{"pattern": 36, "track": 9, "startTick": 0, "lengthTick": 3072}]}
+
+
+def test_add_patterns_skips_the_pattern_lookup_when_no_spec_pins_a_length(fl: Studio,
+                                                                         transport: RecordingTransport) -> None:
+    assert fl.playlist.add_patterns([PatternClipSpec(36, 9, 0), PatternClipSpec(37, 10, 3072)]) == 0
     assert operations(transport) == ["add_pattern_clips"]
-    assert arguments(transport, 0) == {"clips": [{"pattern": 36, "track": 9, "startTick": 0, "lengthTick": 3072}]}
 
 
 def test_add_patterns_enforce_lengths_resizes_only_clips_that_drifted(fl: Studio, transport: RecordingTransport) -> None:
@@ -109,8 +117,8 @@ def test_add_patterns_enforce_lengths_resizes_only_clips_that_drifted(fl: Studio
         clip(3, 11, 0, 3840, source=36)])
     specs = [PatternClipSpec(36, 9, 0, 3072), PatternClipSpec(36, 9, 3072, 3072), PatternClipSpec(37, 10, 0)]
     assert fl.playlist.add_patterns(specs, enforce_lengths=True) == 1
-    assert operations(transport) == ["add_pattern_clips", "query_clips", "resize_clips"]
-    assert arguments(transport, 2) == {"resizes": [{"index": 0, "lengthTick": 3072}]}, \
+    assert operations(transport) == ["query_patterns", "add_pattern_clips", "query_clips", "resize_clips"]
+    assert arguments(transport, 3) == {"resizes": [{"index": 0, "lengthTick": 3072}]}, \
         "clip 1 already matches, clip 2 follows the pattern (length 0), clip 3 is not from these specs"
 
 

@@ -217,6 +217,22 @@ result = {bar: output_level.display_at(556, timebase.bar_start(bar)) for bar in 
 
 `display_at` (and `read_at`) seek, wait until the playhead stops moving, wait 300 ms more, then read until two consecutive readings agree. For any other reader use `fl.transport.read_at(tick, lambda: fl.mixer[6].volume)`. Envelopes shorter than a beat (a 24-tick duck) cannot be sampled this way; verify those from `fl.automation[channel].list()`.
 
+## Repeat a pattern across a span
+
+```python
+BAR = 4 * fl.ops.get_ppq()
+
+placed = fl.playlist.tile_pattern(36, track=9, start_tick=0, length_tick=16 * BAR)
+result = {"clips": int(placed), "pattern_length": placed.pattern_length_tick}
+```
+
+**A pattern clip does not loop.** FL plays the pattern once from the clip start and the rest of the clip is
+silent (live 2026-09-18, FL 26.1.3.5570: a 1-bar pattern placed as a 4-bar clip had audio in bar 1 only, bars
+2-4 silent), so a 16-bar section of a 1-bar pattern is sixteen clips. `tile_pattern` places them in one native
+pass and shortens the last clip so the run ends exactly on the span; `add_pattern_ticks(..., repeat=True)` and
+`add_patterns(specs, repeat=True)` do the same inline. Placing one long clip instead still works and now warns
+with `PatternClipLongerThanPatternWarning`, naming the pattern, its length and how much of the clip is silent.
+
 ## Place clips at an exact length and keep it
 
 ```python
@@ -228,15 +244,18 @@ fixed = fl.playlist.add_patterns(specs, enforce_lengths=True)
 result = {"resized_after_placement": fixed, "lengths": [c.length_tick for c in fl.clips.list(track=9)]}
 ```
 
-A positive `length_tick` is pinned by the host, so the clips stay 8 bars even when a humanised hit or a legato pad overhangs the bar; `enforce_lengths=True` re-checks and resizes anything that still drifted. Deleting or editing notes afterwards leaves those clips at their lengths (`notes.delete(..., preserve_clips=True)` re-checks from the client); change a clip length deliberately with `fl.clips.resize(index, length_tick)`.
+Both clips here are 8 bars of an 8-bar pattern. A positive `length_tick` is pinned by the host, so the clips stay 8 bars even when a humanised hit or a legato pad overhangs the bar; it does NOT make a shorter pattern repeat inside the clip (use `repeat=True` or `tile_pattern` for that); `enforce_lengths=True` re-checks and resizes anything that still drifted. Deleting or editing notes afterwards leaves those clips at their lengths (`notes.delete(..., preserve_clips=True)` re-checks from the client); change a clip length deliberately with `fl.clips.resize(index, length_tick)`.
 
 ## Set the song end
 
 ```python
-marker = fl.transport.set_song_end(121)          # marker at the start of bar 121
-# marker = fl.transport.set_song_end(tick=46080)  # or an absolute tick
+marker = fl.transport.set_song_end(after_bar=120)  # keep bar 120: marker at the start of bar 121
+# marker = fl.transport.set_song_end(121)          # the same place, spelled as a bar START
+# marker = fl.transport.set_song_end(tick=46080)   # or an absolute tick
 result = (marker.index, marker.name, marker.tick)
 ```
+
+`bar=N` puts the marker at the START of bar N, so the song ends before it and bar N is not played — `set_song_end(96)` on a 96-bar song cuts the last bar. Pass `after_bar=96` (or `bar=97`) to keep it.
 
 FL extends the song and the render to the last time marker, so the marker adds silence for tails after the final note. Calling it again moves the marker: any existing marker with the same name is deleted first.
 

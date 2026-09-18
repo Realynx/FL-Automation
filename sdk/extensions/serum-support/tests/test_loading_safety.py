@@ -209,3 +209,28 @@ def test_automation_scan_failure_is_a_warning_not_an_error(tmp_path: Path) -> No
     result = loading.load_preset(BrokenStudio(), 1, fst, root=tmp_path)
     assert result == "channel 1: loaded"
     assert any(w.startswith("automation links could not be inspected: RuntimeError") for w in result.warnings)
+
+
+def test_a_host_sdk_without_the_event_decoder_leaves_links_unknown(monkeypatch: Any, tmp_path: Path) -> None:
+    """A stale installed fruitylink-python wheel must not abort the whole best-effort scan.
+
+    Live 2026-09-17: the wheel under FL's FruityLink tree predated ``AutomationTarget.from_event_id``
+    while reporting the same 0.2.0 version, so ``automation_links`` raised ``AttributeError`` and
+    ``load_preset`` lost every automation warning for the channel.
+    """
+    from fruitylink import automation_records
+
+    monkeypatch.delattr(automation_records.AutomationTarget, "from_event_id", raising=True)
+    fl = Studio()
+    links = loading.automation_links(fl, 1)
+    by_clip = {link["clip_channel"]: link for link in links}
+    assert by_clip[6]["attribution"] == "unknown" and by_clip[6]["decoded"] is None
+    assert "reinstall the SDK wheel" in by_clip[6]["parameter_name"]
+    assert by_clip[3]["attribution"] == "possible"                  # named targets are still attributed
+    fst = tmp_path / "root" / "Presets" / "User" / "Captured.fst"
+    fst.parent.mkdir(parents=True)
+    fst.write_bytes(b"FLhd")
+    result = loading.load_preset(fl, 1, fst, root=tmp_path / "root")
+    assert not any("could not be inspected" in warning for warning in result.warnings)
+    assert any(warning.startswith("6 automation link(s) report an event id that does not decode")
+               for warning in result.warnings)

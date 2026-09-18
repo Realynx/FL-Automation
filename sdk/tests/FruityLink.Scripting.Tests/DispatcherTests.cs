@@ -87,7 +87,12 @@ public sealed class DispatcherTests
         await using var dispatcher = new FlScriptingDispatcher(control);
         await dispatcher.InvokeAsync("list_samples", RecordingControl.Json("{\"filter\":null}"));
         Assert.Null(recorder.Calls.Last().Arguments[0]);
-        await Assert.ThrowsAsync<ScriptingException>(() => dispatcher.InvokeAsync("list_samples", ScriptingJson.EmptyObject));
+        // An OPTIONAL nullable string may also be omitted: list_samples(filter=...) used to be a required
+        // keyword in the generated Python, so a plain browse raised TypeError before it ever reached FL.
+        await dispatcher.InvokeAsync("list_samples", ScriptingJson.EmptyObject);
+        Assert.Null(recorder.Calls.Last().Arguments[0]);
+        // A parameter with no default is still required.
+        await Assert.ThrowsAsync<ScriptingException>(() => dispatcher.InvokeAsync("get_notes", ScriptingJson.EmptyObject));
         await dispatcher.InvokeAsync("edit_notes", RecordingControl.Json("{\"pattern\":1,\"edits\":[{\"channel\":0,\"key\":60,\"startTick\":0,\"newVelocity\":100}]}"));
         var edit = Assert.Single(Assert.IsAssignableFrom<IReadOnlyList<NoteEdit>>(recorder.Calls.Last().Arguments[1]));
         Assert.Equal(100, edit.NewVelocity);

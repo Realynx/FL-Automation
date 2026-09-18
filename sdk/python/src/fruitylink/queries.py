@@ -13,6 +13,7 @@ from .models import (
     PlaylistTrackInfo,
     PluginParameterInfo,
     ProjectInfo,
+    SampleInfo,
     decode_page,
     decode_record,
     decode_records,
@@ -60,6 +61,10 @@ class QueryOperations:
                                 offset: int = 0, limit: int = 512) -> Page[PluginParameterInfo]:
         return decode_page(PluginParameterInfo, self._query("query_plugin_parameters", channel_or_track=channel_or_track,
                                                           slot=slot, filter=filter, offset=offset, limit=limit))
+
+    def query_samples(self, *, filter: str | None = None, offset: int = 0, limit: int = 50) -> Page[SampleInfo]:
+        """One ordered page of installed samples; offset and total count MATCHED files, not raw slots."""
+        return decode_page(SampleInfo, self._query("query_samples", filter=filter, offset=offset, limit=limit))
 
     def query_project(self) -> ProjectInfo:
         return decode_record(ProjectInfo, self._query("query_project"))

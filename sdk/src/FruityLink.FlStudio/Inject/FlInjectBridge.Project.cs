@@ -22,6 +22,12 @@ public sealed partial class FlInjectBridge
     { LogOp("TransportPlay"); return CallAsync("ef7b20", new ulong[] { 10, 1, 2, 8 }, ct); }
     public Task TransportStopAsync(CancellationToken ct = default)
     { LogOp("TransportStop"); return CallAsync("ef7b20", new ulong[] { 11, 1, 2, 8 }, ct); }
+    // Record. The (mode 2, flag 8) args are live-verified on 26.1.3.5570 in a USER-launched instance
+    // (2026-09-18): each call flips toolbarForm->RecBtn's pressed byte 0 -> 1 -> 0, which is exactly what op 12
+    // does (`FLbtn_SetToggleStateAndClick(RecBtn, !pressed, fire: true)`). The earlier "op 12 is a no-op in a
+    // user instance" diagnosis was an artefact of GetRecordPressedAsync reading the button through one deref
+    // instead of two, not of these arguments; FL's own scripting passes a focused-form context byte and flag
+    // 0xF, but that route is NOT needed and is not used here.
     public Task TransportToggleRecordAsync(CancellationToken ct = default)
     { LogOp("TransportToggleRecord"); return CallAsync("ef7b20", new ulong[] { 12, 1, 2, 8 }, ct); }
 

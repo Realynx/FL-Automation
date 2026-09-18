@@ -26,6 +26,16 @@ public interface IFlStructuredQuery
     /// Negative slot selects a channel generator; otherwise select a mixer track and slot.
     /// Offset and total count unfiltered parameter slots.</summary>
     Task<FlQueryPage<FlPluginParameterInfo>> QueryPluginParametersAsync(int channelOrTrack, int slot = -1, string? filter = null, int offset = 0, int limit = 512, CancellationToken ct = default);
+    /// <summary>Read a bounded, ordered page of installed audio samples (FL's factory packs plus the user's
+    /// Image-Line content) instead of parsing the free-text listing. The optional filter is a case-insensitive
+    /// substring of the full path, matching list_samples. Each record carries the verbatim entry string to pass
+    /// straight to add_sample_channel / replace_channel_sample, plus the root tag, relative path, bare name and
+    /// extension so a caller can pick kick/clap/hat paths in one round trip. Ordering is a stable
+    /// case-insensitive sort of the entry strings, so paging is consistent between calls as long as the library
+    /// does not change. Unlike the note and clip pages, offset and total count MATCHED samples, not raw slots:
+    /// filtering happens during the directory scan. At most 10000 matches are indexed per call and total reports
+    /// the indexed count, so narrow the filter rather than paging through an entire library.</summary>
+    Task<FlQueryPage<FlSampleInfo>> QuerySamplesAsync(string? filter = null, int offset = 0, int limit = 50, CancellationToken ct = default);
     /// <summary>Read the exact project title and path. Untitled does not indicate unsaved edits.</summary>
     Task<FlProjectInfo> QueryProjectAsync(CancellationToken ct = default);
     /// <summary>Read automation points with absolute times in quarter-note beats.</summary>
@@ -90,6 +100,16 @@ public sealed record FlMixerSendInfo(int Source, int Destination, string Destina
 /// <param name="Index">Parameter index.</param><param name="Name">Parameter name.</param>
 /// <param name="RawValue">Native integer representation.</param><param name="DisplayValue">Plugin-provided display text, possibly empty.</param>
 public sealed record FlPluginParameterInfo(int Index, string Name, int RawValue, string DisplayValue);
+
+/// <summary>One installed audio sample as the loaders accept it.</summary>
+/// <param name="Entry">The verbatim root-tagged entry ("[P]Drums\Kicks\909 Kick.wav"); pass this unchanged to
+/// add_sample_channel or replace_channel_sample.</param>
+/// <param name="RootTag">The search root this sample came from: "[P]" for FL's factory packs, "[U]" for the
+/// user's Image-Line content.</param>
+/// <param name="RelativePath">The path below that root, without the tag.</param>
+/// <param name="Name">File name without its extension.</param>
+/// <param name="Extension">Lower-case extension including the dot.</param>
+public sealed record FlSampleInfo(string Entry, string RootTag, string RelativePath, string Name, string Extension);
 
 /// <summary>Exact project identity fields, including names containing newlines or punctuation.</summary>
 /// <param name="Title">Project title.</param><param name="Path">Project path.</param>
